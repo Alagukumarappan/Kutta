@@ -37,13 +37,13 @@ export function HomeScreen({
   // outgrows a short screen (leaving room for the header above it).
   const gap = spacing.md;
   const cardWidth = (width - spacing.md * 2 - gap * (CARDS.length - 1)) / CARDS.length;
-  const headerReserve = 140;
+  const headerReserve = 90;
   const cardHeight = clamp(height - headerReserve, 120, 220);
 
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <View style={styles.greetingBubble}>
+        <View style={styles.greetingBadge}>
           <Text style={styles.greetingText}>
             Hi, <Text testID="home-child-name" style={styles.greetingName}>{childName}</Text>! 👋
           </Text>
@@ -82,33 +82,32 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: spacing.lg,
-    marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
-  greetingBubble: {
+  greetingBadge: {
     backgroundColor: colors.sun,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    borderRadius: radii.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     ...shadow,
-    elevation: 3,
+    elevation: 2,
   },
   greetingText: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.ink,
   },
   greetingName: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.ink,
   },
   settingsButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
@@ -116,7 +115,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   settingsIcon: {
-    fontSize: 26,
+    fontSize: 22,
   },
   grid: {
     flexDirection: 'row',

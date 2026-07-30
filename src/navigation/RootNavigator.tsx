@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getProfile } from '../storage/profileStore';
@@ -17,6 +18,23 @@ import { PuzzleGallery } from '../puzzle/PuzzleGallery';
 import { PuzzleScreen } from '../puzzle/PuzzleScreen';
 import { VideoGallery } from '../video/VideoGallery';
 import { VideoPlayerScreen } from '../video/VideoPlayerScreen';
+import { SplashScreen } from '../splash/SplashScreen';
+
+// Everything past the very first launch moment (onboarding, home, settings,
+// quiz, coloring, puzzle, video) is landscape-designed, so app.json's
+// manifest-level orientation lock was dropped to "default" and replaced with
+// this runtime lock instead: lock portrait immediately so the splash below
+// never has to fight a landscape-locked window, then flip to landscape once
+// the initial profile load resolves and the real (landscape) content is
+// about to be shown. A short minimum splash duration keeps it from flashing
+// on fast/cached loads; it's skipped under Jest so tests stay fast and
+// deterministic (no benefit to a real timer when native modules are mocked
+// anyway).
+const MINIMUM_SPLASH_DELAY_MS = process.env.NODE_ENV === 'test' ? 0 : 1000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const Stack = createNativeStackNavigator();
 
@@ -89,7 +107,7 @@ function AppStack({
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: true }}>
-      <Stack.Screen name="Home" options={{ title: titleFor('homeTitle') }}>
+      <Stack.Screen name="Home" options={{ headerShown: false }}>
         {({ navigation }) => (
           <HomeScreen
             childName={profile.name}
@@ -156,9 +174,31 @@ export function RootNavigator() {
     setRetryToken((n) => n + 1);
   }, []);
 
+  // Lock portrait immediately on mount, before the splash below even
+  // paints, so there's no visible landscape flash while the profile loads.
   useEffect(() => {
-    refreshProfile();
-  }, [refreshProfile]);
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
+  // Initial load only: resolve the profile and hold the splash up for at
+  // least MINIMUM_SPLASH_DELAY_MS, then lock landscape — the orientation
+  // every screen after the splash is designed for — before revealing
+  // onboarding or the app shell. Later profile refreshes (onboarding
+  // complete, settings save) go through `refreshProfile` directly and don't
+  // repeat this splash/orientation dance; the screen is already landscape
+  // by then.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getProfile(), delay(MINIMUM_SPLASH_DELAY_MS)]).then(async ([loadedProfile]) => {
+      if (cancelled) return;
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+      if (cancelled) return;
+      setProfile(loadedProfile);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,7 +226,13 @@ export function RootNavigator() {
     };
   }, [profile?.rootFolderUri, retryToken]);
 
-  if (profile === undefined) return null;
+  if (profile === undefined) {
+    return (
+      <LanguageProvider initialLanguage="en">
+        <SplashScreen />
+      </LanguageProvider>
+    );
+  }
 
   return (
     <LanguageProvider initialLanguage={profile?.language ?? 'en'}>

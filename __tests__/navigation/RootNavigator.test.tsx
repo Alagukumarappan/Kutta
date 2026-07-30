@@ -36,6 +36,21 @@ function findAllTitleProps(node: any): string[] {
   return [...own, ...findAllTitleProps(node.children)];
 }
 
+// React Navigation always attaches a `title` prop to a screen's native
+// header config (falling back to the raw route name, e.g. "Home", when no
+// explicit `options.title` is set) — that's true even with
+// `headerShown: false`, so title presence alone can't prove a header is
+// showing. What `headerShown: false` actually does is set the header
+// config's own `hidden` prop, so that's what has to be asserted instead.
+function findHeaderConfigNodes(node: any): any[] {
+  if (Array.isArray(node)) {
+    return node.flatMap(findHeaderConfigNodes);
+  }
+  if (!node || typeof node !== 'object') return [];
+  const own = node.type === 'RNSScreenStackHeaderConfig' ? [node] : [];
+  return [...own, ...findHeaderConfigNodes(node.children)];
+}
+
 describe('RootNavigator header titles', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -46,14 +61,15 @@ describe('RootNavigator header titles', () => {
     });
   });
 
-  // React Navigation's native-stack header is a native component
-  // (RNSScreenStackHeaderConfig), not a rendered <Text>, so the header
-  // title is asserted via its `title` prop rather than findByText.
-  it('sets a translated header title (not the raw route name) for the Home screen', async () => {
+  // The Home screen intentionally has no native-stack header at all (see
+  // RootNavigator's `headerShown: false` on that Stack.Screen).
+  it('hides the header for the Home screen', async () => {
     const { findByTestId, toJSON } = await render(<RootNavigator />);
 
     await findByTestId('home-child-name');
-    expect(findAllTitleProps(toJSON())).toContain('Home');
+    const headerConfigs = findHeaderConfigNodes(toJSON());
+    expect(headerConfigs.length).toBeGreaterThan(0);
+    expect(headerConfigs.every((config) => config.props.hidden === true)).toBe(true);
   });
 
   it('sets a translated header title for Settings instead of the raw route name "settings"', async () => {

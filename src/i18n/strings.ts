@@ -15,7 +15,6 @@ export const UI_STRINGS = {
   homeQuiz: { en: 'Quiz', de: 'Quiz' },
   homePuzzle: { en: 'Photo Puzzle', de: 'Fotopuzzle' },
   homeVideo: { en: 'Videos', de: 'Videos' },
-  homeTitle: { en: 'Home', de: 'Start' },
   coloringDetailTitle: { en: 'Coloring Page', de: 'Malvorlage' },
   puzzleDetailTitle: { en: 'Puzzle', de: 'Puzzle' },
   videoDetailTitle: { en: 'Video', de: 'Video' },
@@ -60,6 +59,10 @@ export const UI_STRINGS = {
   loadError: {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
+  },
+  splashTagline: {
+    en: 'Where learning feels like play',
+    de: 'Wo Lernen sich wie Spielen anfühlt',
   },
 } as const;
 
