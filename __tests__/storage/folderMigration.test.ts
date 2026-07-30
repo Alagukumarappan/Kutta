@@ -9,45 +9,133 @@ jest.mock('expo-file-system/legacy', () => ({
   },
 }));
 
+// A small fake SAF filesystem keyed by parent URI -> child leaf names, so the
+// deep verification logic (which recurses into each subfolder, and one level
+// further into quiz/images) can be exercised realistically.
+function buildFsMock(tree: Record<string, string[]>) {
+  return async (uri: string): Promise<string[]> => {
+    const names = tree[uri] ?? [];
+    return names.map((name) => `${uri}/${name}`);
+  };
+}
+
+const OLD = 'old-root';
+const NEW = 'new-root';
+
+function fullTree(newPictures = ['p1.png', 'p2.png']) {
+  return {
+    [OLD]: ['pictures', 'videos', 'coloring', 'quiz'],
+    [NEW]: ['pictures', 'videos', 'coloring', 'quiz'],
+    [`${OLD}/pictures`]: ['p1.png', 'p2.png'],
+    [`${NEW}/pictures`]: newPictures,
+    [`${OLD}/videos`]: ['v1.mp4'],
+    [`${NEW}/videos`]: ['v1.mp4'],
+    [`${OLD}/coloring`]: ['c1.png'],
+    [`${NEW}/coloring`]: ['c1.png'],
+    [`${OLD}/quiz`]: ['questions.json', 'images'],
+    [`${NEW}/quiz`]: ['questions.json', 'images'],
+    [`${OLD}/quiz/images`]: ['cat.png', 'dog.png'],
+    [`${NEW}/quiz/images`]: ['cat.png', 'dog.png'],
+  };
+}
+
 describe('migrateContent', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('copies every entry then deletes the old root on success', async () => {
-    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
-      if (uri === 'old-root') return ['old-root/pictures', 'old-root/videos'];
-      if (uri === 'new-root') return ['new-root/pictures', 'new-root/videos'];
-    });
+  it('copies every subfolder, verifies deep contents, and deletes only the old subfolders (not the root)', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(fullTree()));
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
 
-    const result = await migrateContent('old-root', 'new-root');
+    const result = await migrateContent(OLD, NEW);
 
     expect(result).toEqual({ success: true });
     expect(FileSystem.StorageAccessFramework.copyAsync).toHaveBeenCalled();
-    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith('old-root');
+
+    // The root itself must never be deleted — only its known subfolders.
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalledWith(OLD);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/pictures`);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/videos`);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/coloring`);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/quiz`);
   });
 
-  it('does NOT delete the old root if a copy fails', async () => {
-    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue(['old-root/pictures']);
+  it('does NOT delete anything if a copy fails', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(fullTree()));
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockRejectedValue(new Error('disk full'));
 
-    const result = await migrateContent('old-root', 'new-root');
+    const result = await migrateContent(OLD, NEW);
 
     expect(result.success).toBe(false);
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
   });
 
-  it('does NOT delete the old root if verification detects incomplete copy', async () => {
-    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
-      if (uri === 'old-root') return ['old-root/pictures', 'old-root/videos'];
-      if (uri === 'new-root') return ['new-root/pictures']; // only one of two entries copied
-    });
+  it('catches a partial copy inside a subfolder that a shallow top-level-name check would have missed', async () => {
+    // Top level: "pictures" exists in both old and new roots (a shallow check
+    // would pass) — but only one of the two files inside actually made it.
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
+      buildFsMock(fullTree(['p1.png']))
+    );
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
 
-    const result = await migrateContent('old-root', 'new-root');
+    const result = await migrateContent(OLD, NEW);
 
     expect(result.success).toBe(false);
     if (result.success) throw new Error('expected migration to fail');
-    expect(result.error).toContain('missing entry');
+    expect(result.error).toContain('p2.png');
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('catches a partial copy one level inside quiz/images', async () => {
+    const tree = fullTree();
+    tree[`${NEW}/quiz/images`] = ['cat.png']; // dog.png missing at destination
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
+    (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
+
+    const result = await migrateContent(OLD, NEW);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected migration to fail');
+    expect(result.error).toContain('dog.png');
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('catches a missing questions.json at the destination', async () => {
+    const tree = fullTree();
+    tree[`${NEW}/quiz`] = ['images']; // questions.json missing at destination
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
+    (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
+
+    const result = await migrateContent(OLD, NEW);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected migration to fail');
+    expect(result.error).toContain('questions.json');
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('refuses to migrate when the new root is nested inside the old root', async () => {
+    const result = await migrateContent('content://tree/document/primary%3ARoot', 'content://tree/document/primary%3ARoot%2FSub');
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected migration to fail');
+    expect(result.error).toMatch(/nested|inside/i);
+    expect(FileSystem.StorageAccessFramework.copyAsync).not.toHaveBeenCalled();
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('refuses to migrate when the old root is nested inside the new root', async () => {
+    const result = await migrateContent('content://tree/document/primary%3ARoot%2FSub', 'content://tree/document/primary%3ARoot');
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected migration to fail');
+    expect(result.error).toMatch(/nested|inside/i);
+    expect(FileSystem.StorageAccessFramework.copyAsync).not.toHaveBeenCalled();
+  });
+
+  it('refuses to migrate when old and new roots are the same folder', async () => {
+    const result = await migrateContent('same-root', 'same-root');
+
+    expect(result.success).toBe(false);
+    expect(FileSystem.StorageAccessFramework.copyAsync).not.toHaveBeenCalled();
   });
 });

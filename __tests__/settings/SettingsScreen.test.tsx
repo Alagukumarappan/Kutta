@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SettingsScreen } from '../../src/settings/SettingsScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -12,13 +13,22 @@ jest.mock('../../src/storage/folderMigration');
 
 const initialProfile = { name: 'Sam', age: 4, language: 'en' as const, rootFolderUri: 'content://tree/old' };
 
+// Simulates the user tapping the "confirm" button of the migration Alert.
+function confirmAlertWith(buttonLabel: string) {
+  const alertSpy = Alert.alert as jest.Mock;
+  const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+  const button = buttons.find((b: { text: string }) => b.text === buttonLabel);
+  button.onPress();
+}
+
 describe('SettingsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     (profileStore.getProfile as jest.Mock).mockResolvedValue(initialProfile);
   });
 
-  it('migrates content when the folder is changed and saves the new profile', async () => {
+  it('migrates content when the folder is changed and the user confirms, then saves the new profile', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
     (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: true });
     (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
@@ -34,6 +44,11 @@ describe('SettingsScreen', () => {
     await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
     await fireEvent.press(getByText('Save changes'));
 
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Move content?', expect.any(String), expect.any(Array), expect.any(Object)));
+    expect(folderMigration.migrateContent).not.toHaveBeenCalled();
+
+    confirmAlertWith('Move content');
+
     await waitFor(() =>
       expect(folderMigration.migrateContent).toHaveBeenCalledWith('content://tree/old', 'content://tree/new')
     );
@@ -44,7 +59,30 @@ describe('SettingsScreen', () => {
     );
   });
 
-  it('lets the user edit name and age and saves them without touching the folder', async () => {
+  it('does NOT migrate or save the new folder if the user cancels the confirmation', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: true });
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    await fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    confirmAlertWith('Cancel');
+
+    await waitFor(() => expect(profileStore.saveProfile).not.toHaveBeenCalled());
+    expect(folderMigration.migrateContent).not.toHaveBeenCalled();
+  });
+
+  it('lets the user edit name and age and saves them without touching the folder or asking for confirmation', async () => {
     (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
 
     const { getByText, getByTestId, findByTestId } = await render(
@@ -65,6 +103,7 @@ describe('SettingsScreen', () => {
       )
     );
     expect(folderMigration.migrateContent).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
   it('shows a failure message and keeps the old folder if migration fails', async () => {
@@ -82,9 +121,59 @@ describe('SettingsScreen', () => {
     await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
     await fireEvent.press(getByText('Save changes'));
 
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    confirmAlertWith('Move content');
+
     await findByText('Could not move content. Your old folder is unchanged.');
     expect(profileStore.saveProfile).not.toHaveBeenCalledWith(
       expect.objectContaining({ rootFolderUri: 'content://tree/new' })
     );
+  });
+
+  it('shows an error alert if picking a folder fails', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockRejectedValue(new Error('picker unavailable'));
+
+    const { getByText, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Error', 'picker unavailable'));
+  });
+
+  it('disables the Save button while a migration is in progress, preventing a double submit', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    let resolveMigration!: (v: { success: true }) => void;
+    (folderMigration.migrateContent as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => { resolveMigration = resolve; })
+    );
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    await fireEvent.press(getByText('Save changes'));
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    confirmAlertWith('Move content');
+
+    await waitFor(() => expect(folderMigration.migrateContent).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getByTestId('settings-save').props.accessibilityState?.disabled).toBe(true));
+
+    // A second tap while migrating must not trigger a second migration.
+    await fireEvent.press(getByTestId('settings-save'));
+    expect(folderMigration.migrateContent).toHaveBeenCalledTimes(1);
+
+    resolveMigration({ success: true });
+    await waitFor(() => expect(profileStore.saveProfile).toHaveBeenCalled());
   });
 });

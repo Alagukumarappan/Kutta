@@ -19,6 +19,17 @@ export const UI_STRINGS = {
     en: 'Could not move content. Your old folder is unchanged.',
     de: 'Inhalte konnten nicht verschoben werden. Der alte Ordner bleibt unverändert.',
   },
+  migrationConfirmTitle: { en: 'Move content?', de: 'Inhalte verschieben?' },
+  migrationConfirmBody: {
+    en: 'Your existing content will be moved to the new folder, and removed from the old location. This cannot be undone.',
+    de: 'Deine vorhandenen Inhalte werden in den neuen Ordner verschoben und aus dem alten Ordner entfernt. Dies kann nicht rückgängig gemacht werden.',
+  },
+  migrationConfirmConfirm: { en: 'Move content', de: 'Inhalte verschieben' },
+  migrationConfirmCancel: { en: 'Cancel', de: 'Abbrechen' },
+  folderPickError: {
+    en: 'Could not open the folder picker. Please try again.',
+    de: 'Der Ordnerauswahldialog konnte nicht geöffnet werden. Bitte versuche es erneut.',
+  },
   emptyPictures: { en: 'No pictures yet — add some to the pictures folder!', de: 'Noch keine Bilder — füge welche zum Bilderordner hinzu!' },
   emptyVideos: { en: 'No videos yet — add some to the videos folder!', de: 'Noch keine Videos — füge welche zum Videoordner hinzu!' },
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },

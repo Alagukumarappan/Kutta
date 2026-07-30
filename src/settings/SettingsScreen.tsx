@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getProfile, saveProfile } from '../storage/profileStore';
 import { requestFolderAccess } from '../storage/folderAccess';
@@ -22,12 +22,32 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
   }, []);
 
   async function handlePickFolder() {
-    const uri = await requestFolderAccess();
-    setPendingFolderUri(uri);
+    try {
+      const uri = await requestFolderAccess();
+      setPendingFolderUri(uri);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Wraps Alert.alert's Cancel/Confirm buttons in a Promise so the caller can
+  // simply `await` the user's decision before doing anything destructive.
+  function confirmMigration(): Promise<boolean> {
+    return new Promise((resolve) => {
+      Alert.alert(
+        t('migrationConfirmTitle'),
+        t('migrationConfirmBody'),
+        [
+          { text: t('migrationConfirmCancel'), style: 'cancel', onPress: () => resolve(false) },
+          { text: t('migrationConfirmConfirm'), onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) }
+      );
+    });
   }
 
   async function handleSave() {
-    if (!profile) return;
+    if (!profile || migrating) return;
     setMigrationError(null);
 
     const age = Number(ageText);
@@ -37,8 +57,14 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
     };
 
     if (pendingFolderUri && pendingFolderUri !== profile.rootFolderUri) {
-      setMigrating(true);
       const oldUri = profile.rootFolderUri;
+
+      if (oldUri) {
+        const confirmed = await confirmMigration();
+        if (!confirmed) return;
+      }
+
+      setMigrating(true);
       const result = oldUri
         ? await migrateContent(oldUri, pendingFolderUri)
         : ({ success: true } as const);
@@ -90,7 +116,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
       {migrating && <Text>{t('migrationInProgress')}</Text>}
       {migrationError && <Text>{migrationError}</Text>}
 
-      <Pressable onPress={handleSave}>
+      <Pressable testID="settings-save" onPress={handleSave} disabled={migrating}>
         <Text>{t('settingsSave')}</Text>
       </Pressable>
     </View>

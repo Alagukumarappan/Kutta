@@ -1,14 +1,58 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
+const SUBFOLDERS = ['pictures', 'videos', 'coloring', 'quiz'] as const;
+
 function leafName(uri: string): string {
   const decoded = decodeURIComponent(uri);
   return decoded.substring(decoded.lastIndexOf('/') + 1);
+}
+
+// SAF tree URIs are opaque, but they do encode the document path as a
+// suffix, so a decoded prefix comparison is enough to detect "the new root
+// is the old root, or lives inside it (or vice versa)" without needing to
+// walk the tree. Doing an actual copy+delete in that situation would be
+// self-referential and could destroy the very data being migrated.
+function isSameOrNestedWithin(candidateUri: string, ancestorUri: string): boolean {
+  const candidate = decodeURIComponent(candidateUri);
+  const ancestor = decodeURIComponent(ancestorUri);
+  return candidate === ancestor || candidate.startsWith(`${ancestor}/`);
+}
+
+async function findChild(parentUri: string, name: string): Promise<string | null> {
+  const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(parentUri);
+  return entries.find((entryUri) => leafName(entryUri) === name) ?? null;
+}
+
+async function listNames(uri: string): Promise<Set<string>> {
+  const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(uri);
+  return new Set(entries.map(leafName));
+}
+
+// Compares the contents of one old/new folder pair by leaf name and returns
+// a human-readable error describing the first missing entry, or null if
+// everything present in the old folder is also present in the new one.
+async function verifyFolderContents(oldUri: string, newUri: string, label: string): Promise<string | null> {
+  const oldNames = await listNames(oldUri);
+  const newNames = await listNames(newUri);
+  for (const name of oldNames) {
+    if (!newNames.has(name)) {
+      return `Copy verification failed: missing "${name}" in destination "${label}" folder.`;
+    }
+  }
+  return null;
 }
 
 export async function migrateContent(
   oldRootUri: string,
   newRootUri: string
 ): Promise<{ success: true } | { success: false; error: string }> {
+  if (isSameOrNestedWithin(newRootUri, oldRootUri) || isSameOrNestedWithin(oldRootUri, newRootUri)) {
+    return {
+      success: false,
+      error: 'The new folder cannot be the same as, or nested inside, the old folder (or vice versa).',
+    };
+  }
+
   try {
     const topLevelEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(oldRootUri);
 
@@ -16,17 +60,48 @@ export async function migrateContent(
       await FileSystem.StorageAccessFramework.copyAsync({ from: entryUri, to: newRootUri });
     }
 
-    const verifyEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(newRootUri);
-    const sourceNames = new Set(topLevelEntries.map(leafName));
-    const destNames = new Set(verifyEntries.map(leafName));
+    // Deep verification: for each of the 4 known subfolders, confirm every
+    // entry that exists on the old side also exists on the new side. This
+    // goes one level deeper than a shallow "the 4 folder names exist" check,
+    // which would happily pass even if a copy silently truncated a
+    // subfolder's contents. For "quiz" we also recurse one level further
+    // into "images" and confirm "questions.json" made it across.
+    for (const folder of SUBFOLDERS) {
+      const oldChild = await findChild(oldRootUri, folder);
+      if (!oldChild) continue; // nothing to verify/migrate for this subfolder
 
-    for (const sourceName of sourceNames) {
-      if (!destNames.has(sourceName)) {
-        return { success: false, error: `Copy verification failed: missing entry "${sourceName}" in destination.` };
+      const newChild = await findChild(newRootUri, folder);
+      if (!newChild) {
+        return { success: false, error: `Copy verification failed: missing "${folder}" folder in destination.` };
+      }
+
+      const contentsError = await verifyFolderContents(oldChild, newChild, folder);
+      if (contentsError) return { success: false, error: contentsError };
+
+      if (folder === 'quiz') {
+        const oldImages = await findChild(oldChild, 'images');
+        if (oldImages) {
+          const newImages = await findChild(newChild, 'images');
+          if (!newImages) {
+            return { success: false, error: 'Copy verification failed: missing "images" folder inside quiz.' };
+          }
+          const imagesError = await verifyFolderContents(oldImages, newImages, 'quiz/images');
+          if (imagesError) return { success: false, error: imagesError };
+        }
       }
     }
 
-    await FileSystem.StorageAccessFramework.deleteAsync(oldRootUri);
+    // Verification passed: remove the OLD content, not the old root folder
+    // node itself. Deleting the root would also destroy any unrelated
+    // content a user might have had there if they picked an existing,
+    // non-empty folder (e.g. DCIM) as their content root.
+    for (const folder of SUBFOLDERS) {
+      const oldChild = await findChild(oldRootUri, folder);
+      if (oldChild) {
+        await FileSystem.StorageAccessFramework.deleteAsync(oldChild);
+      }
+    }
+
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
