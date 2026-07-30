@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { loadQuestions } from './loadQuestions';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
 import { QuestionRenderer } from './QuestionRenderer';
+import { colors, radii, spacing, shadow } from '../theme/tokens';
 
 export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string; childAge: number }) {
   const { t, language } = useLanguage();
@@ -41,29 +42,33 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
 
   if (error) {
     return (
-      <View testID="quiz-error">
-        <Text>{t('loadError')}</Text>
-        <Pressable testID="quiz-retry" onPress={() => setRetryToken((n) => n + 1)}>
-          <Text>{t('retry')}</Text>
+      <View testID="quiz-error" style={styles.centeredScreen}>
+        <Text style={styles.messageText}>{t('loadError')}</Text>
+        <Pressable testID="quiz-retry" onPress={() => setRetryToken((n) => n + 1)} style={styles.retryButton}>
+          <Text style={styles.retryButtonText}>{t('retry')}</Text>
         </Pressable>
       </View>
     );
   }
 
-  if (!state) return <View testID="quiz-loading" />;
+  if (!state) return <View testID="quiz-loading" style={styles.centeredScreen} />;
 
   if (state.session.length === 0) {
     return (
-      <View>
-        <Text>{t('emptyQuiz')}</Text>
+      <View style={styles.centeredScreen}>
+        <Text style={styles.messageText}>{t('emptyQuiz')}</Text>
       </View>
     );
   }
 
   if (state.isFinished) {
     return (
-      <View>
-        <Text>{tFormat('quizScore', language, { score: state.score, total: state.session.length })}</Text>
+      <View style={styles.centeredScreen}>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreText}>
+            {tFormat('quizScore', language, { score: state.score, total: state.session.length })}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -90,3 +95,53 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     />
   );
 }
+
+const styles = StyleSheet.create({
+  centeredScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  messageText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.ink,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  retryButton: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coralDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    ...shadow,
+    elevation: 4,
+  },
+  retryButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
+  scoreCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    borderWidth: 4,
+    borderColor: colors.sunDark,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow,
+    elevation: 4,
+  },
+  scoreText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: colors.ink,
+    textAlign: 'center',
+  },
+});
