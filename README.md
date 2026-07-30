@@ -77,6 +77,10 @@ Rules:
 - Image paths are relative to the `quiz/` folder (e.g. `"images/cat.png"` means the file `quiz/images/cat.png`).
 - Any question the app can't understand (missing options, broken reference, etc.) is silently skipped rather than crashing the quiz — so a typo in one question won't break the rest.
 
+### Don't want to write 120 questions from scratch?
+
+`sample-content/quiz/` has 120 ready-made starter questions (20 per age, ages 2-7) plus the icon images they reference — see `sample-content/README.md` for what's included and how to copy it onto the phone. It's just a starting point; edit, add to, or delete anything in it once it's on the device.
+
 ## Running it locally
 
 This is a React Native app built with Expo, using some custom native modules (folder access, video playback, a drawing canvas) — so it needs a real build, not just the plain Expo Go app from the Play Store.
