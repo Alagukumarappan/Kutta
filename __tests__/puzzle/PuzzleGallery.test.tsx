@@ -41,4 +41,21 @@ describe('PuzzleGallery', () => {
 
     await findByText('No pictures yet — add some to the pictures folder!');
   });
+
+  it('shows a retry error state instead of a permanently blank screen when the load fails', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock)
+      .mockRejectedValueOnce(new Error('SAF grant revoked'))
+      .mockResolvedValueOnce(['content://tree/pictures/beach.jpg']);
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByText('Something went wrong loading this content.');
+    await fireEvent.press(await findByTestId('puzzle-gallery-retry'));
+
+    await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+  });
 });

@@ -24,12 +24,42 @@ export function VideoGallery({
 }) {
   const { t } = useLanguage();
   const [videos, setVideos] = useState<string[] | null>(null);
+  const [error, setError] = useState(false);
+  // Bumped on Retry to force a fresh load attempt even when
+  // videosFolderUri itself hasn't changed (e.g. a transient failure).
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    FileSystem.StorageAccessFramework.readDirectoryAsync(videosFolderUri).then((entries: string[]) => {
-      setVideos(entries.filter(isVideoFile));
-    });
-  }, [videosFolderUri]);
+    let cancelled = false;
+    setError(false);
+    setVideos(null);
+
+    FileSystem.StorageAccessFramework.readDirectoryAsync(videosFolderUri)
+      .then((entries: string[]) => {
+        if (!cancelled) setVideos(entries.filter(isVideoFile));
+      })
+      .catch(() => {
+        // The SAF grant may have been revoked, the folder deleted externally,
+        // or an SD card unmounted — surface a retry state instead of leaving
+        // an unhandled rejection and a permanently blank loading screen.
+        if (!cancelled) setError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videosFolderUri, retryToken]);
+
+  if (error) {
+    return (
+      <View testID="video-gallery-error">
+        <Text>{t('loadError')}</Text>
+        <Pressable testID="video-gallery-retry" onPress={() => setRetryToken((n) => n + 1)}>
+          <Text>{t('retry')}</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (videos === null) return <View testID="video-gallery-loading" />;
 

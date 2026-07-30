@@ -37,4 +37,21 @@ describe('VideoGallery', () => {
 
     await findByText('No videos yet — add some to the videos folder!');
   });
+
+  it('shows a retry error state instead of a permanently blank screen when the load fails', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock)
+      .mockRejectedValueOnce(new Error('SAF grant revoked'))
+      .mockResolvedValueOnce(['content://tree/videos/party.mp4']);
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByText('Something went wrong loading this content.');
+    await fireEvent.press(await findByTestId('video-gallery-retry'));
+
+    await findByTestId('video-item-content://tree/videos/party.mp4');
+  });
 });

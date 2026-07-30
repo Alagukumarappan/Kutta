@@ -42,4 +42,21 @@ describe('ColoringGallery', () => {
 
     await findByText('No coloring pages yet — add some to the coloring folder!');
   });
+
+  it('shows a retry error state instead of a permanently blank screen when the load fails', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock)
+      .mockRejectedValueOnce(new Error('SAF grant revoked'))
+      .mockResolvedValueOnce(['content://tree/coloring/cat-outline.png']);
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByText('Something went wrong loading this content.');
+    await fireEvent.press(await findByTestId('coloring-gallery-retry'));
+
+    await findByTestId('coloring-item-content://tree/coloring/cat-outline.png');
+  });
 });

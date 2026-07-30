@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { loadQuestions } from './loadQuestions';
@@ -10,13 +10,45 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
   const { t, language } = useLanguage();
   const [state, setState] = useState<QuizSessionState | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  // Bumped on Retry to force a fresh load attempt even when quizFolderUri and
+  // childAge haven't changed (e.g. a transient failure).
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    loadQuestions(quizFolderUri).then((all) => {
-      const session = buildSession(all, childAge);
-      setState(initialSessionState(session));
-    });
-  }, [quizFolderUri, childAge]);
+    let cancelled = false;
+    setError(false);
+    setState(null);
+
+    loadQuestions(quizFolderUri)
+      .then((all) => {
+        if (cancelled) return;
+        const session = buildSession(all, childAge);
+        setState(initialSessionState(session));
+      })
+      .catch(() => {
+        // The SAF grant may have been revoked, the quiz folder deleted
+        // externally, or an SD card unmounted — surface a retry state
+        // instead of leaving an unhandled rejection and a permanently blank
+        // loading screen.
+        if (!cancelled) setError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quizFolderUri, childAge, retryToken]);
+
+  if (error) {
+    return (
+      <View testID="quiz-error">
+        <Text>{t('loadError')}</Text>
+        <Pressable testID="quiz-retry" onPress={() => setRetryToken((n) => n + 1)}>
+          <Text>{t('retry')}</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (!state) return <View testID="quiz-loading" />;
 

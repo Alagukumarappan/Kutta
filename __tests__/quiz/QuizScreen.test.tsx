@@ -106,4 +106,22 @@ describe('QuizScreen', () => {
 
     await findByText('No quiz questions for this age yet.');
   });
+
+  it('shows a retry error state instead of a permanently blank screen when loading fails', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock)
+      .mockRejectedValueOnce(new Error('SAF grant revoked'))
+      .mockResolvedValueOnce(twoQuestions);
+    jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText('Something went wrong loading this content.');
+    await fireEvent.press(await findByTestId('quiz-retry'));
+
+    await findByText('2 + 2?');
+  });
 });

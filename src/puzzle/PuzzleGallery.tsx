@@ -19,12 +19,42 @@ export function PuzzleGallery({
 }) {
   const { t } = useLanguage();
   const [images, setImages] = useState<string[] | null>(null);
+  const [error, setError] = useState(false);
+  // Bumped on Retry to force a fresh load attempt even when
+  // picturesFolderUri itself hasn't changed (e.g. a transient failure).
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    FileSystem.StorageAccessFramework.readDirectoryAsync(picturesFolderUri).then((entries) => {
-      setImages(entries.filter(isImageFile));
-    });
-  }, [picturesFolderUri]);
+    let cancelled = false;
+    setError(false);
+    setImages(null);
+
+    FileSystem.StorageAccessFramework.readDirectoryAsync(picturesFolderUri)
+      .then((entries) => {
+        if (!cancelled) setImages(entries.filter(isImageFile));
+      })
+      .catch(() => {
+        // The SAF grant may have been revoked, the folder deleted externally,
+        // or an SD card unmounted — surface a retry state instead of leaving
+        // an unhandled rejection and a permanently blank loading screen.
+        if (!cancelled) setError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [picturesFolderUri, retryToken]);
+
+  if (error) {
+    return (
+      <View testID="puzzle-gallery-error">
+        <Text>{t('loadError')}</Text>
+        <Pressable testID="puzzle-gallery-retry" onPress={() => setRetryToken((n) => n + 1)}>
+          <Text>{t('retry')}</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (images === null) return <View testID="puzzle-gallery-loading" />;
 
