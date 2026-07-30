@@ -1,11 +1,32 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, Animated, ScrollView, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t } from '../i18n/strings';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
 
-const OPTION_SIZE = 130;
+// This screen is shown with headerShown:true (see RootNavigator), so the
+// native-stack header already consumes the top safe-area inset before this
+// component's flex:1 container gets its share of the window — but
+// useWindowDimensions() below reports the FULL window height, header
+// included. HEADER_HEIGHT_ESTIMATE nets that back out so the sizing math
+// below is computed against the space actually left for content, not the
+// whole screen. It only affects how big we *try* to make things — the
+// ScrollView wrapper is the real safety net if this estimate runs low.
+const HEADER_HEIGHT_ESTIMATE = 56;
+
+const SCREEN_PADDING = spacing.md; // 16 - outer padding on all sides
+const PROGRESS_ROW_HEIGHT = 30; // dots (up to 18) + margin
+const FEEDBACK_BAR_HEIGHT = 56; // feedback text + Next button, reserved below the row
+const COLUMN_GAP = spacing.md; // gap between the question column and the options column
+const GRID_GAP = spacing.sm; // gap between/around the 2x2 option grid cells
+const QUESTION_COLUMN_RATIO = 0.42; // question column gets ~42% of the row width, options get the rest
+
+const MIN_OPTION_SIZE = 72;
+const MAX_OPTION_SIZE = 170;
+const MIN_QUESTION_IMAGE_SIZE = 60;
+const MAX_QUESTION_IMAGE_SIZE = 200;
 
 function ImageWithFallback({ uri, testID, size }: { uri: string; testID: string; size: number }) {
   const [failed, setFailed] = useState(false);
@@ -55,6 +76,49 @@ export function QuestionRenderer({
   const hasAnswered = selectedOptionId !== null;
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
 
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
+
+  // This screen is landscape-only (see RootNavigator's runtime orientation
+  // lock) and by far the busiest layout in the app: a question (text and/or
+  // up to a sizeable image) plus a 4-option grid plus a feedback bar plus a
+  // Next button. Stacked vertically that content can run to ~650-700dp,
+  // roughly double what a real landscape phone gives us after the header
+  // (~300-360dp). Laying the question out on the LEFT and the 2x2 option
+  // grid on the RIGHT — side by side, using the width landscape actually
+  // gives us — turns "everything stacked in one tall column" into a single
+  // row that fits inside that height budget. Sizes below are derived from
+  // the actual window rather than fixed constants so this adapts instead of
+  // assuming one specific device.
+  const availableHeight = height - HEADER_HEIGHT_ESTIMATE - insets.bottom;
+  const availableWidth = width - insets.left - insets.right;
+
+  const contentHeight = Math.max(
+    0,
+    availableHeight - SCREEN_PADDING * 2 - (showProgress ? PROGRESS_ROW_HEIGHT : 0) - FEEDBACK_BAR_HEIGHT
+  );
+
+  const columnsWidth = Math.max(0, availableWidth - SCREEN_PADDING * 2 - COLUMN_GAP);
+  const questionColumnWidth = columnsWidth * QUESTION_COLUMN_RATIO;
+  const optionsColumnWidth = columnsWidth - questionColumnWidth;
+
+  // Two rows of two cells must fit within contentHeight, and two columns of
+  // cells must fit within optionsColumnWidth — take whichever axis is
+  // tighter, same approach as computeResponsiveSquareSize elsewhere.
+  const optionSize = clamp(
+    Math.min((contentHeight - GRID_GAP) / 2, (optionsColumnWidth - GRID_GAP) / 2),
+    MIN_OPTION_SIZE,
+    MAX_OPTION_SIZE
+  );
+
+  const questionImageSize = clamp(
+    Math.min(questionColumnWidth - spacing.md * 2, contentHeight - spacing.md * 2),
+    MIN_QUESTION_IMAGE_SIZE,
+    MAX_QUESTION_IMAGE_SIZE
+  );
+
   // A small pop-in for the feedback bar (bounce up to a slight overshoot,
   // then settle) so getting an answer right/wrong feels a bit more alive
   // than text just appearing — cheap enough with RN's built-in Animated API
@@ -74,16 +138,31 @@ export function QuestionRenderer({
   }, [hasAnswered, selectedOptionId, feedbackScale]);
 
   return (
-    <View style={styles.screen}>
-      {typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0 && (
+    <ScrollView
+      style={styles.scrollView}
+      // flexGrow:1 (rather than a fixed flex:1 on the content) is a safety
+      // net, not the primary fix: the row-based layout above is sized to fit
+      // a real landscape screen without scrolling, but an unusually small
+      // screen or an unusually large question image should degrade to
+      // scrolling rather than clipping content off-screen unreachably.
+      contentContainerStyle={[
+        styles.screen,
+        {
+          paddingLeft: SCREEN_PADDING + insets.left,
+          paddingRight: SCREEN_PADDING + insets.right,
+          paddingBottom: SCREEN_PADDING + insets.bottom,
+        },
+      ]}
+    >
+      {showProgress && (
         <View testID="quiz-progress" style={styles.progressRow}>
-          {Array.from({ length: totalQuestions }).map((_, i) => (
+          {Array.from({ length: totalQuestions as number }).map((_, i) => (
             <View
               key={i}
               testID={`quiz-progress-dot-${i}`}
               style={[
                 styles.progressDot,
-                i < currentIndex && styles.progressDotDone,
+                i < (currentIndex as number) && styles.progressDotDone,
                 i === currentIndex && styles.progressDotCurrent,
               ]}
             />
@@ -91,47 +170,54 @@ export function QuestionRenderer({
         </View>
       )}
 
-      <View style={styles.questionCard}>
-        {question.question.image && (
-          <ImageWithFallback uri={question.question.image} testID="question-image" size={150} />
-        )}
-        {question.question.text && <Text style={styles.questionText}>{question.question.text[language]}</Text>}
-      </View>
+      <View style={styles.row}>
+        <View style={[styles.questionCard, { width: questionColumnWidth }]}>
+          {question.question.image && (
+            <ImageWithFallback uri={question.question.image} testID="question-image" size={questionImageSize} />
+          )}
+          {question.question.text && <Text style={styles.questionText}>{question.question.text[language]}</Text>}
+        </View>
 
-      <View style={styles.optionsGrid}>
-        {question.options.map((option) => {
-          const isCorrectOption = option.id === question.correctOptionId;
-          const isSelectedOption = option.id === selectedOptionId;
-          // Once answered: highlight the correct option green, and — if the
-          // child picked a wrong one — highlight their (wrong) pick red too,
-          // so the feedback is visible directly on the options, not just in
-          // a separate line of text.
-          const highlight = hasAnswered
-            ? isCorrectOption
-              ? 'correct'
-              : isSelectedOption
-                ? 'incorrect'
-                : null
-            : null;
+        <View style={[styles.optionsGrid, { width: optionsColumnWidth }]}>
+          {question.options.map((option) => {
+            const isCorrectOption = option.id === question.correctOptionId;
+            const isSelectedOption = option.id === selectedOptionId;
+            // Once answered: highlight the correct option green, and — if the
+            // child picked a wrong one — highlight their (wrong) pick red too,
+            // so the feedback is visible directly on the options, not just in
+            // a separate line of text.
+            const highlight = hasAnswered
+              ? isCorrectOption
+                ? 'correct'
+                : isSelectedOption
+                  ? 'incorrect'
+                  : null
+              : null;
 
-          return (
-            <Pressable
-              key={option.id}
-              testID={`option-${option.id}`}
-              onPress={() => !hasAnswered && onSelect(option.id)}
-              style={[
-                styles.optionCard,
-                highlight === 'correct' && styles.optionCorrect,
-                highlight === 'incorrect' && styles.optionIncorrect,
-              ]}
-            >
-              {option.image && (
-                <ImageWithFallback uri={option.image} testID={`option-image-${option.id}`} size={OPTION_SIZE - spacing.md * 2} />
-              )}
-              {option.text && <Text style={styles.optionText}>{option.text[language]}</Text>}
-            </Pressable>
-          );
-        })}
+            return (
+              <Pressable
+                key={option.id}
+                testID={`option-${option.id}`}
+                onPress={() => !hasAnswered && onSelect(option.id)}
+                style={[
+                  styles.optionCard,
+                  { width: optionSize, height: optionSize },
+                  highlight === 'correct' && styles.optionCorrect,
+                  highlight === 'incorrect' && styles.optionIncorrect,
+                ]}
+              >
+                {option.image && (
+                  <ImageWithFallback
+                    uri={option.image}
+                    testID={`option-image-${option.id}`}
+                    size={Math.max(24, optionSize - spacing.md * 2)}
+                  />
+                )}
+                {option.text && <Text style={styles.optionText}>{option.text[language]}</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       {hasAnswered && (
@@ -148,16 +234,19 @@ export function QuestionRenderer({
           </Pressable>
         </Animated.View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  scrollView: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  screen: {
+    flexGrow: 1,
     alignItems: 'center',
-    padding: spacing.md,
+    paddingTop: spacing.md,
   },
   progressRow: {
     flexDirection: 'row',
@@ -185,6 +274,12 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
   },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    columnGap: spacing.md,
+  },
   questionCard: {
     backgroundColor: colors.white,
     borderRadius: radii.xl,
@@ -193,12 +288,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
     ...shadow,
     elevation: 4,
   },
   questionText: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
@@ -206,13 +300,11 @@ const styles = StyleSheet.create({
   optionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignContent: 'center',
     justifyContent: 'center',
-    width: OPTION_SIZE * 2 + spacing.md * 3,
   },
   optionCard: {
-    width: OPTION_SIZE,
-    height: OPTION_SIZE,
-    margin: spacing.sm,
+    margin: spacing.xs,
     borderRadius: radii.lg,
     borderWidth: 3,
     borderColor: colors.disabledBorder,
@@ -232,7 +324,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.coral,
   },
   optionText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
@@ -247,17 +339,17 @@ const styles = StyleSheet.create({
     fontSize: 32,
   },
   feedbackBar: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     alignItems: 'center',
   },
   feedbackEmoji: {
-    fontSize: 28,
+    fontSize: 24,
     marginBottom: spacing.xs,
   },
   feedbackText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   feedbackCorrectText: {
     color: colors.mintDark,
@@ -276,7 +368,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   nextButtonText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.white,
   },

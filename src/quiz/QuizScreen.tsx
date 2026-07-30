@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { loadQuestions } from './loadQuestions';
@@ -9,6 +10,11 @@ import { colors, radii, spacing, shadow } from '../theme/tokens';
 
 export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string; childAge: number }) {
   const { t, language } = useLanguage();
+  // This screen is shown with headerShown:true (see RootNavigator), so the
+  // native header already covers the top inset — only left/right/bottom are
+  // ours to handle (relevant in this landscape-only app where a notch or
+  // gesture-nav bar sits at one of the sides).
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<QuizSessionState | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -40,9 +46,15 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     };
   }, [quizFolderUri, childAge, retryToken]);
 
+  const insetStyle = {
+    paddingLeft: spacing.lg + insets.left,
+    paddingRight: spacing.lg + insets.right,
+    paddingBottom: spacing.lg + insets.bottom,
+  };
+
   if (error) {
     return (
-      <View testID="quiz-error" style={styles.centeredScreen}>
+      <View testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
         <Text style={styles.messageText}>{t('loadError')}</Text>
         <Pressable testID="quiz-retry" onPress={() => setRetryToken((n) => n + 1)} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>{t('retry')}</Text>
@@ -51,11 +63,11 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     );
   }
 
-  if (!state) return <View testID="quiz-loading" style={styles.centeredScreen} />;
+  if (!state) return <View testID="quiz-loading" style={[styles.centeredScreen, insetStyle]} />;
 
   if (state.session.length === 0) {
     return (
-      <View style={styles.centeredScreen}>
+      <View style={[styles.centeredScreen, insetStyle]}>
         <Text style={styles.messageText}>{t('emptyQuiz')}</Text>
       </View>
     );
@@ -70,7 +82,7 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     const starCount = ratio >= 0.9 ? 3 : ratio >= 0.5 ? 2 : 1;
 
     return (
-      <View style={styles.centeredScreen}>
+      <View style={[styles.centeredScreen, insetStyle]}>
         <View style={styles.scoreCard}>
           <Text style={styles.scoreEmoji}>🎉</Text>
           <Text style={styles.starsRow}>
