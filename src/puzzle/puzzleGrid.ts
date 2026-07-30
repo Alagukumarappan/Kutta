@@ -48,11 +48,10 @@ export function shufflePieceOrder(pieceCount: number, rng: () => number = Math.r
   if (pieceCount <= 1) return identity;
 
   let order = shuffle(identity, rng);
-  let attempts = 0;
-  // Guard against a pathological RNG that always produces the identity order.
-  while (isIdentity(order) && attempts < 10) {
-    order = shuffle(identity, () => (rng() + 0.5) % 1);
-    attempts++;
+  // Guarantee non-identity: if shuffle produced identity (even with adversarial RNG),
+  // swap first two elements to ensure non-identity.
+  if (isIdentity(order)) {
+    [order[0], order[1]] = [order[1], order[0]];
   }
   return order;
 }

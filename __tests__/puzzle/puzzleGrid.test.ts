@@ -32,8 +32,9 @@ describe('shufflePieceOrder', () => {
   });
 
   it('never returns the identity order when there is more than one piece', () => {
-    // With a fixed RNG that would otherwise produce identity, the function must reshuffle.
-    const identityProducingRng = () => 0; // Fisher-Yates with rng()=0 always swaps i with 0
+    // With an RNG that produces identity from Fisher-Yates (rng()≈1 makes j≈i at each step),
+    // the function must detect and fix this by swapping elements.
+    const identityProducingRng = () => 0.99999;
     for (let pieceCount of [4, 6, 9, 12]) {
       const order = shufflePieceOrder(pieceCount, identityProducingRng);
       expect(order).not.toEqual(Array.from({ length: pieceCount }, (_, i) => i));
