@@ -101,7 +101,8 @@ describe('SettingsScreen', () => {
 
     await findByTestId('settings-loaded');
     await fireEvent.changeText(getByTestId('settings-name-input'), 'Samuel');
-    await fireEvent.changeText(getByTestId('settings-age-input'), '5');
+    await fireEvent.press(getByTestId('settings-age-picker'));
+    await fireEvent.press(getByTestId('settings-age-option-5'));
     await fireEvent.press(getByTestId('settings-lang-de'));
     await fireEvent.press(getByText('Save changes'));
 

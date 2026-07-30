@@ -20,6 +20,7 @@ export const UI_STRINGS = {
   puzzleDetailTitle: { en: 'Puzzle', de: 'Puzzle' },
   videoDetailTitle: { en: 'Video', de: 'Video' },
   settingsTitle: { en: 'Settings', de: 'Einstellungen' },
+  settingsFolder: { en: 'Content folder', de: 'Inhaltsordner' },
   settingsChangeFolder: { en: 'Change content folder', de: 'Inhaltsordner ändern' },
   settingsSave: { en: 'Save changes', de: 'Änderungen speichern' },
   migrationInProgress: { en: 'Moving your content…', de: 'Inhalte werden verschoben…' },

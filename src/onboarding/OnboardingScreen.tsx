@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, StyleSheet } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
+import { AgePicker } from '../components/AgePicker';
 import type { Language } from '../types/profile';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
-
-const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
@@ -68,46 +67,21 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
       <View style={styles.card}>
         <Text style={styles.label}>{t('onboardingAge')}</Text>
-        <Pressable
-          testID="onboarding-age-picker"
-          onPress={() => setAgeModalVisible(true)}
-          style={styles.agePickerField}
-        >
-          <Text style={age === null ? styles.agePickerPlaceholder : styles.agePickerValue}>
-            {age === null ? t('onboardingSelectAge') : String(age)}
-          </Text>
-        </Pressable>
+        <AgePicker
+          value={age}
+          onChange={setAge}
+          visible={ageModalVisible}
+          onOpen={() => setAgeModalVisible(true)}
+          onClose={() => setAgeModalVisible(false)}
+          placeholder={t('onboardingSelectAge')}
+          testIDPrefix="onboarding-age"
+        />
         {!ageValid && (
           <Text testID="onboarding-age-error" style={styles.fieldError}>
             {t('onboardingAgeMissing')}
           </Text>
         )}
       </View>
-
-      <Modal
-        visible={ageModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAgeModalVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setAgeModalVisible(false)}>
-          <View style={styles.modalCard}>
-            {AGE_OPTIONS.map((option) => (
-              <Pressable
-                key={option}
-                testID={`onboarding-age-option-${option}`}
-                onPress={() => {
-                  setAge(option);
-                  setAgeModalVisible(false);
-                }}
-                style={styles.ageOptionRow}
-              >
-                <Text style={styles.ageOptionText}>{option}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
 
       <View style={styles.card}>
         <Text style={styles.label}>{t('onboardingLanguage')}</Text>
@@ -200,50 +174,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     fontSize: 18,
-    color: colors.ink,
-  },
-  agePickerField: {
-    borderWidth: 2,
-    borderColor: colors.disabledBorder,
-    borderRadius: radii.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  agePickerPlaceholder: {
-    fontSize: 18,
-    color: colors.disabledText,
-  },
-  agePickerValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: colors.ink,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(45, 49, 66, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  modalCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.sm,
-    width: '100%',
-    maxWidth: 320,
-    ...shadow,
-    elevation: 4,
-  },
-  ageOptionRow: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    alignItems: 'center',
-  },
-  ageOptionText: {
-    fontSize: 22,
-    fontWeight: 'bold',
     color: colors.ink,
   },
   languageRow: {
