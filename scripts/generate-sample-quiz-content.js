@@ -9,10 +9,42 @@
 const fs = require('fs');
 const path = require('path');
 
+// Every image question/option combines the picture with its bilingual name —
+// this doubles as early word-recognition (pairing the shape of a word with
+// the picture it names) even before a child can read it outright, per parent
+// feedback. A user writing their own content can still choose image-only if
+// they prefer; this is a content-authoring choice, not a schema requirement.
 const IMAGE_CONCEPTS = [
-  'cat', 'dog', 'cow', 'elephant', 'lion', 'monkey', 'rabbit', 'duck', 'horse', 'pig',
-  'sheep', 'bear', 'frog', 'mouse', 'chicken', 'bird', 'fish', 'turtle', 'bee', 'butterfly',
-  'apple', 'banana', 'car', 'ball', 'star', 'sun', 'moon', 'tree', 'flower', 'house',
+  { key: 'cat', en: 'Cat', de: 'Katze' },
+  { key: 'dog', en: 'Dog', de: 'Hund' },
+  { key: 'cow', en: 'Cow', de: 'Kuh' },
+  { key: 'elephant', en: 'Elephant', de: 'Elefant' },
+  { key: 'lion', en: 'Lion', de: 'Löwe' },
+  { key: 'monkey', en: 'Monkey', de: 'Affe' },
+  { key: 'rabbit', en: 'Rabbit', de: 'Hase' },
+  { key: 'duck', en: 'Duck', de: 'Ente' },
+  { key: 'horse', en: 'Horse', de: 'Pferd' },
+  { key: 'pig', en: 'Pig', de: 'Schwein' },
+  { key: 'sheep', en: 'Sheep', de: 'Schaf' },
+  { key: 'bear', en: 'Bear', de: 'Bär' },
+  { key: 'frog', en: 'Frog', de: 'Frosch' },
+  { key: 'mouse', en: 'Mouse', de: 'Maus' },
+  { key: 'chicken', en: 'Chicken', de: 'Huhn' },
+  { key: 'bird', en: 'Bird', de: 'Vogel' },
+  { key: 'fish', en: 'Fish', de: 'Fisch' },
+  { key: 'turtle', en: 'Turtle', de: 'Schildkröte' },
+  { key: 'bee', en: 'Bee', de: 'Biene' },
+  { key: 'butterfly', en: 'Butterfly', de: 'Schmetterling' },
+  { key: 'apple', en: 'Apple', de: 'Apfel' },
+  { key: 'banana', en: 'Banana', de: 'Banane' },
+  { key: 'car', en: 'Car', de: 'Auto' },
+  { key: 'ball', en: 'Ball', de: 'Ball' },
+  { key: 'star', en: 'Star', de: 'Stern' },
+  { key: 'sun', en: 'Sun', de: 'Sonne' },
+  { key: 'moon', en: 'Moon', de: 'Mond' },
+  { key: 'tree', en: 'Tree', de: 'Baum' },
+  { key: 'flower', en: 'Flower', de: 'Blume' },
+  { key: 'house', en: 'House', de: 'Haus' },
 ];
 
 // Simple deterministic PRNG so re-running this script produces the same output.
@@ -33,8 +65,8 @@ function shuffle(items, rng) {
   return result;
 }
 
-function imagePath(concept) {
-  return `images/${concept}.png`;
+function imagePath(conceptKey) {
+  return `images/${conceptKey}.png`;
 }
 
 function buildImageQuestions(age, rng) {
@@ -47,7 +79,8 @@ function buildImageQuestions(age, rng) {
     const choices = shuffle([target, ...distractors], rng);
     const options = choices.map((concept, idx) => ({
       id: optionIds[idx],
-      image: imagePath(concept),
+      image: imagePath(concept.key),
+      text: { en: concept.en, de: concept.de },
     }));
     const correctOptionId = options[choices.indexOf(target)].id;
     questions.push({
@@ -55,7 +88,10 @@ function buildImageQuestions(age, rng) {
       category: 'image',
       minAge: age,
       maxAge: age,
-      question: { image: imagePath(target) },
+      question: {
+        image: imagePath(target.key),
+        text: { en: `What is this?`, de: `Was ist das?` },
+      },
       options,
       correctOptionId,
     });

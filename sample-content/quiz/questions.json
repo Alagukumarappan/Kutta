@@ -6,24 +6,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/rabbit.png"
+        "image": "images/rabbit.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/rabbit.png"
+          "image": "images/rabbit.png",
+          "text": {
+            "en": "Rabbit",
+            "de": "Hase"
+          }
         },
         {
           "id": "b",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "c",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "d",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -34,24 +54,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/bird.png"
+        "image": "images/bird.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "b",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "c",
-          "image": "images/bee.png"
+          "image": "images/bee.png",
+          "text": {
+            "en": "Bee",
+            "de": "Biene"
+          }
         },
         {
           "id": "d",
-          "image": "images/bird.png"
+          "image": "images/bird.png",
+          "text": {
+            "en": "Bird",
+            "de": "Vogel"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -62,24 +102,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/cow.png"
+        "image": "images/cow.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "b",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         },
         {
           "id": "c",
-          "image": "images/horse.png"
+          "image": "images/horse.png",
+          "text": {
+            "en": "Horse",
+            "de": "Pferd"
+          }
         },
         {
           "id": "d",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -90,24 +150,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/butterfly.png"
+        "image": "images/butterfly.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         },
         {
           "id": "b",
-          "image": "images/turtle.png"
+          "image": "images/turtle.png",
+          "text": {
+            "en": "Turtle",
+            "de": "Schildkröte"
+          }
         },
         {
           "id": "c",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "d",
-          "image": "images/rabbit.png"
+          "image": "images/rabbit.png",
+          "text": {
+            "en": "Rabbit",
+            "de": "Hase"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -118,24 +198,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/banana.png"
+        "image": "images/banana.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "b",
-          "image": "images/banana.png"
+          "image": "images/banana.png",
+          "text": {
+            "en": "Banana",
+            "de": "Banane"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/turtle.png"
+          "image": "images/turtle.png",
+          "text": {
+            "en": "Turtle",
+            "de": "Schildkröte"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -146,24 +246,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/cow.png"
+        "image": "images/cow.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         },
         {
           "id": "b",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -174,24 +294,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/car.png"
+        "image": "images/car.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         },
         {
           "id": "b",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         },
         {
           "id": "c",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "d",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -202,24 +342,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/chicken.png"
+        "image": "images/chicken.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/chicken.png"
+          "image": "images/chicken.png",
+          "text": {
+            "en": "Chicken",
+            "de": "Huhn"
+          }
         },
         {
           "id": "b",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "c",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         },
         {
           "id": "d",
-          "image": "images/bird.png"
+          "image": "images/bird.png",
+          "text": {
+            "en": "Bird",
+            "de": "Vogel"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -230,24 +390,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/moon.png"
+        "image": "images/moon.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/moon.png"
+          "image": "images/moon.png",
+          "text": {
+            "en": "Moon",
+            "de": "Mond"
+          }
         },
         {
           "id": "b",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -258,24 +438,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/moon.png"
+        "image": "images/moon.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/moon.png"
+          "image": "images/moon.png",
+          "text": {
+            "en": "Moon",
+            "de": "Mond"
+          }
         },
         {
           "id": "b",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -286,24 +486,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/duck.png"
+        "image": "images/duck.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "b",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "c",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "d",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -314,24 +534,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/cat.png"
+        "image": "images/cat.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "b",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "c",
-          "image": "images/banana.png"
+          "image": "images/banana.png",
+          "text": {
+            "en": "Banana",
+            "de": "Banane"
+          }
         },
         {
           "id": "d",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -342,24 +582,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/star.png"
+        "image": "images/star.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "b",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "c",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         },
         {
           "id": "d",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -370,24 +630,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/apple.png"
+        "image": "images/apple.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "b",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "c",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "d",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -398,24 +678,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/sheep.png"
+        "image": "images/sheep.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "b",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "c",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "d",
-          "image": "images/bee.png"
+          "image": "images/bee.png",
+          "text": {
+            "en": "Bee",
+            "de": "Biene"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -426,24 +726,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/cat.png"
+        "image": "images/cat.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/turtle.png"
+          "image": "images/turtle.png",
+          "text": {
+            "en": "Turtle",
+            "de": "Schildkröte"
+          }
         },
         {
           "id": "b",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "c",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "d",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -454,24 +774,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/lion.png"
+        "image": "images/lion.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         },
         {
           "id": "b",
-          "image": "images/chicken.png"
+          "image": "images/chicken.png",
+          "text": {
+            "en": "Chicken",
+            "de": "Huhn"
+          }
         },
         {
           "id": "c",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "d",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -482,24 +822,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/lion.png"
+        "image": "images/lion.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "b",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "c",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "d",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -510,24 +870,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/fish.png"
+        "image": "images/fish.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "b",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "c",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         },
         {
           "id": "d",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -538,24 +918,44 @@
       "minAge": 2,
       "maxAge": 2,
       "question": {
-        "image": "images/fish.png"
+        "image": "images/fish.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "b",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "c",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "d",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -566,24 +966,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/sheep.png"
+        "image": "images/sheep.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "b",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "c",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "d",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -594,24 +1014,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/sun.png"
+        "image": "images/sun.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "b",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "c",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "d",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -622,24 +1062,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/pig.png"
+        "image": "images/pig.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "b",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         },
         {
           "id": "c",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "d",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -650,24 +1110,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/bear.png"
+        "image": "images/bear.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         },
         {
           "id": "b",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "c",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "d",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -678,24 +1158,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/flower.png"
+        "image": "images/flower.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         },
         {
           "id": "b",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "c",
-          "image": "images/turtle.png"
+          "image": "images/turtle.png",
+          "text": {
+            "en": "Turtle",
+            "de": "Schildkröte"
+          }
         },
         {
           "id": "d",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -706,24 +1206,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/fish.png"
+        "image": "images/fish.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         },
         {
           "id": "b",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "c",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         },
         {
           "id": "d",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -734,24 +1254,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/dog.png"
+        "image": "images/dog.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "b",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "c",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "d",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -762,24 +1302,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/ball.png"
+        "image": "images/ball.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         },
         {
           "id": "b",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "c",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         },
         {
           "id": "d",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -790,24 +1350,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/cat.png"
+        "image": "images/cat.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "b",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         },
         {
           "id": "c",
-          "image": "images/moon.png"
+          "image": "images/moon.png",
+          "text": {
+            "en": "Moon",
+            "de": "Mond"
+          }
         },
         {
           "id": "d",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -818,24 +1398,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/cat.png"
+        "image": "images/cat.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "b",
-          "image": "images/bird.png"
+          "image": "images/bird.png",
+          "text": {
+            "en": "Bird",
+            "de": "Vogel"
+          }
         },
         {
           "id": "c",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "d",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -846,24 +1446,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/flower.png"
+        "image": "images/flower.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "b",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         },
         {
           "id": "c",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "d",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -874,24 +1494,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/elephant.png"
+        "image": "images/elephant.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         },
         {
           "id": "b",
-          "image": "images/horse.png"
+          "image": "images/horse.png",
+          "text": {
+            "en": "Horse",
+            "de": "Pferd"
+          }
         },
         {
           "id": "c",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "d",
-          "image": "images/moon.png"
+          "image": "images/moon.png",
+          "text": {
+            "en": "Moon",
+            "de": "Mond"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -902,24 +1542,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/flower.png"
+        "image": "images/flower.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "b",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "c",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         },
         {
           "id": "d",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -930,24 +1590,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/flower.png"
+        "image": "images/flower.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "b",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -958,24 +1638,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/car.png"
+        "image": "images/car.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         },
         {
           "id": "b",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "c",
-          "image": "images/chicken.png"
+          "image": "images/chicken.png",
+          "text": {
+            "en": "Chicken",
+            "de": "Huhn"
+          }
         },
         {
           "id": "d",
-          "image": "images/bird.png"
+          "image": "images/bird.png",
+          "text": {
+            "en": "Bird",
+            "de": "Vogel"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -986,24 +1686,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/car.png"
+        "image": "images/car.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/rabbit.png"
+          "image": "images/rabbit.png",
+          "text": {
+            "en": "Rabbit",
+            "de": "Hase"
+          }
         },
         {
           "id": "b",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         },
         {
           "id": "c",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         },
         {
           "id": "d",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -1014,24 +1734,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/chicken.png"
+        "image": "images/chicken.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "b",
-          "image": "images/chicken.png"
+          "image": "images/chicken.png",
+          "text": {
+            "en": "Chicken",
+            "de": "Huhn"
+          }
         },
         {
           "id": "c",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "d",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -1042,24 +1782,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/sun.png"
+        "image": "images/sun.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/bee.png"
+          "image": "images/bee.png",
+          "text": {
+            "en": "Bee",
+            "de": "Biene"
+          }
         },
         {
           "id": "b",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "c",
-          "image": "images/chicken.png"
+          "image": "images/chicken.png",
+          "text": {
+            "en": "Chicken",
+            "de": "Huhn"
+          }
         },
         {
           "id": "d",
-          "image": "images/fish.png"
+          "image": "images/fish.png",
+          "text": {
+            "en": "Fish",
+            "de": "Fisch"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -1070,24 +1830,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/monkey.png"
+        "image": "images/monkey.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         },
         {
           "id": "b",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "c",
-          "image": "images/bird.png"
+          "image": "images/bird.png",
+          "text": {
+            "en": "Bird",
+            "de": "Vogel"
+          }
         },
         {
           "id": "d",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -1098,24 +1878,44 @@
       "minAge": 3,
       "maxAge": 3,
       "question": {
-        "image": "images/duck.png"
+        "image": "images/duck.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         },
         {
           "id": "b",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "c",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         },
         {
           "id": "d",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -1126,24 +1926,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/star.png"
+        "image": "images/star.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/banana.png"
+          "image": "images/banana.png",
+          "text": {
+            "en": "Banana",
+            "de": "Banane"
+          }
         },
         {
           "id": "b",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -1154,24 +1974,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/bear.png"
+        "image": "images/bear.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/turtle.png"
+          "image": "images/turtle.png",
+          "text": {
+            "en": "Turtle",
+            "de": "Schildkröte"
+          }
         },
         {
           "id": "b",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "c",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         },
         {
           "id": "d",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1182,24 +2022,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/cat.png"
+        "image": "images/cat.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         },
         {
           "id": "b",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "c",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "d",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1210,24 +2070,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/monkey.png"
+        "image": "images/monkey.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/tree.png"
+          "image": "images/tree.png",
+          "text": {
+            "en": "Tree",
+            "de": "Baum"
+          }
         },
         {
           "id": "b",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "c",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "d",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1238,24 +2118,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/ball.png"
+        "image": "images/ball.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "b",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         },
         {
           "id": "c",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "d",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -1266,24 +2166,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/ball.png"
+        "image": "images/ball.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "b",
-          "image": "images/lion.png"
+          "image": "images/lion.png",
+          "text": {
+            "en": "Lion",
+            "de": "Löwe"
+          }
         },
         {
           "id": "c",
-          "image": "images/bee.png"
+          "image": "images/bee.png",
+          "text": {
+            "en": "Bee",
+            "de": "Biene"
+          }
         },
         {
           "id": "d",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         }
       ],
       "correctOptionId": "d"
@@ -1294,24 +2214,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/pig.png"
+        "image": "images/pig.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "b",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "c",
-          "image": "images/frog.png"
+          "image": "images/frog.png",
+          "text": {
+            "en": "Frog",
+            "de": "Frosch"
+          }
         },
         {
           "id": "d",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         }
       ],
       "correctOptionId": "b"
@@ -1322,24 +2262,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/elephant.png"
+        "image": "images/elephant.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         },
         {
           "id": "b",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         },
         {
           "id": "c",
-          "image": "images/rabbit.png"
+          "image": "images/rabbit.png",
+          "text": {
+            "en": "Rabbit",
+            "de": "Hase"
+          }
         },
         {
           "id": "d",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -1350,24 +2310,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/monkey.png"
+        "image": "images/monkey.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "b",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "c",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "d",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -1378,24 +2358,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/duck.png"
+        "image": "images/duck.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         },
         {
           "id": "b",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "c",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         },
         {
           "id": "d",
-          "image": "images/tree.png"
+          "image": "images/tree.png",
+          "text": {
+            "en": "Tree",
+            "de": "Baum"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -1406,24 +2406,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/house.png"
+        "image": "images/house.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "b",
-          "image": "images/flower.png"
+          "image": "images/flower.png",
+          "text": {
+            "en": "Flower",
+            "de": "Blume"
+          }
         },
         {
           "id": "c",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "d",
-          "image": "images/duck.png"
+          "image": "images/duck.png",
+          "text": {
+            "en": "Duck",
+            "de": "Ente"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -1434,24 +2454,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/cow.png"
+        "image": "images/cow.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "b",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         },
         {
           "id": "c",
-          "image": "images/star.png"
+          "image": "images/star.png",
+          "text": {
+            "en": "Star",
+            "de": "Stern"
+          }
         },
         {
           "id": "d",
-          "image": "images/rabbit.png"
+          "image": "images/rabbit.png",
+          "text": {
+            "en": "Rabbit",
+            "de": "Hase"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -1462,24 +2502,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/pig.png"
+        "image": "images/pig.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/mouse.png"
+          "image": "images/mouse.png",
+          "text": {
+            "en": "Mouse",
+            "de": "Maus"
+          }
         },
         {
           "id": "b",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         },
         {
           "id": "c",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "d",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1490,24 +2550,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/turtle.png"
+        "image": "images/turtle.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/banana.png"
+          "image": "images/banana.png",
+          "text": {
+            "en": "Banana",
+            "de": "Banane"
+          }
         },
         {
           "id": "b",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         },
         {
           "id": "c",
-          "image": "images/turtle.png"
+          "image": "images/turtle.png",
+          "text": {
+            "en": "Turtle",
+            "de": "Schildkröte"
+          }
         },
         {
           "id": "d",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1518,24 +2598,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/rabbit.png"
+        "image": "images/rabbit.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         },
         {
           "id": "b",
-          "image": "images/banana.png"
+          "image": "images/banana.png",
+          "text": {
+            "en": "Banana",
+            "de": "Banane"
+          }
         },
         {
           "id": "c",
-          "image": "images/rabbit.png"
+          "image": "images/rabbit.png",
+          "text": {
+            "en": "Rabbit",
+            "de": "Hase"
+          }
         },
         {
           "id": "d",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1546,24 +2646,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/ball.png"
+        "image": "images/ball.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/ball.png"
+          "image": "images/ball.png",
+          "text": {
+            "en": "Ball",
+            "de": "Ball"
+          }
         },
         {
           "id": "b",
-          "image": "images/sheep.png"
+          "image": "images/sheep.png",
+          "text": {
+            "en": "Sheep",
+            "de": "Schaf"
+          }
         },
         {
           "id": "c",
-          "image": "images/monkey.png"
+          "image": "images/monkey.png",
+          "text": {
+            "en": "Monkey",
+            "de": "Affe"
+          }
         },
         {
           "id": "d",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         }
       ],
       "correctOptionId": "a"
@@ -1574,24 +2694,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/tree.png"
+        "image": "images/tree.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/pig.png"
+          "image": "images/pig.png",
+          "text": {
+            "en": "Pig",
+            "de": "Schwein"
+          }
         },
         {
           "id": "b",
-          "image": "images/elephant.png"
+          "image": "images/elephant.png",
+          "text": {
+            "en": "Elephant",
+            "de": "Elefant"
+          }
         },
         {
           "id": "c",
-          "image": "images/tree.png"
+          "image": "images/tree.png",
+          "text": {
+            "en": "Tree",
+            "de": "Baum"
+          }
         },
         {
           "id": "d",
-          "image": "images/butterfly.png"
+          "image": "images/butterfly.png",
+          "text": {
+            "en": "Butterfly",
+            "de": "Schmetterling"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1602,24 +2742,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/sun.png"
+        "image": "images/sun.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "b",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "c",
-          "image": "images/sun.png"
+          "image": "images/sun.png",
+          "text": {
+            "en": "Sun",
+            "de": "Sonne"
+          }
         },
         {
           "id": "d",
-          "image": "images/banana.png"
+          "image": "images/banana.png",
+          "text": {
+            "en": "Banana",
+            "de": "Banane"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1630,24 +2790,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/cow.png"
+        "image": "images/cow.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/dog.png"
+          "image": "images/dog.png",
+          "text": {
+            "en": "Dog",
+            "de": "Hund"
+          }
         },
         {
           "id": "b",
-          "image": "images/apple.png"
+          "image": "images/apple.png",
+          "text": {
+            "en": "Apple",
+            "de": "Apfel"
+          }
         },
         {
           "id": "c",
-          "image": "images/cow.png"
+          "image": "images/cow.png",
+          "text": {
+            "en": "Cow",
+            "de": "Kuh"
+          }
         },
         {
           "id": "d",
-          "image": "images/bird.png"
+          "image": "images/bird.png",
+          "text": {
+            "en": "Bird",
+            "de": "Vogel"
+          }
         }
       ],
       "correctOptionId": "c"
@@ -1658,24 +2838,44 @@
       "minAge": 4,
       "maxAge": 4,
       "question": {
-        "image": "images/car.png"
+        "image": "images/car.png",
+        "text": {
+          "en": "What is this?",
+          "de": "Was ist das?"
+        }
       },
       "options": [
         {
           "id": "a",
-          "image": "images/cat.png"
+          "image": "images/cat.png",
+          "text": {
+            "en": "Cat",
+            "de": "Katze"
+          }
         },
         {
           "id": "b",
-          "image": "images/car.png"
+          "image": "images/car.png",
+          "text": {
+            "en": "Car",
+            "de": "Auto"
+          }
         },
         {
           "id": "c",
-          "image": "images/house.png"
+          "image": "images/house.png",
+          "text": {
+            "en": "House",
+            "de": "Haus"
+          }
         },
         {
           "id": "d",
-          "image": "images/bear.png"
+          "image": "images/bear.png",
+          "text": {
+            "en": "Bear",
+            "de": "Bär"
+          }
         }
       ],
       "correctOptionId": "b"
