@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getProfile, saveProfile } from '../storage/profileStore';
 import { requestFolderAccess } from '../storage/folderAccess';
@@ -86,83 +86,92 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
     onProfileChanged?.();
   }
 
-  if (!profile) return <View testID="settings-loading" style={styles.screen} />;
+  if (!profile) return <View testID="settings-loading" style={[styles.scrollView, styles.screen]} />;
 
   const displayedFolderUri = pendingFolderUri ?? profile.rootFolderUri;
 
   return (
-    <View testID="settings-loaded" style={styles.screen}>
+    <ScrollView
+      testID="settings-loaded"
+      style={styles.scrollView}
+      contentContainerStyle={styles.screen}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.title}>{t('settingsTitle')}</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('onboardingName')}</Text>
-        <TextInput
-          testID="settings-name-input"
-          value={profile.name}
-          onChangeText={(name) => setProfile({ ...profile, name })}
-          style={styles.textInput}
-        />
-      </View>
+      <View style={styles.row}>
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('onboardingName')}</Text>
+          <TextInput
+            testID="settings-name-input"
+            value={profile.name}
+            onChangeText={(name) => setProfile({ ...profile, name })}
+            style={styles.textInput}
+          />
+        </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('onboardingAge')}</Text>
-        <AgePicker
-          value={age}
-          onChange={setAge}
-          visible={ageModalVisible}
-          onOpen={() => setAgeModalVisible(true)}
-          onClose={() => setAgeModalVisible(false)}
-          placeholder={t('onboardingSelectAge')}
-          testIDPrefix="settings-age"
-        />
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('onboardingLanguage')}</Text>
-        <View style={styles.languageRow}>
-          <Pressable
-            testID="settings-lang-en"
-            onPress={() => setProfile({ ...profile, language: 'en' as Language })}
-            style={[styles.langPill, profile.language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
-          >
-            <Text
-              style={[
-                styles.langPillText,
-                profile.language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected,
-              ]}
-            >
-              English
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="settings-lang-de"
-            onPress={() => setProfile({ ...profile, language: 'de' as Language })}
-            style={[styles.langPill, profile.language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
-          >
-            <Text
-              style={[
-                styles.langPillText,
-                profile.language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected,
-              ]}
-            >
-              Deutsch
-            </Text>
-          </Pressable>
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('onboardingAge')}</Text>
+          <AgePicker
+            value={age}
+            onChange={setAge}
+            visible={ageModalVisible}
+            onOpen={() => setAgeModalVisible(true)}
+            onClose={() => setAgeModalVisible(false)}
+            placeholder={t('onboardingSelectAge')}
+            testIDPrefix="settings-age"
+          />
         </View>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('settingsFolder')}</Text>
-        {displayedFolderUri && (
-          <View style={styles.folderConfirm}>
-            <Text testID="settings-folder-path" style={styles.folderConfirmText}>
-              {toReadableFolderPath(displayedFolderUri)}
-            </Text>
+      <View style={styles.row}>
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('onboardingLanguage')}</Text>
+          <View style={styles.languageRow}>
+            <Pressable
+              testID="settings-lang-en"
+              onPress={() => setProfile({ ...profile, language: 'en' as Language })}
+              style={[styles.langPill, profile.language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+            >
+              <Text
+                style={[
+                  styles.langPillText,
+                  profile.language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected,
+                ]}
+              >
+                English
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="settings-lang-de"
+              onPress={() => setProfile({ ...profile, language: 'de' as Language })}
+              style={[styles.langPill, profile.language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+            >
+              <Text
+                style={[
+                  styles.langPillText,
+                  profile.language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected,
+                ]}
+              >
+                Deutsch
+              </Text>
+            </Pressable>
           </View>
-        )}
-        <Pressable onPress={handlePickFolder} style={styles.folderButton}>
-          <Text style={styles.folderButtonText}>{t('settingsChangeFolder')}</Text>
-        </Pressable>
+        </View>
+
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('settingsFolder')}</Text>
+          {displayedFolderUri && (
+            <View style={styles.folderConfirm}>
+              <Text testID="settings-folder-path" style={styles.folderConfirmText}>
+                {toReadableFolderPath(displayedFolderUri)}
+              </Text>
+            </View>
+          )}
+          <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+            <Text style={styles.folderButtonText}>{t('settingsChangeFolder')}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {migrating && (
@@ -186,14 +195,17 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
           {t('settingsSave')}
         </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   screen: {
     flexGrow: 1,
-    backgroundColor: colors.background,
     padding: spacing.md,
   },
   title: {
@@ -203,6 +215,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.lg,
     marginBottom: spacing.lg,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  halfCard: {
+    flex: 1,
+    marginBottom: 0,
   },
   card: {
     backgroundColor: colors.white,
