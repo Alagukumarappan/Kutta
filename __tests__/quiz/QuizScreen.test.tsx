@@ -53,7 +53,7 @@ describe('QuizScreen', () => {
     // (session stays in original array order) for this assertion.
     jest.spyOn(Math, 'random').mockReturnValue(0.999999);
 
-    const { findByText, getByText } = await render(
+    const { findByText, getByText, getByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
       </LanguageProvider>
@@ -61,11 +61,38 @@ describe('QuizScreen', () => {
 
     await findByText('2 + 2?');
     await fireEvent.press(getByText('4'));
+    await findByText('Correct!');
+    await fireEvent.press(getByTestId('quiz-next'));
 
     await findByText('1 + 1?');
     await fireEvent.press(getByText('2'));
+    await findByText('Correct!');
+    await fireEvent.press(getByTestId('quiz-next'));
 
     await waitFor(() => expect(getByText('Quiz done! Your score: 2 / 2')).toBeTruthy());
+  });
+
+  it('shows "Try again!" for a wrong answer but still advances and does not award a point', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+    jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    const { findByText, getByText, getByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText('2 + 2?');
+    await fireEvent.press(getByText('3')); // wrong answer
+    await findByText('Try again!');
+    await fireEvent.press(getByTestId('quiz-next'));
+
+    await findByText('1 + 1?');
+    await fireEvent.press(getByText('2'));
+    await findByText('Correct!');
+    await fireEvent.press(getByTestId('quiz-next'));
+
+    await waitFor(() => expect(getByText('Quiz done! Your score: 1 / 2')).toBeTruthy());
   });
 
   it('shows the empty state when there are no eligible questions', async () => {

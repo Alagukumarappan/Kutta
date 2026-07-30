@@ -24,10 +24,14 @@ describe('QuestionRenderer', () => {
   });
 
   it('falls back to a placeholder when the question image fails to load', async () => {
-    const onAnswer = jest.fn();
-
     const { getByTestId, queryByTestId } = await render(
-      <QuestionRenderer question={imageQuestion} language="en" onAnswer={onAnswer} />
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
     );
 
     const image = getByTestId('question-image');
@@ -35,5 +39,72 @@ describe('QuestionRenderer', () => {
 
     expect(queryByTestId('question-image')).toBeNull();
     expect(getByTestId('question-image-broken')).toBeTruthy();
+  });
+
+  it('calls onSelect (without showing feedback yet) when an option is first tapped', async () => {
+    const onSelect = jest.fn();
+
+    const { getByTestId, queryByTestId } = await render(
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={onSelect}
+        onNext={jest.fn()}
+      />
+    );
+
+    expect(queryByTestId('quiz-feedback')).toBeNull();
+    await fireEvent.press(getByTestId('option-b'));
+    expect(onSelect).toHaveBeenCalledWith('b');
+  });
+
+  it('shows "Correct!" feedback once selectedOptionId matches the correct option, and Next advances', async () => {
+    const onNext = jest.fn();
+
+    const { getByText, getByTestId } = await render(
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId="b"
+        onSelect={jest.fn()}
+        onNext={onNext}
+      />
+    );
+
+    expect(getByText('Correct!')).toBeTruthy();
+    await fireEvent.press(getByTestId('quiz-next'));
+    expect(onNext).toHaveBeenCalled();
+  });
+
+  it('shows "Try again!" feedback when the selected option is wrong', async () => {
+    const { getByText } = await render(
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId="a"
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    expect(getByText('Try again!')).toBeTruthy();
+  });
+
+  it('does not call onSelect again once an option has already been answered', async () => {
+    const onSelect = jest.fn();
+
+    const { getByTestId } = await render(
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId="a"
+        onSelect={onSelect}
+        onNext={jest.fn()}
+      />
+    );
+
+    await fireEvent.press(getByTestId('option-c'));
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });
