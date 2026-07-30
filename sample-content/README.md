@@ -1,6 +1,6 @@
 # Sample Content for Kutta
 
-This folder is **starter content**, not part of the app itself — the app never bundles content, per its design (everything the child sees comes from a folder you pick on the phone). This is just a ready-made set of quiz questions you can copy onto the phone to get started immediately, instead of writing `questions.json` from scratch.
+This folder is **starter content**, not part of the app itself — the app never bundles content, per its design (everything the child sees comes from a folder you pick on the phone). This is a ready-made set of quiz questions AND photo-puzzle pictures you can copy onto the phone to get started immediately, instead of creating content from scratch.
 
 ## What's here
 
@@ -9,18 +9,25 @@ sample-content/
   quiz/
     questions.json   → 120 starter quiz questions (20 for each age, 2-7)
     images/           → 30 icon images the questions above reference
-  ATTRIBUTION.md      → license credit for the icons (required — read before using)
+  pictures/
+    farm.jpg          → for the Photo Puzzle
+    sports-car.jpg     → for the Photo Puzzle
+    doll.jpg           → for the Photo Puzzle
+    superhero.png      → for the Photo Puzzle
+  ATTRIBUTION.md      → license credit for every image (required — read before using)
 ```
 
 ## How to use it
 
-1. Copy the entire `quiz/` folder from here into the content folder you picked during onboarding (the same folder that already has `pictures/`, `videos/`, `coloring/`, and an empty `quiz/` inside it) — overwrite the empty `quiz/questions.json` and `quiz/images/` the app created.
-2. That's it — reopen the Quiz on the phone and these questions will be there, filtered automatically by whatever age is set in the app.
+1. Copy the `quiz/` folder from here into the content folder you picked during onboarding (the same folder that already has `pictures/`, `videos/`, `coloring/`, and an empty `quiz/` inside it) — overwrite the empty `quiz/questions.json` and `quiz/images/` the app created.
+2. Copy the 4 files from `pictures/` here into that same content folder's own `pictures/` subfolder.
+3. That's it — reopen the Quiz or Photo Puzzle on the phone and this content will be there.
 
 ## What's included
 
 - **Ages 2-4** (60 questions, 20 per age): pure picture-matching questions — no reading required. The child sees one picture and taps the matching picture among 4 choices (e.g. sees a picture of a rabbit, taps the rabbit among a rabbit/cow/monkey/dog).
 - **Ages 5-7** (60 questions, 20 per age): a mix of simple math (addition for age 5; addition/subtraction for age 6; addition/subtraction/simple multiplication for age 7) and general-knowledge questions (colors, animals, geography, science, etc.), all bilingual (English/German).
+- **4 Photo Puzzle pictures**: a farm, a sports car, a doll, and a superhero — real/illustrated pictures (not any trademarked character — see `ATTRIBUTION.md`) ready to split into puzzle pieces.
 
 ## Making it your own
 

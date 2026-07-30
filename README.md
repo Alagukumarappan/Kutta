@@ -79,7 +79,7 @@ Rules:
 
 ### Don't want to write 120 questions from scratch?
 
-`sample-content/quiz/` has 120 ready-made starter questions (20 per age, ages 2-7) plus the icon images they reference — see `sample-content/README.md` for what's included and how to copy it onto the phone. It's just a starting point; edit, add to, or delete anything in it once it's on the device.
+`sample-content/` has 120 ready-made starter quiz questions (20 per age, ages 2-7) plus the icon images they reference, AND 4 starter pictures for the Photo Puzzle (farm, sports car, doll, superhero) — see `sample-content/README.md` for what's included and how to copy it onto the phone. It's just a starting point; edit, add to, or delete anything in it once it's on the device.
 
 ## Running it locally
 
