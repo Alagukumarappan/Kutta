@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
@@ -46,83 +46,91 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <View style={styles.screen}>
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={styles.screen}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.title}>{t('onboardingTitle')}</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('onboardingName')}</Text>
-        <TextInput
-          testID="onboarding-name-input"
-          value={name}
-          onChangeText={setName}
-          style={styles.textInput}
-          placeholder="Name"
-        />
-        {!nameValid && (
-          <Text testID="onboarding-name-error" style={styles.fieldError}>
-            {t('onboardingNameMissing')}
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('onboardingAge')}</Text>
-        <AgePicker
-          value={age}
-          onChange={setAge}
-          visible={ageModalVisible}
-          onOpen={() => setAgeModalVisible(true)}
-          onClose={() => setAgeModalVisible(false)}
-          placeholder={t('onboardingSelectAge')}
-          testIDPrefix="onboarding-age"
-        />
-        {!ageValid && (
-          <Text testID="onboarding-age-error" style={styles.fieldError}>
-            {t('onboardingAgeMissing')}
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('onboardingLanguage')}</Text>
-        <View style={styles.languageRow}>
-          <Pressable
-            testID="onboarding-lang-en"
-            onPress={() => setLanguage('en' as Language)}
-            style={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
-          >
-            <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
-              English
+      <View style={styles.row}>
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('onboardingName')}</Text>
+          <TextInput
+            testID="onboarding-name-input"
+            value={name}
+            onChangeText={setName}
+            style={styles.textInput}
+            placeholder="Name"
+          />
+          {!nameValid && (
+            <Text testID="onboarding-name-error" style={styles.fieldError}>
+              {t('onboardingNameMissing')}
             </Text>
-          </Pressable>
-          <Pressable
-            testID="onboarding-lang-de"
-            onPress={() => setLanguage('de' as Language)}
-            style={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
-          >
-            <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
-              Deutsch
+          )}
+        </View>
+
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('onboardingAge')}</Text>
+          <AgePicker
+            value={age}
+            onChange={setAge}
+            visible={ageModalVisible}
+            onOpen={() => setAgeModalVisible(true)}
+            onClose={() => setAgeModalVisible(false)}
+            placeholder={t('onboardingSelectAge')}
+            testIDPrefix="onboarding-age"
+          />
+          {!ageValid && (
+            <Text testID="onboarding-age-error" style={styles.fieldError}>
+              {t('onboardingAgeMissing')}
             </Text>
-          </Pressable>
+          )}
         </View>
       </View>
 
-      <View style={styles.card}>
-        <Pressable onPress={handlePickFolder} style={styles.folderButton}>
-          <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
-        </Pressable>
-        {folderUri && (
-          <View style={styles.folderConfirm}>
-            <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
-              {toReadableFolderPath(folderUri)}
-            </Text>
+      <View style={styles.row}>
+        <View style={[styles.card, styles.halfCard]}>
+          <Text style={styles.label}>{t('onboardingLanguage')}</Text>
+          <View style={styles.languageRow}>
+            <Pressable
+              testID="onboarding-lang-en"
+              onPress={() => setLanguage('en' as Language)}
+              style={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+            >
+              <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
+                English
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="onboarding-lang-de"
+              onPress={() => setLanguage('de' as Language)}
+              style={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+            >
+              <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
+                Deutsch
+              </Text>
+            </Pressable>
           </View>
-        )}
-        {!folderValid && (
-          <Text testID="onboarding-folder-error" style={styles.fieldError}>
-            {t('onboardingFolderMissing')}
-          </Text>
-        )}
+        </View>
+
+        <View style={[styles.card, styles.halfCard]}>
+          <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+            <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
+          </Pressable>
+          {folderUri && (
+            <View style={styles.folderConfirm}>
+              <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
+                {toReadableFolderPath(folderUri)}
+              </Text>
+            </View>
+          )}
+          {!folderValid && (
+            <Text testID="onboarding-folder-error" style={styles.fieldError}>
+              {t('onboardingFolderMissing')}
+            </Text>
+          )}
+        </View>
       </View>
 
       <Pressable
@@ -135,14 +143,17 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           {t('onboardingSave')}
         </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   screen: {
     flexGrow: 1,
-    backgroundColor: colors.background,
     padding: spacing.md,
   },
   title: {
@@ -152,6 +163,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.lg,
     marginBottom: spacing.lg,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  halfCard: {
+    flex: 1,
+    marginBottom: 0,
   },
   card: {
     backgroundColor: colors.white,
