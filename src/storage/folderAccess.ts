@@ -8,6 +8,16 @@ export async function requestFolderAccess(): Promise<string | null> {
   return result.directoryUri;
 }
 
+// Returns the decoded final path segment of a SAF URI, e.g. for
+// ".../document/primary%3ARoot%2Fpictures" this returns "pictures". Used to
+// compare a candidate child's *whole* name against the wanted name, rather
+// than a suffix check — `entryUri.endsWith(name)` would also match unrelated
+// siblings like "Old pictures" or "not-pictures" when looking for "pictures".
+function leafNameOf(uri: string): string {
+  const decoded = decodeURIComponent(uri);
+  return decoded.substring(decoded.lastIndexOf('/') + 1);
+}
+
 // The installed expo-file-system's `getUriForDirectoryInRoot(folderName)` takes
 // a single argument and always builds a hardcoded "primary:<folderName>" URI —
 // it locates a folder in the device's root storage for requesting a *new* SAF
@@ -20,14 +30,8 @@ export async function requestFolderAccess(): Promise<string | null> {
 // same way) instead of reaching for `getUriForDirectoryInRoot`.
 export async function findChildUri(parentUri: string, name: string): Promise<string | null> {
   const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(parentUri);
-  const match = entries.find(
-    (entryUri) => entryUri.endsWith(`/${name}`) || entryUri.endsWith(encodeURIComponent(name))
-  );
+  const match = entries.find((entryUri) => leafNameOf(entryUri) === name);
   return match ?? null;
-}
-
-async function dirExists(parentUri: string, name: string): Promise<boolean> {
-  return (await findChildUri(parentUri, name)) !== null;
 }
 
 // Ensures a child directory named `name` exists directly under `parentUri`,
@@ -53,7 +57,7 @@ export async function ensureContentStructure(rootUri: string): Promise<void> {
   await ensureSubfolder(quizUri, 'images');
 
   const quizEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(quizUri);
-  const hasQuestionsFile = quizEntries.some((e) => e.endsWith('questions.json') || e.endsWith(encodeURIComponent('questions.json')));
+  const hasQuestionsFile = quizEntries.some((e) => leafNameOf(e) === 'questions.json');
   if (!hasQuestionsFile) {
     const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(quizUri, 'questions.json', 'application/json');
     await FileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, JSON.stringify({ questions: [] }, null, 2));
