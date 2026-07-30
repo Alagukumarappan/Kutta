@@ -16,7 +16,6 @@ describe('migrateContent', () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
       if (uri === 'old-root') return ['old-root/pictures', 'old-root/videos'];
       if (uri === 'new-root') return ['new-root/pictures', 'new-root/videos'];
-      return ['old-root/pictures/a.png']; // sub-listing used for verification
     });
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
 
@@ -34,6 +33,20 @@ describe('migrateContent', () => {
     const result = await migrateContent('old-root', 'new-root');
 
     expect(result.success).toBe(false);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('does NOT delete the old root if verification detects incomplete copy', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === 'old-root') return ['old-root/pictures', 'old-root/videos'];
+      if (uri === 'new-root') return ['new-root/pictures']; // only one of two entries copied
+    });
+    (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
+
+    const result = await migrateContent('old-root', 'new-root');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('missing entry');
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,10 @@
 import * as FileSystem from 'expo-file-system';
 
+function leafName(uri: string): string {
+  const decoded = decodeURIComponent(uri);
+  return decoded.substring(decoded.lastIndexOf('/') + 1);
+}
+
 export async function migrateContent(
   oldRootUri: string,
   newRootUri: string
@@ -12,8 +17,13 @@ export async function migrateContent(
     }
 
     const verifyEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(newRootUri);
-    if (verifyEntries.length < topLevelEntries.length) {
-      return { success: false, error: 'Copy verification failed: item count mismatch.' };
+    const sourceNames = new Set(topLevelEntries.map(leafName));
+    const destNames = new Set(verifyEntries.map(leafName));
+
+    for (const sourceName of sourceNames) {
+      if (!destNames.has(sourceName)) {
+        return { success: false, error: `Copy verification failed: missing entry "${sourceName}" in destination.` };
+      }
     }
 
     await FileSystem.StorageAccessFramework.deleteAsync(oldRootUri);
