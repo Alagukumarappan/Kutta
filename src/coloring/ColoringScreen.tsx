@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   Canvas,
-  useImage,
   Image as SkiaImage,
   Path as SkiaPath,
   Skia,
@@ -13,6 +13,7 @@ import {
   SkImage,
 } from '@shopify/react-native-skia';
 import { floodFill } from './floodFill';
+import { base64ToUint8Array } from './base64';
 import { computeResponsiveSquareSize } from '../theme/tokens';
 import { colors, spacing, radii } from '../theme/tokens';
 import { PALETTE, RGBA } from './palette';
@@ -44,7 +45,24 @@ interface Stroke {
 
 export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const { t } = useLanguage();
-  const image = useImage(imageUri);
+  // Deliberately NOT using Skia's useImage(imageUri) hook here: on Android it
+  // loads the URI via Skia.Data.fromURI, which goes through
+  // PlatformContext.java's `new URI(sourceUri).toURL()` /
+  // URLConnection - and Java's URL class has no protocol handler for the
+  // 'content://' scheme (only http/https/file/ftp/jar). Every photo picked
+  // out of the app's SAF-granted folder listing (see ColoringGallery /
+  // folderAccess.ts's StorageAccessFramework.readDirectoryAsync) is a
+  // content:// URI, so useImage silently resolves to null for every real
+  // photo. Instead, read the raw bytes ourselves through
+  // expo-file-system/legacy's readAsStringAsync, which - for a SAF
+  // content:// URI - goes through Android's ContentResolver.openInputStream
+  // rather than java.net.URL, and hand the decoded bytes to Skia's
+  // byte-based decoder (the same Skia.Data.fromBytes +
+  // Skia.Image.MakeImage(FromEncoded) pattern already used below for the
+  // flood-fill write-back), which doesn't care what scheme the original URI
+  // had.
+  const [image, setImage] = useState<SkImage | null>(null);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's status bar
@@ -89,6 +107,39 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   pixelsRef.current = pixels;
 
   const activePathRef = useRef<SkPath | null>(null);
+
+  // Load the source photo's bytes ourselves (see the comment above the
+  // `image` state) and decode them into an SkImage. Runs once per
+  // `imageUri`, and is the only place `image` gets set from source - nothing
+  // downstream (readPixels/floodFill/pen overlay) changes.
+  useEffect(() => {
+    let cancelled = false;
+    setImage(null);
+    setImageLoadFailed(false);
+
+    (async () => {
+      try {
+        const base64 = await FileSystem.readAsStringAsync(imageUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const bytes = base64ToUint8Array(base64);
+        const data = Skia.Data.fromBytes(bytes);
+        const decoded = Skia.Image.MakeImageFromEncoded(data);
+        if (cancelled) return;
+        if (decoded) {
+          setImage(decoded);
+        } else {
+          setImageLoadFailed(true);
+        }
+      } catch {
+        if (!cancelled) setImageLoadFailed(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUri]);
 
   // Read the raw RGBA pixel buffer out of the decoded image so floodFill has
   // something to operate on. Runs once per loaded image.
@@ -209,6 +260,11 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       }}
     >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        {imageLoadFailed ? (
+          <View testID="coloring-image-load-error">
+            <Text style={{ color: colors.ink }}>{t('coloringImageLoadError')}</Text>
+          </View>
+        ) : (
         <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
           <Canvas style={{ width: canvasSize, height: canvasSize }} testID="coloring-canvas">
             {displayImage && (
@@ -237,6 +293,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             )}
           </Canvas>
         </View>
+        )}
       </View>
 
       <View

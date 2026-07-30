@@ -48,6 +48,10 @@ export const UI_STRINGS = {
   quizNext: { en: 'Next', de: 'Weiter' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
+  coloringImageLoadError: {
+    en: 'This picture could not be loaded for coloring.',
+    de: 'Dieses Bild konnte nicht zum Ausmalen geladen werden.',
+  },
   folderResolveError: {
     en: 'Could not access your content folders. Please check folder access and try again.',
     de: 'Zugriff auf deine Inhaltsordner nicht möglich. Bitte überprüfe den Ordnerzugriff und versuche es erneut.',
