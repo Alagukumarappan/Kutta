@@ -15,6 +15,11 @@ type CardSpec = {
   border: string;
 };
 
+// Matches settingsButton's width/height below — pulled out as a constant so
+// the headerReserve math in HomeScreen can derive from it instead of
+// duplicating (or drifting from) the literal 44 in the stylesheet.
+const SETTINGS_BUTTON_SIZE = 44;
+
 const CARDS: CardSpec[] = [
   { testID: 'home-card-coloring', destination: 'coloring', labelKey: 'homeColoring', emoji: '🎨', bg: colors.pink, border: colors.pinkDark },
   { testID: 'home-card-quiz', destination: 'quiz', labelKey: 'homeQuiz', emoji: '🧠', bg: colors.periwinkle, border: colors.periwinkleDark },
@@ -44,7 +49,10 @@ export function HomeScreen({
   const availableWidth = width - insets.left - insets.right;
   const gap = spacing.md;
   const cardWidth = (availableWidth - spacing.md * 2 - gap * (CARDS.length - 1)) / CARDS.length;
-  const headerReserve = 90 + insets.top + insets.bottom;
+  // Chrome above/below the card row: screen's top+bottom padding (spacing.md
+  // each) plus the settings-icon row's fixed height (SETTINGS_BUTTON_SIZE)
+  // plus its marginBottom (spacing.md) separating it from the card grid.
+  const headerReserve = spacing.md * 3 + SETTINGS_BUTTON_SIZE + insets.top + insets.bottom;
   const cardHeight = clamp(height - headerReserve, 120, 220);
 
   return (
@@ -124,8 +132,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   settingsButton: {
-    width: 44,
-    height: 44,
+    width: SETTINGS_BUTTON_SIZE,
+    height: SETTINGS_BUTTON_SIZE,
     borderRadius: 22,
     backgroundColor: colors.white,
     alignItems: 'center',

@@ -12,10 +12,13 @@ import {
   PieceRect,
 } from './puzzleGrid';
 
-// Thin border/gap drawn around every piece slot so young children can see the
+// Thin border drawn around every piece slot so young children can see the
 // grid structure (where each piece belongs) even before it's filled in
-// correctly. Purely cosmetic — it sits *around* the piece's rect and does
-// not change the rect math itself, so pieces still crop the same regions.
+// correctly. Because React Native uses border-box sizing, this border sits
+// *inside* the slot's rect rather than around it, so it crops a few px off
+// each edge of the piece's image content (a minor trade-off — not worth
+// insetting the image to compensate, since the crop is small and the
+// border's visual purpose matters more than pixel-perfect image cropping).
 const SLOT_BORDER = 3;
 
 function PuzzlePiece({
@@ -161,7 +164,6 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
                 key={slotIndex}
                 testID={`puzzle-slot-${slotIndex}`}
                 onPress={() => handleTapSlot(slotIndex)}
-                hitSlop={4}
               >
                 <PuzzlePiece
                   imageUri={imageUri}
