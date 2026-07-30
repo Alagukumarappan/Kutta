@@ -38,8 +38,13 @@ function isValidQuestion(v: unknown): v is Question {
   if (!Array.isArray(q.options) || q.options.length !== 4) return false;
   if (!q.options.every(isValidOption)) return false;
 
+  const optionIds = q.options.map((o: QuestionOption) => o.id);
+  if (new Set(optionIds).size !== optionIds.length) return false;
+
   if (typeof q.correctOptionId !== 'string') return false;
   if (!q.options.some((o: QuestionOption) => o.id === q.correctOptionId)) return false;
+
+  if (q.minAge > q.maxAge) return false;
 
   return true;
 }

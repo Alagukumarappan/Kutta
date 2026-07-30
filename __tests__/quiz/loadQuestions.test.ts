@@ -55,6 +55,26 @@ describe('parseQuestionsFile', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('skips a question with two options sharing the same id', () => {
+    const broken = {
+      ...validQuestion,
+      options: [
+        { id: 'a', text: { en: 'Cat', de: 'Katze' } },
+        { id: 'a', text: { en: 'Dog', de: 'Hund' } },
+        { id: 'c', text: { en: 'Cow', de: 'Kuh' } },
+        { id: 'd', text: { en: 'Elephant', de: 'Elefant' } },
+      ],
+    };
+    const result = parseQuestionsFile(JSON.stringify({ questions: [broken] }));
+    expect(result).toHaveLength(0);
+  });
+
+  it('skips a question with an inverted age range (minAge > maxAge)', () => {
+    const broken = { ...validQuestion, minAge: 8, maxAge: 2 };
+    const result = parseQuestionsFile(JSON.stringify({ questions: [broken] }));
+    expect(result).toHaveLength(0);
+  });
+
   it('returns an empty array for invalid JSON instead of throwing', () => {
     expect(parseQuestionsFile('{not valid json')).toEqual([]);
   });
