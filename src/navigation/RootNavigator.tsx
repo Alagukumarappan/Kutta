@@ -6,6 +6,7 @@ import { getProfile } from '../storage/profileStore';
 import { findChildUri, ensureContentStructure } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
+import type { StringKey } from '../i18n/strings';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsScreen } from '../settings/SettingsScreen';
@@ -79,9 +80,16 @@ function AppStack({
   folderUris: SubfolderUris;
   onProfileChanged: () => void;
 }) {
+  const { t } = useLanguage();
+
+  // Without an explicit `title`, React Navigation falls back to the raw
+  // route name (e.g. "coloring-detail") as the header — English-only and
+  // developer-facing, and it ignores the current language setting entirely.
+  const titleFor = (key: StringKey) => t(key);
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: true }}>
-      <Stack.Screen name="Home">
+      <Stack.Screen name="Home" options={{ title: titleFor('homeTitle') }}>
         {({ navigation }) => (
           <HomeScreen
             childName={profile.name}
@@ -89,13 +97,13 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="settings">
+      <Stack.Screen name="settings" options={{ title: titleFor('settingsTitle') }}>
         {() => <SettingsScreen onProfileChanged={onProfileChanged} />}
       </Stack.Screen>
-      <Stack.Screen name="quiz">
+      <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
         {() => <QuizScreen quizFolderUri={folderUris.quiz} childAge={profile.age} />}
       </Stack.Screen>
-      <Stack.Screen name="coloring">
+      <Stack.Screen name="coloring" options={{ title: titleFor('homeColoring') }}>
         {({ navigation }) => (
           <ColoringGallery
             coloringFolderUri={folderUris.coloring}
@@ -103,10 +111,10 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="coloring-detail">
+      <Stack.Screen name="coloring-detail" options={{ title: titleFor('coloringDetailTitle') }}>
         {({ route }: any) => <ColoringScreen imageUri={route.params.imageUri} />}
       </Stack.Screen>
-      <Stack.Screen name="puzzle">
+      <Stack.Screen name="puzzle" options={{ title: titleFor('homePuzzle') }}>
         {({ navigation }) => (
           <PuzzleGallery
             picturesFolderUri={folderUris.pictures}
@@ -114,10 +122,10 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="puzzle-detail">
+      <Stack.Screen name="puzzle-detail" options={{ title: titleFor('puzzleDetailTitle') }}>
         {({ route }: any) => <PuzzleScreen imageUri={route.params.imageUri} />}
       </Stack.Screen>
-      <Stack.Screen name="video">
+      <Stack.Screen name="video" options={{ title: titleFor('homeVideo') }}>
         {({ navigation }) => (
           <VideoGallery
             videosFolderUri={folderUris.videos}
@@ -125,7 +133,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="video-detail">
+      <Stack.Screen name="video-detail" options={{ title: titleFor('videoDetailTitle') }}>
         {({ route }: any) => <VideoPlayerScreen videoUri={route.params.videoUri} />}
       </Stack.Screen>
     </Stack.Navigator>
