@@ -62,11 +62,22 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
   }
 
   if (state.isFinished) {
+    const total = state.session.length;
+    // 1-3 stars rather than a raw percentage — easier for a young child to
+    // read at a glance, and floored at 1 star so even a rough round still
+    // feels like an accomplishment rather than a "failure" grade.
+    const ratio = total > 0 ? state.score / total : 0;
+    const starCount = ratio >= 0.9 ? 3 : ratio >= 0.5 ? 2 : 1;
+
     return (
       <View style={styles.centeredScreen}>
         <View style={styles.scoreCard}>
+          <Text style={styles.scoreEmoji}>🎉</Text>
+          <Text style={styles.starsRow}>
+            {[1, 2, 3].map((n) => (n <= starCount ? '⭐' : '☆')).join(' ')}
+          </Text>
           <Text style={styles.scoreText}>
-            {tFormat('quizScore', language, { score: state.score, total: state.session.length })}
+            {tFormat('quizScore', language, { score: state.score, total })}
           </Text>
         </View>
       </View>
@@ -92,6 +103,8 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
       selectedOptionId={selectedOptionId}
       onSelect={handleSelect}
       onNext={handleNext}
+      currentIndex={state.currentIndex}
+      totalQuestions={state.session.length}
     />
   );
 }
@@ -137,6 +150,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadow,
     elevation: 4,
+  },
+  scoreEmoji: {
+    fontSize: 48,
+    marginBottom: spacing.xs,
+  },
+  starsRow: {
+    fontSize: 40,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   scoreText: {
     fontSize: 26,

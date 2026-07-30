@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, Image, Pressable, StyleSheet, Animated } from 'react-native';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t } from '../i18n/strings';
@@ -38,18 +38,59 @@ export function QuestionRenderer({
   selectedOptionId,
   onSelect,
   onNext,
+  currentIndex,
+  totalQuestions,
 }: {
   question: Question;
   language: Language;
   selectedOptionId: string | null;
   onSelect: (optionId: string) => void;
   onNext: () => void;
+  // Optional: when provided, a row of progress dots is shown above the
+  // question so a pre-reader can see how far through the session they are
+  // without needing to parse numbers/text. currentIndex is 0-based.
+  currentIndex?: number;
+  totalQuestions?: number;
 }) {
   const hasAnswered = selectedOptionId !== null;
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
 
+  // A small pop-in for the feedback bar (bounce up to a slight overshoot,
+  // then settle) so getting an answer right/wrong feels a bit more alive
+  // than text just appearing — cheap enough with RN's built-in Animated API
+  // that it isn't worth skipping, but subtle enough not to distract or delay
+  // the child from tapping Next.
+  const feedbackScale = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (hasAnswered) {
+      feedbackScale.setValue(0.6);
+      Animated.spring(feedbackScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 80,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [hasAnswered, selectedOptionId, feedbackScale]);
+
   return (
     <View style={styles.screen}>
+      {typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0 && (
+        <View testID="quiz-progress" style={styles.progressRow}>
+          {Array.from({ length: totalQuestions }).map((_, i) => (
+            <View
+              key={i}
+              testID={`quiz-progress-dot-${i}`}
+              style={[
+                styles.progressDot,
+                i < currentIndex && styles.progressDotDone,
+                i === currentIndex && styles.progressDotCurrent,
+              ]}
+            />
+          ))}
+        </View>
+      )}
+
       <View style={styles.questionCard}>
         {question.question.image && (
           <ImageWithFallback uri={question.question.image} testID="question-image" size={150} />
@@ -94,14 +135,18 @@ export function QuestionRenderer({
       </View>
 
       {hasAnswered && (
-        <View testID="quiz-feedback" style={styles.feedbackBar}>
+        <Animated.View
+          testID="quiz-feedback"
+          style={[styles.feedbackBar, { transform: [{ scale: feedbackScale }] }]}
+        >
+          {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
           <Text style={[styles.feedbackText, isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText]}>
             {isCorrect ? t('quizCorrect', language) : t('quizIncorrect', language)}
           </Text>
           <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
             <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
           </Pressable>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -113,6 +158,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     alignItems: 'center',
     padding: spacing.md,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  progressDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginHorizontal: spacing.xs / 2,
+    backgroundColor: colors.disabledBg,
+    borderWidth: 2,
+    borderColor: colors.disabledBorder,
+  },
+  progressDotDone: {
+    backgroundColor: colors.sun,
+    borderColor: colors.sunDark,
+  },
+  progressDotCurrent: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coralDark,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   questionCard: {
     backgroundColor: colors.white,
@@ -178,6 +249,10 @@ const styles = StyleSheet.create({
   feedbackBar: {
     marginTop: spacing.md,
     alignItems: 'center',
+  },
+  feedbackEmoji: {
+    fontSize: 28,
+    marginBottom: spacing.xs,
   },
   feedbackText: {
     fontSize: 22,
