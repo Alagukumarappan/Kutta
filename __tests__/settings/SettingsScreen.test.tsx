@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { SettingsScreen } from '../../src/settings/SettingsScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as profileStore from '../../src/storage/profileStore';
@@ -14,11 +14,17 @@ jest.mock('../../src/storage/folderMigration');
 const initialProfile = { name: 'Sam', age: 4, language: 'en' as const, rootFolderUri: 'content://tree/old' };
 
 // Simulates the user tapping the "confirm" button of the migration Alert.
-function confirmAlertWith(buttonLabel: string) {
+// Wrapped in `act` (and awaited) so the state updates handleSave makes once
+// its awaited confirmMigration() promise resolves are properly flushed.
+async function confirmAlertWith(buttonLabel: string) {
   const alertSpy = Alert.alert as jest.Mock;
   const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
   const button = buttons.find((b: { text: string }) => b.text === buttonLabel);
-  button.onPress();
+  await act(async () => {
+    button.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 describe('SettingsScreen', () => {
@@ -42,12 +48,14 @@ describe('SettingsScreen', () => {
     await findByTestId('settings-loaded');
     await fireEvent.press(getByText('Change content folder'));
     await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
-    await fireEvent.press(getByText('Save changes'));
+    // Not awaited: handleSave pauses mid-flight awaiting the confirmation
+    // Alert's button press, so awaiting the event dispatch itself would hang.
+    fireEvent.press(getByText('Save changes'));
 
     await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Move content?', expect.any(String), expect.any(Array), expect.any(Object)));
     expect(folderMigration.migrateContent).not.toHaveBeenCalled();
 
-    confirmAlertWith('Move content');
+    await confirmAlertWith('Move content');
 
     await waitFor(() =>
       expect(folderMigration.migrateContent).toHaveBeenCalledWith('content://tree/old', 'content://tree/new')
@@ -73,10 +81,10 @@ describe('SettingsScreen', () => {
     await findByTestId('settings-loaded');
     await fireEvent.press(getByText('Change content folder'));
     await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
-    await fireEvent.press(getByText('Save changes'));
+    fireEvent.press(getByText('Save changes'));
 
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
-    confirmAlertWith('Cancel');
+    await confirmAlertWith('Cancel');
 
     await waitFor(() => expect(profileStore.saveProfile).not.toHaveBeenCalled());
     expect(folderMigration.migrateContent).not.toHaveBeenCalled();
@@ -119,10 +127,10 @@ describe('SettingsScreen', () => {
     await findByTestId('settings-loaded');
     await fireEvent.press(getByText('Change content folder'));
     await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
-    await fireEvent.press(getByText('Save changes'));
+    fireEvent.press(getByText('Save changes'));
 
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
-    confirmAlertWith('Move content');
+    await confirmAlertWith('Move content');
 
     await findByText('Could not move content. Your old folder is unchanged.');
     expect(profileStore.saveProfile).not.toHaveBeenCalledWith(
@@ -162,15 +170,15 @@ describe('SettingsScreen', () => {
     await findByTestId('settings-loaded');
     await fireEvent.press(getByText('Change content folder'));
     await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
-    await fireEvent.press(getByText('Save changes'));
+    fireEvent.press(getByText('Save changes'));
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
-    confirmAlertWith('Move content');
+    await confirmAlertWith('Move content');
 
     await waitFor(() => expect(folderMigration.migrateContent).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getByTestId('settings-save').props.accessibilityState?.disabled).toBe(true));
 
     // A second tap while migrating must not trigger a second migration.
-    await fireEvent.press(getByTestId('settings-save'));
+    fireEvent.press(getByTestId('settings-save'));
     expect(folderMigration.migrateContent).toHaveBeenCalledTimes(1);
 
     resolveMigration({ success: true });
