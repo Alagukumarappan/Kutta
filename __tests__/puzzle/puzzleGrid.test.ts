@@ -1,4 +1,30 @@
-import { computeGridDimensions, computePieceRects, shufflePieceOrder } from '../../src/puzzle/puzzleGrid';
+import { computeGridDimensions, computePieceRects, shufflePieceOrder, computePuzzleBoardSize } from '../../src/puzzle/puzzleGrid';
+
+// computePuzzleBoardSize delegates to computeResponsiveSquareSize with these fixed
+// constants (mirrored here, not imported, so these tests catch a regression in either
+// file): reservedHeight=160, reservedWidth=220, min=200, max=420.
+// Formula: clamp(min(windowHeight - 160, windowWidth - 220), 200, 420).
+describe('computePuzzleBoardSize', () => {
+  it('is bound by width when width is the tighter constraint', () => {
+    // maxByWidth = 500 - 220 = 280; maxByHeight = 1000 - 160 = 840 -> min is 280, within [200,420]
+    expect(computePuzzleBoardSize(500, 1000)).toBe(280);
+  });
+
+  it('is bound by height when height is the tighter constraint', () => {
+    // maxByHeight = 500 - 160 = 340; maxByWidth = 1000 - 220 = 780 -> min is 340, within [200,420]
+    expect(computePuzzleBoardSize(1000, 500)).toBe(340);
+  });
+
+  it('clamps to the minimum size when the window is very small', () => {
+    // maxByWidth = 300 - 220 = 80; maxByHeight = 300 - 160 = 140 -> min is 80, clamped up to 200
+    expect(computePuzzleBoardSize(300, 300)).toBe(200);
+  });
+
+  it('clamps to the maximum size when the window is very large', () => {
+    // maxByWidth = 2000 - 220 = 1780; maxByHeight = 2000 - 160 = 1840 -> min is 1780, clamped down to 420
+    expect(computePuzzleBoardSize(2000, 2000)).toBe(420);
+  });
+});
 
 describe('computeGridDimensions', () => {
   it.each([
