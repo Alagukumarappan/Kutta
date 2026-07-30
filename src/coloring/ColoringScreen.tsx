@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Canvas,
   useImage,
@@ -45,11 +46,20 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const { t } = useLanguage();
   const image = useImage(imageUri);
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's status bar
+  // and on-screen nav bar; they don't know about *this* device's actual
+  // notch/gesture-bar geometry, which varies (e.g. a Samsung S22's cutout and
+  // 3-button/gesture nav differ from the emulator's). Add the real,
+  // per-device insets on top of those fixed margins so the canvas never
+  // shrinks *into* what it originally reserved (the fixed constants still
+  // cover the header/footer chrome; the insets cover the additional
+  // system-reserved area outside that).
   const canvasSize = computeResponsiveSquareSize(
     width,
     height,
-    CANVAS_RESERVED_HEIGHT,
-    CANVAS_RESERVED_WIDTH,
+    CANVAS_RESERVED_HEIGHT + insets.top + insets.bottom,
+    CANVAS_RESERVED_WIDTH + insets.left + insets.right,
     CANVAS_MIN_SIZE,
     CANVAS_MAX_SIZE
   );
@@ -190,7 +200,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const displayImage = filledImage ?? image;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.background,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+    >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
           <Canvas style={{ width: canvasSize, height: canvasSize }} testID="coloring-canvas">
@@ -226,7 +243,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         testID="coloring-footer"
         style={{
           paddingHorizontal: spacing.md,
-          paddingBottom: spacing.md,
+          paddingBottom: spacing.md + insets.bottom,
           paddingTop: spacing.sm,
         }}
       >

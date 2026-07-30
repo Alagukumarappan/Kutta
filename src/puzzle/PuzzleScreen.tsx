@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { PieceCountPicker } from '../components/PieceCountPicker';
 import {
@@ -34,7 +35,8 @@ function PuzzlePiece({ imageUri, rect, containerSize }: { imageUri: string; rect
 export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   const { t } = useLanguage();
   const { width, height } = useWindowDimensions();
-  const puzzleSize = computePuzzleBoardSize(width, height);
+  const insets = useSafeAreaInsets();
+  const puzzleSize = computePuzzleBoardSize(width, height, insets);
   const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
   const [pieceCountModalVisible, setPieceCountModalVisible] = useState(false);
   const [order, setOrder] = useState<number[]>([]);
@@ -63,7 +65,16 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
 
   if (!pieceCount) {
     return (
-      <ScrollView contentContainerStyle={{ padding: 16, alignItems: 'center' }}>
+      <ScrollView
+        contentContainerStyle={{
+          padding: 16,
+          paddingTop: 16 + insets.top,
+          paddingBottom: 16 + insets.bottom,
+          paddingLeft: 16 + insets.left,
+          paddingRight: 16 + insets.right,
+          alignItems: 'center',
+        }}
+      >
         <Text>{t('puzzlePickPieces')}</Text>
         <View style={{ marginTop: 8, width: '100%', maxWidth: 200 }}>
           <PieceCountPicker
@@ -85,7 +96,16 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   const isSolved = order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={{
+        padding: 16,
+        paddingTop: 16 + insets.top,
+        paddingBottom: 16 + insets.bottom,
+        paddingLeft: 16 + insets.left,
+        paddingRight: 16 + insets.right,
+      }}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <View style={{ marginRight: 16 }}>
           <Image source={{ uri: imageUri }} style={{ width: 80, height: 80 }} testID="puzzle-preview" />

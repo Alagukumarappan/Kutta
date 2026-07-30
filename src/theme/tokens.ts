@@ -36,6 +36,18 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+// Mirrors react-native-safe-area-context's EdgeInsets shape without importing
+// it here, so this file (pure layout math, unit-testable with no RN/device
+// dependency) doesn't need to depend on that library directly.
+export interface EdgeInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export const ZERO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
 // Computes a square size (e.g. a canvas or puzzle board) that fits within the
 // current window after reserving room for surrounding UI (palettes, previews,
 // labels, margins). Landscape phones are short-but-wide, so the height axis is

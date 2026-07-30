@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
 
@@ -30,18 +31,34 @@ export function HomeScreen({
 }) {
   const { t } = useLanguage();
   const { width, height } = useWindowDimensions();
+  // Home is the one screen with headerShown:false (no native
+  // header/navigation chrome doing this for us elsewhere), so it's the only
+  // screen that has to account for the status bar / notch / gesture-nav bar
+  // on all four sides itself.
+  const insets = useSafeAreaInsets();
 
   // Landscape gives ample width and limited height, so the 4 cards sit in a
   // single row instead of a 2x2 stack. Size them from the actual window
   // rather than a fixed pixel size, and cap the height so the row never
   // outgrows a short screen (leaving room for the header above it).
+  const availableWidth = width - insets.left - insets.right;
   const gap = spacing.md;
-  const cardWidth = (width - spacing.md * 2 - gap * (CARDS.length - 1)) / CARDS.length;
-  const headerReserve = 90;
+  const cardWidth = (availableWidth - spacing.md * 2 - gap * (CARDS.length - 1)) / CARDS.length;
+  const headerReserve = 90 + insets.top + insets.bottom;
   const cardHeight = clamp(height - headerReserve, 120, 220);
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        {
+          paddingTop: spacing.md + insets.top,
+          paddingBottom: spacing.md + insets.bottom,
+          paddingLeft: spacing.md + insets.left,
+          paddingRight: spacing.md + insets.right,
+        },
+      ]}
+    >
       <View style={styles.header}>
         <View style={styles.greetingBadge}>
           <Text style={styles.greetingText}>
@@ -78,7 +95,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: spacing.md,
+    // Base padding; the actual per-side padding used at render time also
+    // adds this screen's safe-area insets (see the inline style override in
+    // the component) since this is the one screen with no native header.
   },
   header: {
     flexDirection: 'row',

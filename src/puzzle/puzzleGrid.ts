@@ -1,5 +1,5 @@
 import { shuffle } from '../quiz/shuffle';
-import { computeResponsiveSquareSize } from '../theme/tokens';
+import { computeResponsiveSquareSize, EdgeInsets, ZERO_INSETS } from '../theme/tokens';
 
 // Reserves room for the preview thumbnail, labels and margins above/around the
 // board so the puzzle board itself sizes to fit a short-but-wide landscape
@@ -9,12 +9,20 @@ const PUZZLE_RESERVED_WIDTH = 220;
 const PUZZLE_MIN_SIZE = 200;
 const PUZZLE_MAX_SIZE = 420;
 
-export function computePuzzleBoardSize(windowWidth: number, windowHeight: number): number {
+// `insets` defaults to zero so existing callers/tests that only care about
+// the window-size math (no device in the loop) keep working unchanged; real
+// screens pass the device's actual useSafeAreaInsets() so a notch, status
+// bar, or gesture-nav bar never eats into the board itself.
+export function computePuzzleBoardSize(
+  windowWidth: number,
+  windowHeight: number,
+  insets: EdgeInsets = ZERO_INSETS
+): number {
   return computeResponsiveSquareSize(
     windowWidth,
     windowHeight,
-    PUZZLE_RESERVED_HEIGHT,
-    PUZZLE_RESERVED_WIDTH,
+    PUZZLE_RESERVED_HEIGHT + insets.top + insets.bottom,
+    PUZZLE_RESERVED_WIDTH + insets.left + insets.right,
     PUZZLE_MIN_SIZE,
     PUZZLE_MAX_SIZE
   );

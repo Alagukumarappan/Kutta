@@ -24,6 +24,16 @@ describe('computePuzzleBoardSize', () => {
     // maxByWidth = 2000 - 220 = 1780; maxByHeight = 2000 - 160 = 1840 -> min is 1780, clamped down to 420
     expect(computePuzzleBoardSize(2000, 2000)).toBe(420);
   });
+
+  it('defaults to zero insets when none are passed, matching a device with no notch/nav-bar', () => {
+    expect(computePuzzleBoardSize(1000, 500)).toBe(computePuzzleBoardSize(1000, 500, { top: 0, right: 0, bottom: 0, left: 0 }));
+  });
+
+  it('shrinks the board to make room for real device insets (notch/status bar/gesture-nav bar)', () => {
+    // maxByHeight = 500 - 160 - (20 top + 30 bottom) = 290; maxByWidth = 1000 - 220 - (10 left + 10 right) = 760
+    // -> min is 290, within [200, 420]
+    expect(computePuzzleBoardSize(1000, 500, { top: 20, right: 10, bottom: 30, left: 10 })).toBe(290);
+  });
 });
 
 describe('computeGridDimensions', () => {
