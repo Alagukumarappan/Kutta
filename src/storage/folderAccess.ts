@@ -21,6 +21,15 @@ export async function ensureContentStructure(rootUri: string): Promise<void> {
     }
   }
 
+  // NOTE(Task 16 review): the installed expo-file-system's typed signature for
+  // getUriForDirectoryInRoot takes a single folderName and builds a hardcoded
+  // "primary:<folderName>" URI — it is not meant for deriving a child URI under
+  // an arbitrary already-granted SAF root, and this 2-arg call predates that
+  // type surfacing (see task-16-report.md for full analysis). Left unchanged
+  // here to avoid altering Task 4's already-tested behavior/mocks; needs a
+  // proper follow-up fix (e.g. resolve via readDirectoryAsync/makeDirectoryAsync
+  // return values, as RootNavigator.tsx now does for its own subfolder URIs).
+  // @ts-expect-error - see NOTE above; pre-existing Task 4 call predates this type surfacing.
   const quizUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot(rootUri, 'quiz');
 
   const imagesExists = await dirExists(quizUri, 'images');

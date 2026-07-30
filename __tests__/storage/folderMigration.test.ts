@@ -46,6 +46,7 @@ describe('migrateContent', () => {
     const result = await migrateContent('old-root', 'new-root');
 
     expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected migration to fail');
     expect(result.error).toContain('missing entry');
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
   });
