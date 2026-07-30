@@ -26,6 +26,11 @@ export const UI_STRINGS = {
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
+  folderResolveError: {
+    en: 'Could not access your content folders. Please check folder access and try again.',
+    de: 'Zugriff auf deine Inhaltsordner nicht möglich. Bitte überprüfe den Ordnerzugriff und versuche es erneut.',
+  },
+  retry: { en: 'Retry', de: 'Erneut versuchen' },
 } as const;
 
 export type StringKey = keyof typeof UI_STRINGS;

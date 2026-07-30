@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, Pressable } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import * as FileSystem from 'expo-file-system/legacy';
 import { getProfile } from '../storage/profileStore';
+import { findChildUri } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
-import { LanguageProvider } from '../i18n/LanguageContext';
+import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsScreen } from '../settings/SettingsScreen';
@@ -24,45 +25,52 @@ type SubfolderUris = Record<ContentSubfolder, string>;
 
 // SAF tree URIs (content://...) are opaque provider-defined identifiers, not
 // plain file paths — a naive `${root}/${subfolder}` string join does NOT
-// produce a valid child document URI, and (as verified by reading the
-// installed expo-file-system source) `StorageAccessFramework
-// .getUriForDirectoryInRoot` also does not do this: it takes a single
-// folder name and always builds a hardcoded "primary:<name>" URI under the
-// device's root storage, ignoring any existing SAF grant entirely.
-//
-// The only correct way to resolve an existing subfolder's URI under an
-// arbitrary already-granted SAF root is to list the root directory (as
-// Task 4's folderAccess.ts already does internally for its own existence
-// checks) and match the child entry by name — every subfolder already
-// exists by the time this runs, because onboarding's ensureContentStructure
-// creates pictures/videos/coloring/quiz upfront.
+// produce a valid child document URI, and `StorageAccessFramework
+// .getUriForDirectoryInRoot` also does not do this: it takes a single folder
+// name and always builds a hardcoded "primary:<name>" URI under the device's
+// root storage, ignoring any existing SAF grant entirely. Reuse the same
+// `findChildUri` primitive folderAccess.ts uses to create/locate these
+// subfolders in the first place, so both places agree on how a SAF child URI
+// is resolved.
 async function resolveSubfolderUris(rootUri: string): Promise<SubfolderUris> {
-  const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(rootUri);
-
-  function findChild(name: string): string {
-    const match = entries.find(
-      (entryUri) => entryUri.endsWith(`/${name}`) || entryUri.endsWith(encodeURIComponent(name))
-    );
+  async function findChild(name: string): Promise<string> {
+    const match = await findChildUri(rootUri, name);
     if (!match) {
       throw new Error(`Content folder "${name}" was not found under the selected root folder.`);
     }
     return match;
   }
 
-  return {
-    pictures: findChild('pictures'),
-    videos: findChild('videos'),
-    coloring: findChild('coloring'),
-    quiz: findChild('quiz'),
-  };
+  const [pictures, videos, coloring, quiz] = await Promise.all([
+    findChild('pictures'),
+    findChild('videos'),
+    findChild('coloring'),
+    findChild('quiz'),
+  ]);
+
+  return { pictures, videos, coloring, quiz };
+}
+
+function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLanguage();
+  return (
+    <View testID="folder-resolve-error">
+      <Text>{t('folderResolveError')}</Text>
+      <Pressable testID="folder-resolve-retry" onPress={onRetry}>
+        <Text>{t('retry')}</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 function AppStack({
   profile,
   folderUris,
+  onProfileChanged,
 }: {
   profile: Profile;
   folderUris: SubfolderUris;
+  onProfileChanged: () => void;
 }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: true }}>
@@ -75,7 +83,7 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="settings">
-        {() => <SettingsScreen />}
+        {() => <SettingsScreen onProfileChanged={onProfileChanged} />}
       </Stack.Screen>
       <Stack.Screen name="quiz">
         {() => <QuizScreen quizFolderUri={folderUris.quiz} childAge={profile.age} />}
@@ -120,31 +128,59 @@ function AppStack({
 export function RootNavigator() {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [folderUris, setFolderUris] = useState<SubfolderUris | null>(null);
+  const [folderError, setFolderError] = useState(false);
+  // Bumped to force a fresh resolution attempt on retry, even when
+  // rootFolderUri itself hasn't changed (e.g. a transient SAF failure).
+  const [retryToken, setRetryToken] = useState(0);
 
-  useEffect(() => {
+  const refreshProfile = useCallback(() => {
     getProfile().then(setProfile);
   }, []);
 
+  const retryFolderResolution = useCallback(() => {
+    setRetryToken((n) => n + 1);
+  }, []);
+
   useEffect(() => {
+    refreshProfile();
+  }, [refreshProfile]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     if (profile?.rootFolderUri) {
-      resolveSubfolderUris(profile.rootFolderUri).then(setFolderUris);
+      setFolderError(false);
+      setFolderUris(null);
+      resolveSubfolderUris(profile.rootFolderUri)
+        .then((uris) => {
+          if (!cancelled) setFolderUris(uris);
+        })
+        .catch(() => {
+          // The SAF grant may have been revoked, or a subfolder may be
+          // missing/renamed outside the app — surface a retry state instead
+          // of leaving an unhandled rejection and a permanent blank screen.
+          if (!cancelled) setFolderError(true);
+        });
     } else {
       setFolderUris(null);
+      setFolderError(false);
     }
-  }, [profile?.rootFolderUri]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.rootFolderUri, retryToken]);
 
   if (profile === undefined) return null;
-
-  function refreshProfile() {
-    getProfile().then(setProfile);
-  }
 
   return (
     <LanguageProvider initialLanguage={profile?.language ?? 'en'}>
       <NavigationContainer>
         {profile ? (
-          folderUris ? (
-            <AppStack profile={profile} folderUris={folderUris} />
+          folderError ? (
+            <FolderErrorScreen onRetry={retryFolderResolution} />
+          ) : folderUris ? (
+            <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} />
           ) : null
         ) : (
           <OnboardingScreen onComplete={refreshProfile} />

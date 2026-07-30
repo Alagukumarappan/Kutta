@@ -8,34 +8,49 @@ export async function requestFolderAccess(): Promise<string | null> {
   return result.directoryUri;
 }
 
-async function dirExists(parentUri: string, name: string): Promise<boolean> {
+// The installed expo-file-system's `getUriForDirectoryInRoot(folderName)` takes
+// a single argument and always builds a hardcoded "primary:<folderName>" URI —
+// it locates a folder in the device's root storage for requesting a *new* SAF
+// grant, and does not (and cannot) derive a child URI under an arbitrary
+// already-granted SAF root. The only correct way to resolve or create a named
+// child of a SAF directory is to list it and match by name, or to use the real
+// URI returned by `makeDirectoryAsync` when creating it. `findChildUri` and
+// `ensureSubfolder` below are the shared, correct primitives for that; reuse
+// them (see also RootNavigator.tsx, which resolves its own subfolder URIs the
+// same way) instead of reaching for `getUriForDirectoryInRoot`.
+export async function findChildUri(parentUri: string, name: string): Promise<string | null> {
   const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(parentUri);
-  return entries.some((entryUri) => entryUri.endsWith(`/${name}`) || entryUri.endsWith(encodeURIComponent(name)));
+  const match = entries.find(
+    (entryUri) => entryUri.endsWith(`/${name}`) || entryUri.endsWith(encodeURIComponent(name))
+  );
+  return match ?? null;
+}
+
+async function dirExists(parentUri: string, name: string): Promise<boolean> {
+  return (await findChildUri(parentUri, name)) !== null;
+}
+
+// Ensures a child directory named `name` exists directly under `parentUri`,
+// returning its real URI — either the existing entry's URI (found by listing)
+// or the URI `makeDirectoryAsync` hands back when it has to create it.
+async function ensureSubfolder(parentUri: string, name: string): Promise<string> {
+  const existing = await findChildUri(parentUri, name);
+  if (existing) return existing;
+  return FileSystem.StorageAccessFramework.makeDirectoryAsync(parentUri, name);
 }
 
 export async function ensureContentStructure(rootUri: string): Promise<void> {
+  const subfolderUris: Record<(typeof SUBFOLDERS)[number], string> = {} as Record<
+    (typeof SUBFOLDERS)[number],
+    string
+  >;
   for (const folder of SUBFOLDERS) {
-    const exists = await dirExists(rootUri, folder);
-    if (!exists) {
-      await FileSystem.StorageAccessFramework.makeDirectoryAsync(rootUri, folder);
-    }
+    subfolderUris[folder] = await ensureSubfolder(rootUri, folder);
   }
 
-  // NOTE(Task 16 review): the installed expo-file-system's typed signature for
-  // getUriForDirectoryInRoot takes a single folderName and builds a hardcoded
-  // "primary:<folderName>" URI — it is not meant for deriving a child URI under
-  // an arbitrary already-granted SAF root, and this 2-arg call predates that
-  // type surfacing (see task-16-report.md for full analysis). Left unchanged
-  // here to avoid altering Task 4's already-tested behavior/mocks; needs a
-  // proper follow-up fix (e.g. resolve via readDirectoryAsync/makeDirectoryAsync
-  // return values, as RootNavigator.tsx now does for its own subfolder URIs).
-  // @ts-expect-error - see NOTE above; pre-existing Task 4 call predates this type surfacing.
-  const quizUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot(rootUri, 'quiz');
+  const quizUri = subfolderUris.quiz;
 
-  const imagesExists = await dirExists(quizUri, 'images');
-  if (!imagesExists) {
-    await FileSystem.StorageAccessFramework.makeDirectoryAsync(quizUri, 'images');
-  }
+  await ensureSubfolder(quizUri, 'images');
 
   const quizEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(quizUri);
   const hasQuestionsFile = quizEntries.some((e) => e.endsWith('questions.json') || e.endsWith(encodeURIComponent('questions.json')));

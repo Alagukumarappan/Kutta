@@ -6,7 +6,7 @@ import { requestFolderAccess } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import type { Language, Profile } from '../types/profile';
 
-export function SettingsScreen() {
+export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => void } = {}) {
   const { t } = useLanguage();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ageText, setAgeText] = useState('');
@@ -53,6 +53,7 @@ export function SettingsScreen() {
 
     await saveProfile(nextProfile);
     setProfile(nextProfile);
+    onProfileChanged?.();
   }
 
   if (!profile) return <View testID="settings-loading" />;
