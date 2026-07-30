@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Image, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
+import { PieceCountPicker } from '../components/PieceCountPicker';
 import {
   computeGridDimensions,
   computePieceRects,
@@ -8,8 +9,6 @@ import {
   shufflePieceOrder,
   PieceRect,
 } from './puzzleGrid';
-
-const PIECE_COUNT_OPTIONS: (4 | 6 | 9 | 12)[] = [4, 6, 9, 12];
 
 function PuzzlePiece({ imageUri, rect, containerSize }: { imageUri: string; rect: PieceRect; containerSize: number }) {
   // rects are computed over a containerSize x containerSize image (see computePieceRects call
@@ -37,6 +36,7 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   const { width, height } = useWindowDimensions();
   const puzzleSize = computePuzzleBoardSize(width, height);
   const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
+  const [pieceCountModalVisible, setPieceCountModalVisible] = useState(false);
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
@@ -65,12 +65,16 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
     return (
       <ScrollView contentContainerStyle={{ padding: 16, alignItems: 'center' }}>
         <Text>{t('puzzlePickPieces')}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {PIECE_COUNT_OPTIONS.map((count) => (
-            <Pressable key={count} testID={`piece-count-${count}`} onPress={() => startPuzzle(count)} style={{ margin: 8 }}>
-              <Text>{count}</Text>
-            </Pressable>
-          ))}
+        <View style={{ marginTop: 8, width: '100%', maxWidth: 200 }}>
+          <PieceCountPicker
+            value={pieceCount}
+            onChange={startPuzzle}
+            visible={pieceCountModalVisible}
+            onOpen={() => setPieceCountModalVisible(true)}
+            onClose={() => setPieceCountModalVisible(false)}
+            placeholder={t('puzzlePickPieces')}
+            testIDPrefix="puzzle-piece-count"
+          />
         </View>
       </ScrollView>
     );

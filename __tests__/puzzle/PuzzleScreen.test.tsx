@@ -41,8 +41,8 @@ async function startFourPiecePuzzle() {
       <PuzzleScreen imageUri={IMAGE_URI} />
     </LanguageProvider>
   );
-  const startButton = await utils.findByTestId('piece-count-4');
-  await fireEvent.press(startButton);
+  await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
+  await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
   return utils;
 }
 
@@ -55,10 +55,14 @@ describe('PuzzleScreen', () => {
     );
 
     expect(queryByTestId('puzzle-slot-0')).toBeNull();
-    const option4 = await findByTestId('piece-count-4');
-    const option6 = await findByTestId('piece-count-6');
-    const option9 = await findByTestId('piece-count-9');
-    const option12 = await findByTestId('piece-count-12');
+    const picker = await findByTestId('puzzle-piece-count-picker');
+    expect(picker).toBeTruthy();
+
+    await fireEvent.press(picker);
+    const option4 = await findByTestId('puzzle-piece-count-option-4');
+    const option6 = await findByTestId('puzzle-piece-count-option-6');
+    const option9 = await findByTestId('puzzle-piece-count-option-9');
+    const option12 = await findByTestId('puzzle-piece-count-option-12');
     expect(option4).toBeTruthy();
     expect(option6).toBeTruthy();
     expect(option9).toBeTruthy();
