@@ -9,6 +9,7 @@ import { QuestionRenderer } from './QuestionRenderer';
 export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string; childAge: number }) {
   const { t, language } = useLanguage();
   const [state, setState] = useState<QuizSessionState | null>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadQuestions(quizFolderUri).then((all) => {
@@ -37,11 +38,23 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
 
   const currentQuestion = state.session[state.currentIndex];
 
+  function handleSelect(optionId: string) {
+    setSelectedOptionId(optionId);
+  }
+
+  function handleNext() {
+    if (selectedOptionId === null) return;
+    setState((prev) => (prev ? answerCurrentQuestion(prev, selectedOptionId) : prev));
+    setSelectedOptionId(null);
+  }
+
   return (
     <QuestionRenderer
       question={currentQuestion}
       language={language}
-      onAnswer={(optionId) => setState((prev) => (prev ? answerCurrentQuestion(prev, optionId) : prev))}
+      selectedOptionId={selectedOptionId}
+      onSelect={handleSelect}
+      onNext={handleNext}
     />
   );
 }

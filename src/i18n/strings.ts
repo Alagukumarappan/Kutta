@@ -35,6 +35,9 @@ export const UI_STRINGS = {
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
+  quizCorrect: { en: 'Correct!', de: 'Richtig!' },
+  quizIncorrect: { en: 'Try again!', de: 'Versuch es nochmal!' },
+  quizNext: { en: 'Next', de: 'Weiter' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
   folderResolveError: {
