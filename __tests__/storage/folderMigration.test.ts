@@ -132,6 +132,24 @@ describe('migrateContent', () => {
     expect(FileSystem.StorageAccessFramework.copyAsync).not.toHaveBeenCalled();
   });
 
+  it('refuses to migrate when the old root is a whole-storage grant ("primary:") and the new root is a subfolder inside it', async () => {
+    // Android's SAF represents "user granted access to their entire internal
+    // storage" as a tree URI whose decoded document path ends in "primary:"
+    // (a volume-root marker, not a folder followed by "/"). A `/`-only
+    // boundary check would fail to see "primary:Kutta" as nested inside
+    // "primary:", letting a self-referential copy+delete slip through.
+    const result = await migrateContent(
+      'content://tree/document/primary%3A',
+      'content://tree/document/primary%3AKutta'
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected migration to fail');
+    expect(result.error).toMatch(/nested|inside/i);
+    expect(FileSystem.StorageAccessFramework.copyAsync).not.toHaveBeenCalled();
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
   it('refuses to migrate when old and new roots are the same folder', async () => {
     const result = await migrateContent('same-root', 'same-root');
 

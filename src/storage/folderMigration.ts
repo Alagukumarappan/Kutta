@@ -15,7 +15,24 @@ function leafName(uri: string): string {
 function isSameOrNestedWithin(candidateUri: string, ancestorUri: string): boolean {
   const candidate = decodeURIComponent(candidateUri);
   const ancestor = decodeURIComponent(ancestorUri);
-  return candidate === ancestor || candidate.startsWith(`${ancestor}/`);
+  if (candidate === ancestor) {
+    return true;
+  }
+  if (!candidate.startsWith(ancestor)) {
+    return false;
+  }
+  // If the ancestor itself already ends on a path/volume boundary (e.g.
+  // Android's SAF represents "entire internal storage" grants as a document
+  // path ending in "primary:" — a volume-root marker, not a folder followed
+  // by "/"), then any suffix is nested; no further boundary character is
+  // needed. Otherwise the very next character in candidate must itself be a
+  // boundary character ("/" or ":"), not just any continuation of the name.
+  const ancestorLastChar = ancestor.charAt(ancestor.length - 1);
+  if (ancestorLastChar === '/' || ancestorLastChar === ':') {
+    return true;
+  }
+  const boundaryChar = candidate.charAt(ancestor.length);
+  return boundaryChar === '/' || boundaryChar === ':';
 }
 
 async function findChild(parentUri: string, name: string): Promise<string | null> {
