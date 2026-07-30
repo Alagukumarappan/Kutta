@@ -13,7 +13,7 @@ export async function requestFolderAccess(): Promise<string | null> {
 // compare a candidate child's *whole* name against the wanted name, rather
 // than a suffix check — `entryUri.endsWith(name)` would also match unrelated
 // siblings like "Old pictures" or "not-pictures" when looking for "pictures".
-function leafNameOf(uri: string): string {
+export function leafNameOf(uri: string): string {
   const decoded = decodeURIComponent(uri);
   return decoded.substring(decoded.lastIndexOf('/') + 1);
 }

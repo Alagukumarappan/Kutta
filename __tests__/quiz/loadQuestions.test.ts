@@ -1,4 +1,12 @@
-import { parseQuestionsFile } from '../../src/quiz/loadQuestions';
+import * as FileSystem from 'expo-file-system/legacy';
+import { parseQuestionsFile, loadQuestions } from '../../src/quiz/loadQuestions';
+
+jest.mock('expo-file-system/legacy', () => ({
+  StorageAccessFramework: {
+    readDirectoryAsync: jest.fn(),
+    readAsStringAsync: jest.fn(),
+  },
+}));
 
 const validQuestion = {
   id: 'q001',
@@ -54,5 +62,77 @@ describe('parseQuestionsFile', () => {
   it('returns an empty array when "questions" is missing or not an array', () => {
     expect(parseQuestionsFile(JSON.stringify({}))).toEqual([]);
     expect(parseQuestionsFile(JSON.stringify({ questions: 'nope' }))).toEqual([]);
+  });
+});
+
+describe('loadQuestions', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('resolves relative image paths to the real SAF child URI found in quiz/images', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === 'content://tree/quiz') {
+        return ['content://tree/quiz/questions.json', 'content://tree/quiz/images'];
+      }
+      if (uri === 'content://tree/quiz/images') {
+        return ['content://tree/quiz/images/cat.png'];
+      }
+      return [];
+    });
+    (FileSystem.StorageAccessFramework.readAsStringAsync as jest.Mock).mockResolvedValue(
+      JSON.stringify({ questions: [validQuestion] })
+    );
+
+    const result = await loadQuestions('content://tree/quiz');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].question.image).toBe('content://tree/quiz/images/cat.png');
+    expect(result[0].question.image).not.toBe('images/cat.png');
+  });
+
+  it('leaves the image field unresolved when no matching file exists in quiz/images', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === 'content://tree/quiz') {
+        return ['content://tree/quiz/questions.json', 'content://tree/quiz/images'];
+      }
+      if (uri === 'content://tree/quiz/images') {
+        return ['content://tree/quiz/images/dog.png'];
+      }
+      return [];
+    });
+    (FileSystem.StorageAccessFramework.readAsStringAsync as jest.Mock).mockResolvedValue(
+      JSON.stringify({ questions: [validQuestion] })
+    );
+
+    const result = await loadQuestions('content://tree/quiz');
+
+    expect(result[0].question.image).toBe('images/cat.png');
+  });
+
+  it('resolves option image paths as well as the question image', async () => {
+    const withOptionImage = {
+      ...validQuestion,
+      options: [
+        { id: 'a', image: 'images/opt-a.png' },
+        validQuestion.options[1],
+        validQuestion.options[2],
+        validQuestion.options[3],
+      ],
+    };
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === 'content://tree/quiz') {
+        return ['content://tree/quiz/questions.json', 'content://tree/quiz/images'];
+      }
+      if (uri === 'content://tree/quiz/images') {
+        return ['content://tree/quiz/images/cat.png', 'content://tree/quiz/images/opt-a.png'];
+      }
+      return [];
+    });
+    (FileSystem.StorageAccessFramework.readAsStringAsync as jest.Mock).mockResolvedValue(
+      JSON.stringify({ questions: [withOptionImage] })
+    );
+
+    const result = await loadQuestions('content://tree/quiz');
+
+    expect(result[0].options[0].image).toBe('content://tree/quiz/images/opt-a.png');
   });
 });
