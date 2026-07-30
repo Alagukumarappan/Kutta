@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -23,6 +24,16 @@ export function VideoGallery({
   onSelect: (videoUri: string) => void;
 }) {
   const { t } = useLanguage();
+  // Shown with headerShown:true (see RootNavigator), so the native header
+  // already covers the top inset — only left/right/bottom are ours to
+  // handle here (a notch or gesture-nav bar sits at one of the sides in this
+  // landscape-only app).
+  const insets = useSafeAreaInsets();
+  const insetStyle = {
+    paddingLeft: insets.left,
+    paddingRight: insets.right,
+    paddingBottom: insets.bottom,
+  };
   const [videos, setVideos] = useState<string[] | null>(null);
   const [error, setError] = useState(false);
   // Bumped on Retry to force a fresh load attempt even when
@@ -52,7 +63,7 @@ export function VideoGallery({
 
   if (error) {
     return (
-      <View testID="video-gallery-error">
+      <View testID="video-gallery-error" style={insetStyle}>
         <Text>{t('loadError')}</Text>
         <Pressable testID="video-gallery-retry" onPress={() => setRetryToken((n) => n + 1)}>
           <Text>{t('retry')}</Text>
@@ -61,11 +72,11 @@ export function VideoGallery({
     );
   }
 
-  if (videos === null) return <View testID="video-gallery-loading" />;
+  if (videos === null) return <View testID="video-gallery-loading" style={insetStyle} />;
 
   if (videos.length === 0) {
     return (
-      <View>
+      <View style={insetStyle}>
         <Text>{t('emptyVideos')}</Text>
       </View>
     );
@@ -75,6 +86,7 @@ export function VideoGallery({
     <FlatList
       data={videos}
       keyExtractor={(uri) => uri}
+      contentContainerStyle={insetStyle}
       renderItem={({ item }) => (
         <Pressable testID={`video-item-${item}`} onPress={() => onSelect(item)}>
           <Text>{fileNameFromUri(item)}</Text>

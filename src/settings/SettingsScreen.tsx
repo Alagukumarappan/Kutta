@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getProfile, saveProfile } from '../storage/profileStore';
 import { requestFolderAccess } from '../storage/folderAccess';
@@ -11,6 +12,11 @@ import { colors, radii, spacing, shadow } from '../theme/tokens';
 
 export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => void } = {}) {
   const { t, setLanguage } = useLanguage();
+  // Shown with headerShown:true (see RootNavigator), so the native header
+  // already covers the top inset — only left/right/bottom are ours to
+  // handle (a notch or gesture-nav bar sits at one of the sides in this
+  // landscape-only app).
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [age, setAge] = useState<number | null>(null);
   const [ageModalVisible, setAgeModalVisible] = useState(false);
@@ -86,7 +92,13 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
     onProfileChanged?.();
   }
 
-  if (!profile) return <View testID="settings-loading" style={[styles.scrollView, styles.screen]} />;
+  const insetStyle = {
+    paddingLeft: spacing.md + insets.left,
+    paddingRight: spacing.md + insets.right,
+    paddingBottom: spacing.md + insets.bottom,
+  };
+
+  if (!profile) return <View testID="settings-loading" style={[styles.scrollView, styles.screen, insetStyle]} />;
 
   const displayedFolderUri = pendingFolderUri ?? profile.rootFolderUri;
 
@@ -94,7 +106,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
     <ScrollView
       testID="settings-loaded"
       style={styles.scrollView}
-      contentContainerStyle={styles.screen}
+      contentContainerStyle={[styles.screen, insetStyle]}
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.title}>{t('settingsTitle')}</Text>
