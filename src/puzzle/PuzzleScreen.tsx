@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  ActivityIndicator,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { PieceCountPicker } from '../components/PieceCountPicker';
@@ -24,18 +33,21 @@ const SLOT_BORDER = 3;
 function PuzzlePiece({
   imageUri,
   rect,
-  containerSize,
+  containerWidth,
+  containerHeight,
   selected,
 }: {
   imageUri: string;
   rect: PieceRect;
-  containerSize: number;
+  containerWidth: number;
+  containerHeight: number;
   selected: boolean;
 }) {
-  // rects are computed over a containerSize x containerSize image (see computePieceRects call
-  // below), so the piece is a crop of the *full-size* image — no extra scaling is needed.
-  // The slot View is sized to the piece's rect and clips (overflow: hidden) the full image,
-  // shifted so the correct region lands inside the window.
+  // rects are computed over a containerWidth x containerHeight image (see computePieceRects
+  // call below, which is now passed the board's real, aspect-ratio-correct width/height
+  // instead of assuming a square source photo), so the piece is a crop of the *full-size*
+  // image — no extra scaling is needed. The slot View is sized to the piece's rect and clips
+  // (overflow: hidden) the full image, shifted so the correct region lands inside the window.
   return (
     <View
       style={[
@@ -54,8 +66,8 @@ function PuzzlePiece({
         testID="puzzle-piece-image"
         source={{ uri: imageUri }}
         style={{
-          width: containerSize,
-          height: containerSize,
+          width: containerWidth,
+          height: containerHeight,
           marginLeft: -rect.x,
           marginTop: -rect.y,
         }}
@@ -75,11 +87,44 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   // account for insets.top itself. Zero out top here so it isn't double-
   // counted on top of what the header already reserved; bottom/left/right
   // still need to be handled since the header doesn't cover those.
-  const puzzleSize = computePuzzleBoardSize(width, height, { ...insets, top: 0 });
   const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
   const [pieceCountModalVisible, setPieceCountModalVisible] = useState(false);
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  // The board's shape and crop rects depend on the ACTUAL picked photo's real
+  // width/height (a portrait photo needs a tall board and tall piece shapes,
+  // not a square one) - imageSize is null until Image.getSize resolves.
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [imageSizeFailed, setImageSizeFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setImageSize(null);
+    setImageSizeFailed(false);
+    Image.getSize(
+      imageUri,
+      (imgWidth, imgHeight) => {
+        if (!cancelled) setImageSize({ width: imgWidth, height: imgHeight });
+      },
+      () => {
+        // Photo dimensions couldn't be read - fall back to treating it as
+        // square rather than blocking/crashing the puzzle.
+        if (!cancelled) setImageSizeFailed(true);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUri]);
+
+  // While still loading, assume square (matches old behavior) so the picker
+  // screen isn't blocked on the photo's real size; once loaded (or failed),
+  // computePuzzleBoardSize/computeGridDimensions use the real proportions.
+  const imageWidth = imageSize?.width ?? 1;
+  const imageHeight = imageSize?.height ?? 1;
+  const isPortrait = imageWidth < imageHeight;
+  const board = computePuzzleBoardSize(width, height, imageWidth, imageHeight, { ...insets, top: 0 });
+  const isImageSizeReady = imageSize !== null || imageSizeFailed;
 
   function startPuzzle(count: 4 | 6 | 9 | 12) {
     setPieceCount(count);
@@ -134,8 +179,16 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
     );
   }
 
-  const { rows, cols } = computeGridDimensions(pieceCount);
-  const rects = computePieceRects(puzzleSize, puzzleSize, rows, cols);
+  if (!isImageSizeReady) {
+    return (
+      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
+        <ActivityIndicator size="large" color={colors.mintDark} />
+      </View>
+    );
+  }
+
+  const { rows, cols } = computeGridDimensions(pieceCount, isPortrait);
+  const rects = computePieceRects(board.width, board.height, rows, cols);
   const isSolved = order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
 
   return (
@@ -158,7 +211,7 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
         </View>
 
         <View style={styles.boardFrame}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: puzzleSize }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: board.width }}>
             {order.map((pieceIndex, slotIndex) => (
               <Pressable
                 key={slotIndex}
@@ -168,7 +221,8 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
                 <PuzzlePiece
                   imageUri={imageUri}
                   rect={rects[pieceIndex]}
-                  containerSize={puzzleSize}
+                  containerWidth={board.width}
+                  containerHeight={board.height}
                   selected={selectedSlot === slotIndex}
                 />
               </Pressable>
@@ -192,6 +246,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pickerEmoji: {
     fontSize: 56,

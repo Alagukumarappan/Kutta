@@ -9,7 +9,10 @@ const PIECE_COUNT_OPTIONS = [4, 6, 9, 12] as const;
 // can recognize "this one has more/smaller pieces" by eye rather than by
 // reading the number.
 function MiniGrid({ count }: { count: 4 | 6 | 9 | 12 }) {
-  const { rows, cols } = computeGridDimensions(count);
+  // This mini preview icon doesn't know the shape of the photo the player will
+  // eventually pick, so it always shows the landscape (wide) shape - the
+  // real board/pieces adapt to the actual photo's orientation once picked.
+  const { rows, cols } = computeGridDimensions(count, false);
   return (
     <View style={styles.miniGrid}>
       {Array.from({ length: rows }).map((_, r) => (
