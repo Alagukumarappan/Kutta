@@ -71,4 +71,18 @@ describe('quiz session reducer', () => {
     expect(state.isFinished).toBe(true);
     expect(state.score).toBe(1);
   });
+
+  it('returns unchanged state when called on an already-finished session', () => {
+    const session = buildSession(makeQuestions(1), 5);
+    let state = initialSessionState(session);
+    // Answer the last question to make isFinished true
+    state = answerCurrentQuestion(state, session[0].correctOptionId);
+    expect(state.isFinished).toBe(true);
+    const beforeSecondCall = { ...state };
+    // Try to answer again when already finished
+    const afterSecondCall = answerCurrentQuestion(state, 'any-option-id');
+    expect(afterSecondCall.currentIndex).toBe(beforeSecondCall.currentIndex);
+    expect(afterSecondCall.score).toBe(beforeSecondCall.score);
+    expect(afterSecondCall.isFinished).toBe(beforeSecondCall.isFinished);
+  });
 });
