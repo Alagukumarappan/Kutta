@@ -275,6 +275,11 @@ const styles = StyleSheet.create({
   },
   questionText: {
     fontSize: 24,
+    // Pinned equal to fontSize (rather than left to the platform's ~1.2-1.4x
+    // default) so QUESTION_TEXT_RESERVED_HEIGHT in ./layout.ts — which
+    // assumes lineHeight === fontSize — stays an exact match instead of a
+    // few dp short, per a review that found this class of drift twice.
+    lineHeight: 24,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
@@ -353,6 +358,10 @@ const styles = StyleSheet.create({
   },
   nextButtonText: {
     fontSize: 18,
+    // Pinned equal to fontSize so FEEDBACK_BAR_HEIGHT in ./layout.ts — which
+    // assumes lineHeight === fontSize — stays exact rather than a few dp
+    // short (see the note on questionText above).
+    lineHeight: 18,
     fontWeight: 'bold',
     color: colors.white,
   },

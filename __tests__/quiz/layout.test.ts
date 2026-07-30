@@ -71,9 +71,20 @@ describe('computeQuizLayout', () => {
     expect(layout.questionImageSize).toBeGreaterThanOrEqual(MIN_QUESTION_IMAGE_SIZE);
 
     // --- The actual overflow check the reviewer cared about ---
-    // Total vertical content used = SCREEN_PADDING (top) + progress row + contentHeight (question/options row) + feedback bar
-    // must be <= availableHeight, i.e. contentHeight computation already prices
-    // this in and is non-negative/sane for a real device size.
+    // Sum every reserved band exactly as the rendered screen stacks them
+    // (top padding, progress row, the question/options row, feedback bar,
+    // bottom padding) and assert it does not exceed the real device height —
+    // not just that intermediate values are positive. This is the specific
+    // assertion a prior review found missing after two rounds of this
+    // arithmetic drifting silently out of sync with the actual styles.
+    const totalRenderedHeight =
+      SCREEN_PADDING + // paddingTop
+      PROGRESS_ROW_HEIGHT +
+      layout.contentHeight + // the question/options row itself
+      FEEDBACK_BAR_HEIGHT +
+      SCREEN_PADDING; // paddingBottom
+    expect(totalRenderedHeight).toBeLessThanOrEqual(windowHeight - HEADER_HEIGHT_ESTIMATE);
+
     expect(layout.contentHeight).toBeGreaterThan(0);
     expect(layout.optionSize).toBeGreaterThan(0);
     expect(layout.questionImageSize).toBeGreaterThan(0);
