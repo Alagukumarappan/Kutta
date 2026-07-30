@@ -100,6 +100,52 @@ npm install
 
 **Making JS/TS changes fast after the first install:** once the app is installed, run `npx expo start` — this gives you fast reload for code changes without a full native rebuild, as long as you're not adding new native dependencies.
 
+## Rebuilding after changes (when a fast reload isn't enough)
+
+Some changes require more than `npx expo start`'s fast reload — you need a real rebuild. Here's when each situation applies and what to run.
+
+**When you only changed JS/TS code** (a screen, a function, styling, etc.) and the app is already installed:
+```bash
+npx expo start
+```
+Reload the app on the device (shake the phone or press `r` in the terminal) — no rebuild needed.
+
+**When you added or changed a native dependency** (anything in `package.json` that touches native code — e.g. `react-native-reanimated`, `expo-video`, `@shopify/react-native-skia`), or `app.json` config that affects the native project (like `orientation`, permissions, the app icon):
+```bash
+npm install          # if you added/changed a package
+npm run android       # rebuilds and reinstalls
+```
+`npm run android` reuses the existing native `android/` folder if one already exists — it does **not** automatically pick up every `app.json` change (see below).
+
+**When you changed something in `app.json`** (orientation, icon, permissions, plugins) and it doesn't seem to take effect after `npm run android`:
+```bash
+npx expo prebuild --clean
+npm run android
+```
+`expo prebuild --clean` deletes and regenerates the native `android/` (and `ios/`) folders from scratch based on the current `app.json`. This is necessary because `npm run android` only *builds* the existing native folder — it doesn't regenerate it from `app.json` on every run. Do this any time an `app.json` change (like the landscape orientation lock) doesn't seem to be taking effect.
+
+**If the build fails with confusing native/Gradle errors** (e.g. `[Worklets] runOnUI can only be used with worklets`, or other errors that only show up after adding a native package):
+```bash
+rm -rf node_modules/.cache .expo
+npx expo start -c
+```
+Leave that running, then in another terminal run `npm run android` again. This clears Metro's bundler cache, which can go stale after adding new native modules like `react-native-reanimated`.
+
+**If Gradle itself fails with a Java-related error** (mentions restricted methods, or JDK version mismatches): this project needs **Java 17** specifically for the Android build tools — a newer or older Java version installed as your default can cause confusing failures. Check with:
+```bash
+java -version
+```
+If it's not 17, and you have SDKMAN installed, run `sdk env` in the project folder (there's a `.sdkmanrc` file pinning Java 17) to switch your terminal to the right version before building.
+
+**Quick decision guide:**
+| What changed | What to run |
+|---|---|
+| Just JS/TS code | `npx expo start`, then reload on device |
+| Added/changed a package in `package.json` | `npm install` then `npm run android` |
+| Changed `app.json` (orientation, icon, permissions) | `npx expo prebuild --clean` then `npm run android` |
+| Weird native/worklets error after adding a package | Clear cache (`rm -rf node_modules/.cache .expo`, `npx expo start -c`), then `npm run android` |
+| Gradle/Java version errors | Check `java -version` is 17, use `sdk env` if using SDKMAN |
+
 ## Running the tests
 
 ```bash
