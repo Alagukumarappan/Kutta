@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, Image, Pressable } from 'react-native';
+import { View, Text, Image, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
-import { computeGridDimensions, computePieceRects, shufflePieceOrder, PieceRect } from './puzzleGrid';
+import {
+  computeGridDimensions,
+  computePieceRects,
+  computePuzzleBoardSize,
+  shufflePieceOrder,
+  PieceRect,
+} from './puzzleGrid';
 
-const PUZZLE_SIZE = 300;
 const PIECE_COUNT_OPTIONS: (4 | 6 | 9 | 12)[] = [4, 6, 9, 12];
 
 function PuzzlePiece({ imageUri, rect, containerSize }: { imageUri: string; rect: PieceRect; containerSize: number }) {
@@ -29,6 +34,8 @@ function PuzzlePiece({ imageUri, rect, containerSize }: { imageUri: string; rect
 
 export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   const { t } = useLanguage();
+  const { width, height } = useWindowDimensions();
+  const puzzleSize = computePuzzleBoardSize(width, height);
   const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -56,32 +63,38 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
 
   if (!pieceCount) {
     return (
-      <View>
+      <ScrollView contentContainerStyle={{ padding: 16, alignItems: 'center' }}>
         <Text>{t('puzzlePickPieces')}</Text>
-        {PIECE_COUNT_OPTIONS.map((count) => (
-          <Pressable key={count} testID={`piece-count-${count}`} onPress={() => startPuzzle(count)}>
-            <Text>{count}</Text>
-          </Pressable>
-        ))}
-      </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {PIECE_COUNT_OPTIONS.map((count) => (
+            <Pressable key={count} testID={`piece-count-${count}`} onPress={() => startPuzzle(count)} style={{ margin: 8 }}>
+              <Text>{count}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
     );
   }
 
   const { rows, cols } = computeGridDimensions(pieceCount);
-  const rects = computePieceRects(PUZZLE_SIZE, PUZZLE_SIZE, rows, cols);
+  const rects = computePieceRects(puzzleSize, puzzleSize, rows, cols);
   const isSolved = order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
 
   return (
-    <View>
-      <Image source={{ uri: imageUri }} style={{ width: 80, height: 80 }} testID="puzzle-preview" />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: PUZZLE_SIZE }}>
-        {order.map((pieceIndex, slotIndex) => (
-          <Pressable key={slotIndex} testID={`puzzle-slot-${slotIndex}`} onPress={() => handleTapSlot(slotIndex)}>
-            <PuzzlePiece imageUri={imageUri} rect={rects[pieceIndex]} containerSize={PUZZLE_SIZE} />
-          </Pressable>
-        ))}
+    <ScrollView contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <View style={{ marginRight: 16 }}>
+          <Image source={{ uri: imageUri }} style={{ width: 80, height: 80 }} testID="puzzle-preview" />
+          {isSolved && <Text testID="puzzle-complete">🎉</Text>}
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: puzzleSize }}>
+          {order.map((pieceIndex, slotIndex) => (
+            <Pressable key={slotIndex} testID={`puzzle-slot-${slotIndex}`} onPress={() => handleTapSlot(slotIndex)}>
+              <PuzzlePiece imageUri={imageUri} rect={rects[pieceIndex]} containerSize={puzzleSize} />
+            </Pressable>
+          ))}
+        </View>
       </View>
-      {isSolved && <Text testID="puzzle-complete">🎉</Text>}
-    </View>
+    </ScrollView>
   );
 }

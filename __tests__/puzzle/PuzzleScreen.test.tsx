@@ -2,23 +2,32 @@ import React from 'react';
 import { render, fireEvent, within } from '@testing-library/react-native';
 import { PuzzleScreen } from '../../src/puzzle/PuzzleScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import { computePuzzleBoardSize } from '../../src/puzzle/puzzleGrid';
 
 const IMAGE_URI = 'content://tree/pictures/beach.jpg';
 
-// For pieceCount=4, computeGridDimensions gives rows=2, cols=2, so each piece is
-// 150x150 within the 300x300 puzzle. Each slot's underlying <Image> (testID
-// "puzzle-piece-image") is offset by (-rect.x, -rect.y) via marginLeft/marginTop, which
-// uniquely identifies which piece (0..3) is currently sitting in that slot — this lets us
-// read the actual `order` state indirectly through the rendered tree instead of reaching
+// jest-expo's test environment reports a fixed window size (750x1334) via
+// useWindowDimensions, regardless of the app's landscape orientation lock —
+// so the puzzle board's responsive size is deterministic here. For
+// pieceCount=4, computeGridDimensions gives rows=2, cols=2, so each piece is
+// (boardSize / 2) square within the boardSize x boardSize puzzle. Each slot's
+// underlying <Image> (testID "puzzle-piece-image") is offset by (-rect.x,
+// -rect.y) via marginLeft/marginTop, which uniquely identifies which piece
+// (0..3) is currently sitting in that slot — this lets us read the actual
+// `order` state indirectly through the rendered tree instead of reaching
 // into component internals.
+const TEST_WINDOW = { width: 750, height: 1334 };
+const BOARD_SIZE = computePuzzleBoardSize(TEST_WINDOW.width, TEST_WINDOW.height);
+const PIECE_SIZE = BOARD_SIZE / 2;
+
 function pieceIndexInSlot(slot: any): number {
   const image = within(slot).getByTestId('puzzle-piece-image');
   const marginLeft = image.props.style.marginLeft as number;
   const marginTop = image.props.style.marginTop as number;
   const x = -marginLeft;
   const y = -marginTop;
-  const col = Math.round(x / 150);
-  const row = Math.round(y / 150);
+  const col = Math.round(x / PIECE_SIZE);
+  const row = Math.round(y / PIECE_SIZE);
   return row * 2 + col;
 }
 
