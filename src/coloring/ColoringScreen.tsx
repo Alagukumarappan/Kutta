@@ -19,8 +19,13 @@ import { useLanguage } from '../i18n/LanguageContext';
 
 // Reserves room for the toolbar + palette footer strip rendered below the
 // canvas, and outer margins, so the canvas gets as much of the screen as
-// possible while still leaving room to pick a tool/color.
-const CANVAS_RESERVED_HEIGHT = 150;
+// possible while still leaving room to pick a tool/color. In landscape (this
+// screen is orientation-locked to landscape, see app.json) the footer
+// (toolbar buttons + palette swatches + padding/margins) plus the native
+// navigation header plus the status bar together need roughly 180-190dp on a
+// typical phone, so 150 under-reserved and let the canvas clip against the
+// footer.
+const CANVAS_RESERVED_HEIGHT = 200;
 const CANVAS_RESERVED_WIDTH = 32;
 const CANVAS_MIN_SIZE = 200;
 const CANVAS_MAX_SIZE = 900;
@@ -123,6 +128,25 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     if (newImage) setFilledImage(newImage);
   }
 
+  // Commits the in-progress stroke (if any) into `strokes` and clears the
+  // active-stroke refs/state. Shared by the release and terminate handlers
+  // so a stroke is never lost or double-committed regardless of how the
+  // gesture ends.
+  //
+  // The captured `finished` local is important: `setStrokes`'s updater can
+  // be deferred by React and run later, after `activePathRef.current` has
+  // already been reset to null on the next line. Reading the ref directly
+  // inside the updater would then push `null` into `strokes`, and Skia's
+  // <SkiaPath path={null}> throws "Invalid path: null" at render time.
+  function finishActiveStroke() {
+    const finished = activePathRef.current;
+    activePathRef.current = null;
+    if (finished) {
+      setStrokes((prev) => [...prev, { path: finished, color: selectedDisplayColorRef.current }]);
+    }
+    setCurrentPath(null);
+  }
+
   const panResponder = useRef<PanResponderInstance>(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -149,15 +173,16 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       },
       onPanResponderRelease: (evt: GestureResponderEvent) => {
         if (toolModeRef.current === 'pen') {
-          if (activePathRef.current) {
-            setStrokes((prev) => [...prev, { path: activePathRef.current!, color: selectedDisplayColorRef.current }]);
-          }
-          activePathRef.current = null;
-          setCurrentPath(null);
+          finishActiveStroke();
           return;
         }
         const { locationX, locationY } = evt.nativeEvent;
         handleCanvasTap(locationX, locationY);
+      },
+      onPanResponderTerminate: () => {
+        if (toolModeRef.current === 'pen') {
+          finishActiveStroke();
+        }
       },
     })
   ).current;
@@ -172,7 +197,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             {displayImage && (
               <SkiaImage image={displayImage} x={0} y={0} width={canvasSize} height={canvasSize} />
             )}
-            {strokes.map((stroke, i) => (
+            {strokes.map((stroke, i) => stroke.path && (
               <SkiaPath
                 key={i}
                 path={stroke.path}
