@@ -54,6 +54,9 @@ export const UI_STRINGS = {
     de: 'Zugriff auf deine Inhaltsordner nicht möglich. Bitte überprüfe den Ordnerzugriff und versuche es erneut.',
   },
   retry: { en: 'Retry', de: 'Erneut versuchen' },
+  toolFill: { en: 'Fill', de: 'Füllen' },
+  toolPen: { en: 'Pen', de: 'Stift' },
+  clearDrawing: { en: 'Clear drawing', de: 'Zeichnung löschen' },
   loadError: {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
