@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { Question, QuestionOption } from '../types/quiz';
 
 function isBilingualText(v: unknown): v is { en: string; de: string } {

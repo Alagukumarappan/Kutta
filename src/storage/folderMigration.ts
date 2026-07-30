@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 function leafName(uri: string): string {
   const decoded = decodeURIComponent(uri);

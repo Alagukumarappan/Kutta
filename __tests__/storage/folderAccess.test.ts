@@ -1,7 +1,7 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { ensureContentStructure } from '../../src/storage/folderAccess';
 
-jest.mock('expo-file-system', () => ({
+jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: {
     readDirectoryAsync: jest.fn(),
     makeDirectoryAsync: jest.fn(),

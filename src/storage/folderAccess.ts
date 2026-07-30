@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const SUBFOLDERS = ['pictures', 'videos', 'coloring', 'quiz'] as const;
 

@@ -1,7 +1,7 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { migrateContent } from '../../src/storage/folderMigration';
 
-jest.mock('expo-file-system', () => ({
+jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: {
     readDirectoryAsync: jest.fn(),
     copyAsync: jest.fn(),
