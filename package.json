@@ -20,6 +20,7 @@
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
+    "babel-preset-expo": "~57.0.5",
     "jest-expo": "^57.0.3",
     "ts-jest": "^29.4.12",
     "typescript": "~6.0.3"
