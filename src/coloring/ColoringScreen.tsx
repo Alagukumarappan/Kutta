@@ -21,12 +21,12 @@ import { useLanguage } from '../i18n/LanguageContext';
 
 // Reserves room for the toolbar + palette footer strip rendered below the
 // canvas, and outer margins, so the canvas gets as much of the screen as
-// possible while still leaving room to pick a tool/color. In landscape (this
-// screen is orientation-locked to landscape, see app.json) the footer
-// (toolbar buttons + palette swatches + padding/margins) plus the native
-// navigation header plus the status bar together need roughly 180-190dp on a
-// typical phone, so 150 under-reserved and let the canvas clip against the
-// footer.
+// possible while still leaving room to pick a tool/color. This screen is
+// landscape-only via RootNavigator's runtime orientation lock (app.json
+// itself now uses "default" rather than a manifest-level lock). The footer
+// (toolbar buttons + palette swatches + padding/margins) needs roughly
+// 180-190dp on a typical phone, so 200 leaves a small margin rather than
+// letting the canvas clip against the footer.
 const CANVAS_RESERVED_HEIGHT = 200;
 const CANVAS_RESERVED_WIDTH = 32;
 const CANVAS_MIN_SIZE = 200;
@@ -65,18 +65,21 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's status bar
-  // and on-screen nav bar; they don't know about *this* device's actual
-  // notch/gesture-bar geometry, which varies (e.g. a Samsung S22's cutout and
-  // 3-button/gesture nav differ from the emulator's). Add the real,
-  // per-device insets on top of those fixed margins so the canvas never
-  // shrinks *into* what it originally reserved (the fixed constants still
-  // cover the header/footer chrome; the insets cover the additional
-  // system-reserved area outside that).
+  // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's on-screen
+  // nav bar; they don't know about *this* device's actual notch/gesture-bar
+  // geometry, which varies (e.g. a Samsung S22's cutout and 3-button/gesture
+  // nav differ from the emulator's). Add the real, per-device bottom/left/
+  // right insets on top of those fixed margins so the canvas never shrinks
+  // *into* what it originally reserved (the fixed constants still cover the
+  // footer chrome; the insets cover the additional system-reserved area
+  // outside that). insets.top is deliberately NOT added here: this screen is
+  // shown with headerShown:true (see RootNavigator), so the native header
+  // already consumes the top inset before this component's flex:1 container
+  // gets its share of the window — adding it again would double-count it.
   const canvasSize = computeResponsiveSquareSize(
     width,
     height,
-    CANVAS_RESERVED_HEIGHT + insets.top + insets.bottom,
+    CANVAS_RESERVED_HEIGHT + insets.bottom,
     CANVAS_RESERVED_WIDTH + insets.left + insets.right,
     CANVAS_MIN_SIZE,
     CANVAS_MAX_SIZE

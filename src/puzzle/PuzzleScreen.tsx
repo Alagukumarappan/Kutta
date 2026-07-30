@@ -65,7 +65,14 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   const { t } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const puzzleSize = computePuzzleBoardSize(width, height, insets);
+  // This screen is shown with headerShown:true (see RootNavigator), so the
+  // native header already consumes the top safe-area inset before this
+  // component's flex:1 container gets its share of the window — unlike
+  // HomeScreen (headerShown:false), which is the one screen that has to
+  // account for insets.top itself. Zero out top here so it isn't double-
+  // counted on top of what the header already reserved; bottom/left/right
+  // still need to be handled since the header doesn't cover those.
+  const puzzleSize = computePuzzleBoardSize(width, height, { ...insets, top: 0 });
   const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
   const [pieceCountModalVisible, setPieceCountModalVisible] = useState(false);
   const [order, setOrder] = useState<number[]>([]);
