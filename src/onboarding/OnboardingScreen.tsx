@@ -16,8 +16,12 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const isValid = name.trim().length > 0 && Number.isInteger(age) && age >= 2 && age <= 8 && !!folderUri;
 
   async function handlePickFolder() {
-    const uri = await requestFolderAccess();
-    setFolderUri(uri);
+    try {
+      const uri = await requestFolderAccess();
+      setFolderUri(uri);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function handleSave() {
