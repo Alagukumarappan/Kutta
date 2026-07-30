@@ -4,29 +4,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t } from '../i18n/strings';
-import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
+import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { computeQuizLayout, OPTION_CARD_MARGIN, SCREEN_PADDING } from './layout';
 
 // This screen is shown with headerShown:true (see RootNavigator), so the
 // native-stack header already consumes the top safe-area inset before this
 // component's flex:1 container gets its share of the window — but
 // useWindowDimensions() below reports the FULL window height, header
-// included. HEADER_HEIGHT_ESTIMATE nets that back out so the sizing math
-// below is computed against the space actually left for content, not the
-// whole screen. It only affects how big we *try* to make things — the
-// ScrollView wrapper is the real safety net if this estimate runs low.
-const HEADER_HEIGHT_ESTIMATE = 56;
-
-const SCREEN_PADDING = spacing.md; // 16 - outer padding on all sides
-const PROGRESS_ROW_HEIGHT = 30; // dots (up to 18) + margin
-const FEEDBACK_BAR_HEIGHT = 56; // feedback text + Next button, reserved below the row
-const COLUMN_GAP = spacing.md; // gap between the question column and the options column
-const GRID_GAP = spacing.sm; // gap between/around the 2x2 option grid cells
-const QUESTION_COLUMN_RATIO = 0.42; // question column gets ~42% of the row width, options get the rest
-
-const MIN_OPTION_SIZE = 72;
-const MAX_OPTION_SIZE = 170;
-const MIN_QUESTION_IMAGE_SIZE = 60;
-const MAX_QUESTION_IMAGE_SIZE = 200;
+// included. computeQuizLayout nets that back out so the sizing math below is
+// computed against the space actually left for content, not the whole
+// screen. It only affects how big we *try* to make things — the ScrollView
+// wrapper is the real safety net if this estimate runs low.
+//
+// All the sizing arithmetic itself (header/padding reservations, the 2x2
+// option grid, and the question image) lives in ./layout.ts as a pure,
+// unit-tested function, since this math is fiddly enough that it has drifted
+// out of sync with the actual styles before.
 
 function ImageWithFallback({ uri, testID, size }: { uri: string; testID: string; size: number }) {
   const [failed, setFailed] = useState(false);
@@ -92,32 +85,16 @@ export function QuestionRenderer({
   // row that fits inside that height budget. Sizes below are derived from
   // the actual window rather than fixed constants so this adapts instead of
   // assuming one specific device.
-  const availableHeight = height - HEADER_HEIGHT_ESTIMATE - insets.bottom;
-  const availableWidth = width - insets.left - insets.right;
-
-  const contentHeight = Math.max(
-    0,
-    availableHeight - SCREEN_PADDING * 2 - (showProgress ? PROGRESS_ROW_HEIGHT : 0) - FEEDBACK_BAR_HEIGHT
-  );
-
-  const columnsWidth = Math.max(0, availableWidth - SCREEN_PADDING * 2 - COLUMN_GAP);
-  const questionColumnWidth = columnsWidth * QUESTION_COLUMN_RATIO;
-  const optionsColumnWidth = columnsWidth - questionColumnWidth;
-
-  // Two rows of two cells must fit within contentHeight, and two columns of
-  // cells must fit within optionsColumnWidth — take whichever axis is
-  // tighter, same approach as computeResponsiveSquareSize elsewhere.
-  const optionSize = clamp(
-    Math.min((contentHeight - GRID_GAP) / 2, (optionsColumnWidth - GRID_GAP) / 2),
-    MIN_OPTION_SIZE,
-    MAX_OPTION_SIZE
-  );
-
-  const questionImageSize = clamp(
-    Math.min(questionColumnWidth - spacing.md * 2, contentHeight - spacing.md * 2),
-    MIN_QUESTION_IMAGE_SIZE,
-    MAX_QUESTION_IMAGE_SIZE
-  );
+  const { questionColumnWidth, optionsColumnWidth, optionSize, questionImageSize } = computeQuizLayout({
+    windowWidth: width,
+    windowHeight: height,
+    insetTop: insets.top,
+    insetBottom: insets.bottom,
+    insetLeft: insets.left,
+    insetRight: insets.right,
+    showProgress,
+    hasQuestionText: Boolean(question.question.text),
+  });
 
   // A small pop-in for the feedback bar (bounce up to a slight overshoot,
   // then settle) so getting an answer right/wrong feels a bit more alive
@@ -226,7 +203,12 @@ export function QuestionRenderer({
           style={[styles.feedbackBar, { transform: [{ scale: feedbackScale }] }]}
         >
           {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
-          <Text style={[styles.feedbackText, isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText]}>
+          <Text
+            style={[
+              styles.feedbackText,
+              isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText,
+            ]}
+          >
             {isCorrect ? t('quizCorrect', language) : t('quizIncorrect', language)}
           </Text>
           <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
@@ -296,6 +278,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
+    marginTop: spacing.xs,
   },
   optionsGrid: {
     flexDirection: 'row',
@@ -304,7 +287,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   optionCard: {
-    margin: spacing.xs,
+    margin: OPTION_CARD_MARGIN,
     borderRadius: radii.lg,
     borderWidth: 3,
     borderColor: colors.disabledBorder,
@@ -340,16 +323,17 @@ const styles = StyleSheet.create({
   },
   feedbackBar: {
     marginTop: spacing.sm,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    columnGap: spacing.sm,
   },
   feedbackEmoji: {
     fontSize: 24,
-    marginBottom: spacing.xs,
   },
   feedbackText: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: spacing.xs,
   },
   feedbackCorrectText: {
     color: colors.mintDark,
