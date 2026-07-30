@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, StyleSheet } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
 import type { Language } from '../types/profile';
+import { colors, radii, spacing, shadow } from '../theme/tokens';
 
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
@@ -14,6 +15,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
   const age = Number(ageText);
   const isValid = name.trim().length > 0 && Number.isInteger(age) && age >= 2 && age <= 8 && !!folderUri;
+  const saveDisabled = !isValid || saving;
 
   async function handlePickFolder() {
     try {
@@ -39,31 +41,212 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <View>
-      <Text>{t('onboardingTitle')}</Text>
+    <View style={styles.screen}>
+      <Text style={styles.title}>{t('onboardingTitle')}</Text>
 
-      <Text>{t('onboardingName')}</Text>
-      <TextInput testID="onboarding-name-input" value={name} onChangeText={setName} />
+      <View style={styles.card}>
+        <Text style={styles.label}>{t('onboardingName')}</Text>
+        <TextInput
+          testID="onboarding-name-input"
+          value={name}
+          onChangeText={setName}
+          style={styles.textInput}
+          placeholder="Name"
+        />
+      </View>
 
-      <Text>{t('onboardingAge')}</Text>
-      <TextInput testID="onboarding-age-input" value={ageText} onChangeText={setAgeText} keyboardType="numeric" />
+      <View style={styles.card}>
+        <Text style={styles.label}>{t('onboardingAge')}</Text>
+        <TextInput
+          testID="onboarding-age-input"
+          value={ageText}
+          onChangeText={setAgeText}
+          keyboardType="numeric"
+          style={styles.ageInput}
+        />
+      </View>
 
-      <Text>{t('onboardingLanguage')}</Text>
-      <Pressable testID="onboarding-lang-en" onPress={() => setLanguage('en' as Language)}>
-        <Text>English</Text>
-      </Pressable>
-      <Pressable testID="onboarding-lang-de" onPress={() => setLanguage('de' as Language)}>
-        <Text>Deutsch</Text>
-      </Pressable>
+      <View style={styles.card}>
+        <Text style={styles.label}>{t('onboardingLanguage')}</Text>
+        <View style={styles.languageRow}>
+          <Pressable
+            testID="onboarding-lang-en"
+            onPress={() => setLanguage('en' as Language)}
+            style={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+          >
+            <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
+              English
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="onboarding-lang-de"
+            onPress={() => setLanguage('de' as Language)}
+            style={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+          >
+            <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
+              Deutsch
+            </Text>
+          </Pressable>
+        </View>
+      </View>
 
-      <Pressable onPress={handlePickFolder}>
-        <Text>{t('onboardingPickFolder')}</Text>
-      </Pressable>
-      {folderUri && <Text testID="onboarding-folder-picked">✓</Text>}
+      <View style={styles.card}>
+        <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+          <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
+        </Pressable>
+        {folderUri && (
+          <View style={styles.folderConfirm}>
+            <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
+              Folder selected ✓
+            </Text>
+          </View>
+        )}
+      </View>
 
-      <Pressable onPress={handleSave} disabled={!isValid || saving}>
-        <Text>{t('onboardingSave')}</Text>
+      <Pressable
+        testID="onboarding-save-button"
+        onPress={handleSave}
+        disabled={saveDisabled}
+        style={[styles.saveButton, saveDisabled ? styles.saveButtonDisabled : styles.saveButtonEnabled]}
+      >
+        <Text style={[styles.saveButtonText, saveDisabled ? styles.saveButtonTextDisabled : styles.saveButtonTextEnabled]}>
+          {t('onboardingSave')}
+        </Text>
       </Pressable>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flexGrow: 1,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: colors.ink,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadow,
+    elevation: 2,
+  },
+  label: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.ink,
+    marginBottom: spacing.sm,
+  },
+  textInput: {
+    borderWidth: 2,
+    borderColor: colors.disabledBorder,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontSize: 18,
+    color: colors.ink,
+  },
+  ageInput: {
+    borderWidth: 2,
+    borderColor: colors.disabledBorder,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  languageRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  langPill: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.xl,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  langPillSelected: {
+    backgroundColor: colors.sky,
+    borderColor: colors.skyDark,
+  },
+  langPillUnselected: {
+    backgroundColor: colors.white,
+    borderColor: colors.disabledBorder,
+  },
+  langPillText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  langPillTextSelected: {
+    color: colors.white,
+  },
+  langPillTextUnselected: {
+    color: colors.ink,
+  },
+  folderButton: {
+    backgroundColor: colors.sky,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    ...shadow,
+    elevation: 2,
+  },
+  folderButtonText: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  folderConfirm: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.mint,
+    borderRadius: radii.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  folderConfirmText: {
+    color: colors.white,
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  saveButton: {
+    borderRadius: radii.xl,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.md,
+    borderWidth: 2,
+  },
+  saveButtonEnabled: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coralDark,
+    ...shadow,
+    elevation: 4,
+  },
+  saveButtonDisabled: {
+    backgroundColor: colors.disabledBg,
+    borderColor: colors.disabledBorder,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  saveButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  saveButtonTextEnabled: {
+    color: colors.white,
+  },
+  saveButtonTextDisabled: {
+    color: colors.disabledText,
+  },
+});

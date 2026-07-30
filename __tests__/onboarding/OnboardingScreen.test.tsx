@@ -82,4 +82,25 @@ describe('OnboardingScreen', () => {
     expect(onComplete).not.toHaveBeenCalled();
     expect(folderAccess.requestFolderAccess).not.toHaveBeenCalled();
   });
+
+  it('visually marks the Save button as disabled until the form is valid', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+
+    const onComplete = jest.fn();
+    const { getByTestId, getByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <OnboardingScreen onComplete={onComplete} />
+      </LanguageProvider>
+    );
+
+    const saveButton = getByTestId('onboarding-save-button');
+    expect(saveButton.props.accessibilityState?.disabled).toBe(true);
+
+    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
+    await fireEvent.changeText(getByTestId('onboarding-age-input'), '4');
+    await fireEvent.press(getByText('Choose content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+
+    expect(getByTestId('onboarding-save-button').props.accessibilityState?.disabled).toBe(false);
+  });
 });
