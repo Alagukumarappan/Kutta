@@ -47,6 +47,8 @@ export const UI_STRINGS = {
   quizIncorrect: { en: 'Try again!', de: 'Versuch es nochmal!' },
   quizNext: { en: 'Next', de: 'Weiter' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
+  puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },
+  puzzleComplete: { en: 'Great job!', de: 'Super gemacht!' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
   coloringImageLoadError: {
     en: 'This picture could not be loaded for coloring.',
