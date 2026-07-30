@@ -177,7 +177,12 @@ export function RootNavigator() {
   // Lock portrait immediately on mount, before the splash below even
   // paints, so there's no visible landscape flash while the profile loads.
   useEffect(() => {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch((err) => {
+      // No user-facing recovery to build for this today, but a silent
+      // failure here would leave orientation unconstrained in an app that's
+      // landscape-only by design — worth knowing about during development.
+      console.warn('Failed to lock orientation to portrait for splash', err);
+    });
   }, []);
 
   // Initial load only: resolve the profile and hold the splash up for at
@@ -189,12 +194,24 @@ export function RootNavigator() {
   // by then.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getProfile(), delay(MINIMUM_SPLASH_DELAY_MS)]).then(async ([loadedProfile]) => {
-      if (cancelled) return;
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
-      if (cancelled) return;
-      setProfile(loadedProfile);
-    });
+    Promise.all([getProfile(), delay(MINIMUM_SPLASH_DELAY_MS)])
+      .then(async ([loadedProfile]) => {
+        if (cancelled) return;
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((err) => {
+          // Same reasoning as the portrait lock above: no user-facing recovery
+          // to build right now, but a failure leaving orientation unconstrained
+          // in a landscape-only app is worth surfacing rather than swallowing.
+          console.warn('Failed to lock orientation to landscape', err);
+        });
+        if (cancelled) return;
+        setProfile(loadedProfile);
+      })
+      .catch(() => {
+        // If getProfile() rejects (corrupt storage, etc.), fall through to
+        // the onboarding flow instead of leaving the splash showing forever
+        // with no profile ever resolved.
+        if (!cancelled) setProfile(null);
+      });
     return () => {
       cancelled = true;
     };
