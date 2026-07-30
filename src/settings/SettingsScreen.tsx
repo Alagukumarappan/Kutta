@@ -7,7 +7,7 @@ import { migrateContent } from '../storage/folderMigration';
 import type { Language, Profile } from '../types/profile';
 
 export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => void } = {}) {
-  const { t } = useLanguage();
+  const { t, setLanguage } = useLanguage();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ageText, setAgeText] = useState('');
   const [pendingFolderUri, setPendingFolderUri] = useState<string | null>(null);
@@ -53,6 +53,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
 
     await saveProfile(nextProfile);
     setProfile(nextProfile);
+    setLanguage(nextProfile.language);
     onProfileChanged?.();
   }
 

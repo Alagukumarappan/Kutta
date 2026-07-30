@@ -87,4 +87,49 @@ describe('ensureContentStructure', () => {
       'application/json'
     );
   });
+
+  it('does not mistake an unrelated similarly-named folder (e.g. "Old pictures") for the "pictures" subfolder', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === rootUri) {
+        // A pre-existing, unrelated sibling whose name merely *ends with*
+        // "pictures" — must NOT be treated as the "pictures" subfolder, or
+        // photo-puzzle content would get written into the user's own files.
+        return [`${rootUri}/Old%20pictures`];
+      }
+      return [];
+    });
+
+    await ensureContentStructure(rootUri);
+
+    const madeDirs = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.map(
+      (c) => c[1]
+    );
+    // "pictures" must still be (re)created as its own real subfolder...
+    expect(madeDirs).toContain('pictures');
+    const picturesCall = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.find(
+      (c) => c[1] === 'pictures'
+    );
+    // ...directly under rootUri, not treated as already satisfied by "Old pictures".
+    expect(picturesCall?.[0]).toBe(rootUri);
+  });
+
+  it('does not mistake a differently-named file (e.g. "my-questions.json") for questions.json', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === `${rootUri}/quiz`) return [`${rootUri}/quiz/my-questions.json`];
+      return [];
+    });
+    (FileSystem.StorageAccessFramework.createFileAsync as jest.Mock).mockResolvedValue(
+      `${rootUri}/quiz/questions.json`
+    );
+
+    await ensureContentStructure(rootUri);
+
+    // "my-questions.json" ends with "questions.json" but is not an exact
+    // match, so the template file must still be created.
+    expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledWith(
+      `${rootUri}/quiz`,
+      'questions.json',
+      'application/json'
+    );
+  });
 });

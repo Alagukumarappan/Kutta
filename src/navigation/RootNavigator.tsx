@@ -3,7 +3,7 @@ import { View, Text, Pressable } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getProfile } from '../storage/profileStore';
-import { findChildUri } from '../storage/folderAccess';
+import { findChildUri, ensureContentStructure } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
@@ -33,6 +33,13 @@ type SubfolderUris = Record<ContentSubfolder, string>;
 // subfolders in the first place, so both places agree on how a SAF child URI
 // is resolved.
 async function resolveSubfolderUris(rootUri: string): Promise<SubfolderUris> {
+  // Re-run the same idempotent setup onboarding used. If a user deleted or
+  // renamed a subfolder from outside the app (a file manager, etc.),
+  // ensureContentStructure recreates whatever's missing so resolution below
+  // — and a Retry tap on FolderErrorScreen — can self-heal instead of
+  // failing identically forever.
+  await ensureContentStructure(rootUri);
+
   async function findChild(name: string): Promise<string> {
     const match = await findChildUri(rootUri, name);
     if (!match) {
