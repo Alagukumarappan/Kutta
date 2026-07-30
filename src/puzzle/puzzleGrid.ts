@@ -1,4 +1,24 @@
 import { shuffle } from '../quiz/shuffle';
+import { computeResponsiveSquareSize } from '../theme/tokens';
+
+// Reserves room for the preview thumbnail, labels and margins above/around the
+// board so the puzzle board itself sizes to fit a short-but-wide landscape
+// window instead of overflowing it.
+const PUZZLE_RESERVED_HEIGHT = 160;
+const PUZZLE_RESERVED_WIDTH = 220;
+const PUZZLE_MIN_SIZE = 200;
+const PUZZLE_MAX_SIZE = 420;
+
+export function computePuzzleBoardSize(windowWidth: number, windowHeight: number): number {
+  return computeResponsiveSquareSize(
+    windowWidth,
+    windowHeight,
+    PUZZLE_RESERVED_HEIGHT,
+    PUZZLE_RESERVED_WIDTH,
+    PUZZLE_MIN_SIZE,
+    PUZZLE_MAX_SIZE
+  );
+}
 
 const GRID_DIMENSIONS: Record<4 | 6 | 9 | 12, { rows: number; cols: number }> = {
   4: { rows: 2, cols: 2 },

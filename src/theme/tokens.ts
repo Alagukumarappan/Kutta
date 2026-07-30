@@ -31,3 +31,24 @@ export const shadow = {
   shadowOpacity: 0.15,
   shadowRadius: 5,
 };
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+// Computes a square size (e.g. a canvas or puzzle board) that fits within the
+// current window after reserving room for surrounding UI (palettes, previews,
+// labels, margins). Landscape phones are short-but-wide, so the height axis is
+// usually the binding constraint - this takes whichever axis is tighter.
+export function computeResponsiveSquareSize(
+  windowWidth: number,
+  windowHeight: number,
+  reservedHeight: number,
+  reservedWidth: number,
+  min: number,
+  max: number
+): number {
+  const maxByHeight = windowHeight - reservedHeight;
+  const maxByWidth = windowWidth - reservedWidth;
+  return clamp(Math.min(maxByHeight, maxByWidth), min, max);
+}
