@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { View, ScrollView, useWindowDimensions } from 'react-native';
 import {
   Canvas,
   useImage,
@@ -10,8 +10,15 @@ import {
   SkImage,
 } from '@shopify/react-native-skia';
 import { floodFill } from './floodFill';
+import { computeResponsiveSquareSize } from '../theme/tokens';
 
-const CANVAS_SIZE = 300;
+// Reserves room for the palette strip (rendered beside the canvas in
+// landscape) and outer margins, so the canvas sizes to fit a short-but-wide
+// window instead of overflowing it.
+const CANVAS_RESERVED_HEIGHT = 80;
+const CANVAS_RESERVED_WIDTH = 140;
+const CANVAS_MIN_SIZE = 200;
+const CANVAS_MAX_SIZE = 420;
 
 const PALETTE: [number, number, number, number][] = [
   [255, 0, 0, 255],
@@ -23,6 +30,15 @@ const PALETTE: [number, number, number, number][] = [
 
 export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const image = useImage(imageUri);
+  const { width, height } = useWindowDimensions();
+  const canvasSize = computeResponsiveSquareSize(
+    width,
+    height,
+    CANVAS_RESERVED_HEIGHT,
+    CANVAS_RESERVED_WIDTH,
+    CANVAS_MIN_SIZE,
+    CANVAS_MAX_SIZE
+  );
   const [selectedColor, setSelectedColor] = useState<[number, number, number, number]>(PALETTE[0]);
   const [pixels, setPixels] = useState<Uint8ClampedArray | null>(null);
   const [filledImage, setFilledImage] = useState<SkImage | null>(null);
@@ -54,8 +70,8 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 
     // Tap coordinates arrive in the Canvas's displayed (possibly scaled)
     // coordinate space; map them back into the pixel buffer's native space.
-    const pixelX = Math.floor((x / CANVAS_SIZE) * width);
-    const pixelY = Math.floor((y / CANVAS_SIZE) * height);
+    const pixelX = Math.floor((x / canvasSize) * width);
+    const pixelY = Math.floor((y / canvasSize) * height);
     if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height) return;
 
     const updated = floodFill(pixels, width, height, pixelX, pixelY, selectedColor);
@@ -74,27 +90,34 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const displayImage = filledImage ?? image;
 
   return (
-    <View>
-      <View
-        testID="coloring-canvas-touch-area"
-        onTouchEnd={(e) => handleCanvasTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-      >
-        <Canvas style={{ width: CANVAS_SIZE, height: CANVAS_SIZE }} testID="coloring-canvas">
-          {displayImage && (
-            <SkiaImage image={displayImage} x={0} y={0} width={CANVAS_SIZE} height={CANVAS_SIZE} />
-          )}
-        </Canvas>
+    <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <View
+          testID="coloring-canvas-touch-area"
+          onTouchEnd={(e) => handleCanvasTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+        >
+          <Canvas style={{ width: canvasSize, height: canvasSize }} testID="coloring-canvas">
+            {displayImage && (
+              <SkiaImage image={displayImage} x={0} y={0} width={canvasSize} height={canvasSize} />
+            )}
+          </Canvas>
+        </View>
+        <View testID="coloring-palette" style={{ marginLeft: 16 }}>
+          {PALETTE.map((color, i) => (
+            <View
+              key={i}
+              testID={`palette-color-${i}`}
+              style={{
+                backgroundColor: `rgb(${color[0]},${color[1]},${color[2]})`,
+                width: 36,
+                height: 36,
+                marginBottom: 8,
+              }}
+              onTouchEnd={() => setSelectedColor(color)}
+            />
+          ))}
+        </View>
       </View>
-      <View testID="coloring-palette">
-        {PALETTE.map((color, i) => (
-          <View
-            key={i}
-            testID={`palette-color-${i}`}
-            style={{ backgroundColor: `rgb(${color[0]},${color[1]},${color[2]})`, width: 30, height: 30 }}
-            onTouchEnd={() => setSelectedColor(color)}
-          />
-        ))}
-      </View>
-    </View>
+    </ScrollView>
   );
 }
