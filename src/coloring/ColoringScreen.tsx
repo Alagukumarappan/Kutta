@@ -362,25 +362,37 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           horizontal
           showsHorizontalScrollIndicator={false}
         >
-          {PALETTE.map((paletteColor, i) => (
-            <Pressable
-              key={i}
-              testID={`palette-color-${i}`}
-              onPress={() => {
-                setSelectedColor(paletteColor.fill);
-                setSelectedDisplayColor(paletteColor.display);
-              }}
-              style={{
-                backgroundColor: paletteColor.display,
-                width: 44,
-                height: 44,
-                borderRadius: radii.md,
-                marginRight: spacing.sm,
-                borderWidth: selectedDisplayColor === paletteColor.display ? 3 : 1,
-                borderColor: selectedDisplayColor === paletteColor.display ? colors.ink : colors.disabledBorder,
-              }}
-            />
-          ))}
+          {PALETTE.map((paletteColor, i) => {
+            const isSelected = selectedDisplayColor === paletteColor.display;
+            return (
+              <Pressable
+                key={i}
+                testID={`palette-color-${i}`}
+                onPress={() => {
+                  setSelectedColor(paletteColor.fill);
+                  setSelectedDisplayColor(paletteColor.display);
+                }}
+                style={{
+                  backgroundColor: paletteColor.display,
+                  width: 44,
+                  height: 44,
+                  // Fully circular (radius = half the side) rather than a
+                  // rounded square, matching the large circular swatches
+                  // used across children's coloring apps.
+                  borderRadius: 22,
+                  marginRight: spacing.sm,
+                  marginTop: spacing.xs,
+                  marginBottom: spacing.xs,
+                  borderWidth: isSelected ? 3 : 1,
+                  borderColor: isSelected ? colors.ink : colors.disabledBorder,
+                  // Slight scale-up on the selected swatch, on top of the
+                  // existing border-ring change, so the "currently loaded"
+                  // color is unmistakable at a glance.
+                  transform: [{ scale: isSelected ? 1.12 : 1 }],
+                }}
+              />
+            );
+          })}
         </ScrollView>
       </View>
     </View>
