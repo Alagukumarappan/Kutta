@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
 
 export type HomeDestination = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'settings';
 
@@ -29,6 +29,16 @@ export function HomeScreen({
   onNavigate: (destination: HomeDestination) => void;
 }) {
   const { t } = useLanguage();
+  const { width, height } = useWindowDimensions();
+
+  // Landscape gives ample width and limited height, so the 4 cards sit in a
+  // single row instead of a 2x2 stack. Size them from the actual window
+  // rather than a fixed pixel size, and cap the height so the row never
+  // outgrows a short screen (leaving room for the header above it).
+  const gap = spacing.md;
+  const cardWidth = (width - spacing.md * 2 - gap * (CARDS.length - 1)) / CARDS.length;
+  const headerReserve = 140;
+  const cardHeight = clamp(height - headerReserve, 120, 220);
 
   return (
     <View style={styles.screen}>
@@ -50,7 +60,10 @@ export function HomeScreen({
             key={card.testID}
             testID={card.testID}
             onPress={() => onNavigate(card.destination)}
-            style={[styles.card, { backgroundColor: card.bg, borderColor: card.border }]}
+            style={[
+              styles.card,
+              { width: cardWidth, height: cardHeight, backgroundColor: card.bg, borderColor: card.border },
+            ]}
           >
             <Text style={styles.cardEmoji}>{card.emoji}</Text>
             <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
@@ -107,18 +120,14 @@ const styles = StyleSheet.create({
   },
   grid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
   card: {
-    width: '48%',
-    aspectRatio: 1,
     borderRadius: radii.xl,
     borderWidth: 4,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.md,
-    marginBottom: spacing.md,
     ...shadow,
     elevation: 4,
   },
