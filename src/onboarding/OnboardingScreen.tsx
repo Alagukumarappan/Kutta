@@ -1,20 +1,26 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, Modal, StyleSheet } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
+import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import type { Language } from '../types/profile';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
+
+const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
   const [name, setName] = useState('');
-  const [ageText, setAgeText] = useState('');
+  const [age, setAge] = useState<number | null>(null);
+  const [ageModalVisible, setAgeModalVisible] = useState(false);
   const [folderUri, setFolderUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const age = Number(ageText);
-  const isValid = name.trim().length > 0 && Number.isInteger(age) && age >= 2 && age <= 8 && !!folderUri;
+  const nameValid = name.trim().length > 0;
+  const ageValid = age !== null;
+  const folderValid = !!folderUri;
+  const isValid = nameValid && ageValid && folderValid;
   const saveDisabled = !isValid || saving;
 
   async function handlePickFolder() {
@@ -27,7 +33,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   async function handleSave() {
-    if (!isValid || !folderUri) return;
+    if (!isValid || !folderUri || age === null) return;
     setSaving(true);
     try {
       await ensureContentStructure(folderUri);
@@ -53,18 +59,55 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           style={styles.textInput}
           placeholder="Name"
         />
+        {!nameValid && (
+          <Text testID="onboarding-name-error" style={styles.fieldError}>
+            {t('onboardingNameMissing')}
+          </Text>
+        )}
       </View>
 
       <View style={styles.card}>
         <Text style={styles.label}>{t('onboardingAge')}</Text>
-        <TextInput
-          testID="onboarding-age-input"
-          value={ageText}
-          onChangeText={setAgeText}
-          keyboardType="numeric"
-          style={styles.ageInput}
-        />
+        <Pressable
+          testID="onboarding-age-picker"
+          onPress={() => setAgeModalVisible(true)}
+          style={styles.agePickerField}
+        >
+          <Text style={age === null ? styles.agePickerPlaceholder : styles.agePickerValue}>
+            {age === null ? t('onboardingSelectAge') : String(age)}
+          </Text>
+        </Pressable>
+        {!ageValid && (
+          <Text testID="onboarding-age-error" style={styles.fieldError}>
+            {t('onboardingAgeMissing')}
+          </Text>
+        )}
       </View>
+
+      <Modal
+        visible={ageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAgeModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setAgeModalVisible(false)}>
+          <View style={styles.modalCard}>
+            {AGE_OPTIONS.map((option) => (
+              <Pressable
+                key={option}
+                testID={`onboarding-age-option-${option}`}
+                onPress={() => {
+                  setAge(option);
+                  setAgeModalVisible(false);
+                }}
+                style={styles.ageOptionRow}
+              >
+                <Text style={styles.ageOptionText}>{option}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
 
       <View style={styles.card}>
         <Text style={styles.label}>{t('onboardingLanguage')}</Text>
@@ -97,9 +140,14 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         {folderUri && (
           <View style={styles.folderConfirm}>
             <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
-              Folder selected ✓
+              {toReadableFolderPath(folderUri)}
             </Text>
           </View>
+        )}
+        {!folderValid && (
+          <Text testID="onboarding-folder-error" style={styles.fieldError}>
+            {t('onboardingFolderMissing')}
+          </Text>
         )}
       </View>
 
@@ -154,16 +202,49 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.ink,
   },
-  ageInput: {
+  agePickerField: {
     borderWidth: 2,
     borderColor: colors.disabledBorder,
     borderRadius: radii.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  agePickerPlaceholder: {
+    fontSize: 18,
+    color: colors.disabledText,
+  },
+  agePickerValue: {
     fontSize: 22,
     fontWeight: 'bold',
     color: colors.ink,
-    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(45, 49, 66, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.sm,
+    width: '100%',
+    maxWidth: 320,
+    ...shadow,
+    elevation: 4,
+  },
+  ageOptionRow: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    alignItems: 'center',
+  },
+  ageOptionText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.ink,
   },
   languageRow: {
     flexDirection: 'row',
@@ -219,6 +300,12 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  fieldError: {
+    marginTop: spacing.xs,
+    color: colors.coralDark,
+    fontSize: 14,
+    fontWeight: '600',
   },
   saveButton: {
     borderRadius: radii.xl,
