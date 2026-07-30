@@ -1,42 +1,98 @@
 import { shuffle } from '../quiz/shuffle';
-import { computeResponsiveSquareSize, EdgeInsets, ZERO_INSETS } from '../theme/tokens';
+import { EdgeInsets, ZERO_INSETS } from '../theme/tokens';
 
 // Reserves room for the preview thumbnail, labels and margins above/around the
 // board so the puzzle board itself sizes to fit a short-but-wide landscape
 // window instead of overflowing it.
 const PUZZLE_RESERVED_HEIGHT = 160;
 const PUZZLE_RESERVED_WIDTH = 220;
+// Floor only - there's deliberately no fixed ceiling here. The board's real
+// upper bound is however much space is actually available on the device
+// (windowWidth/windowHeight minus the reserved chrome), so a wide landscape
+// screen gets a wide board instead of being capped down to a small square.
 const PUZZLE_MIN_SIZE = 200;
-const PUZZLE_MAX_SIZE = 420;
 
-// `insets` defaults to zero so existing callers/tests that only care about
-// the window-size math (no device in the loop) keep working unchanged; real
-// screens pass the device's actual useSafeAreaInsets() so a notch, status
-// bar, or gesture-nav bar never eats into the board itself.
+export interface BoardSize {
+  width: number;
+  height: number;
+}
+
+// Fits a board that preserves the source photo's real aspect ratio into
+// whatever space is left after reserving room for the header, safe-area
+// insets, and the preview card, using as much of that space as possible in
+// BOTH dimensions (not just clamping to a small square) so a wide landscape
+// screen isn't left with wasted blank space, and a portrait photo isn't
+// squashed/stretched into a square.
 export function computePuzzleBoardSize(
   windowWidth: number,
   windowHeight: number,
+  imageWidth: number,
+  imageHeight: number,
   insets: EdgeInsets = ZERO_INSETS
-): number {
-  return computeResponsiveSquareSize(
-    windowWidth,
-    windowHeight,
-    PUZZLE_RESERVED_HEIGHT + insets.top + insets.bottom,
-    PUZZLE_RESERVED_WIDTH + insets.left + insets.right,
-    PUZZLE_MIN_SIZE,
-    PUZZLE_MAX_SIZE
+): BoardSize {
+  const availableWidth = Math.max(
+    windowWidth - PUZZLE_RESERVED_WIDTH - insets.left - insets.right,
+    PUZZLE_MIN_SIZE
   );
+  const availableHeight = Math.max(
+    windowHeight - PUZZLE_RESERVED_HEIGHT - insets.top - insets.bottom,
+    PUZZLE_MIN_SIZE
+  );
+
+  // Guard against a not-yet-loaded/invalid image size (0, NaN, negative) by
+  // falling back to a square aspect ratio, matching the previous behavior.
+  const aspectRatio = imageWidth > 0 && imageHeight > 0 ? imageWidth / imageHeight : 1;
+
+  let width: number;
+  let height: number;
+  if (availableWidth / aspectRatio <= availableHeight) {
+    // Width is the tighter constraint: use all of it, derive height from the
+    // photo's real aspect ratio.
+    width = availableWidth;
+    height = availableWidth / aspectRatio;
+  } else {
+    // Height is the tighter constraint.
+    height = availableHeight;
+    width = availableHeight * aspectRatio;
+  }
+
+  // Try to bring the smaller dimension up to the floor, scaling both up
+  // proportionally so the aspect ratio (and therefore the crop shape) stays
+  // correct. But never scale past the space actually available in EITHER
+  // axis to do it - fitting the screen without scrolling matters more than
+  // hitting the floor exactly, so for a very letterboxed window + an extreme
+  // aspect ratio photo, the board may end up a little under the floor in one
+  // dimension rather than overflow and force scrolling.
+  const smallest = Math.min(width, height);
+  if (smallest < PUZZLE_MIN_SIZE) {
+    const desiredScale = PUZZLE_MIN_SIZE / smallest;
+    const maxScale = Math.min(availableWidth / width, availableHeight / height);
+    const scale = Math.min(desiredScale, maxScale);
+    width *= scale;
+    height *= scale;
+  }
+
+  return { width, height };
 }
 
-const GRID_DIMENSIONS: Record<4 | 6 | 9 | 12, { rows: number; cols: number }> = {
+const GRID_DIMENSIONS_LANDSCAPE: Record<4 | 6 | 9 | 12, { rows: number; cols: number }> = {
   4: { rows: 2, cols: 2 },
   6: { rows: 2, cols: 3 },
   9: { rows: 3, cols: 3 },
   12: { rows: 3, cols: 4 },
 };
 
-export function computeGridDimensions(pieceCount: 4 | 6 | 9 | 12): { rows: number; cols: number } {
-  return GRID_DIMENSIONS[pieceCount];
+// For a given piece count, the "landscape" (wide) shape above is the default;
+// for a portrait photo we use the transposed (tall) shape instead, so pieces
+// end up roughly matching the photo's real proportions instead of always
+// being wide rectangles cut from a photo that's actually tall. Piece COUNTS
+// (4/6/9/12) never change - only the rows x cols shape for a given count.
+export function computeGridDimensions(
+  pieceCount: 4 | 6 | 9 | 12,
+  isPortrait: boolean
+): { rows: number; cols: number } {
+  const landscape = GRID_DIMENSIONS_LANDSCAPE[pieceCount];
+  return isPortrait ? { rows: landscape.cols, cols: landscape.rows } : landscape;
 }
 
 export interface PieceRect {
