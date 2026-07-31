@@ -1,4 +1,5 @@
 import React from 'react';
+import { AccessibilityInfo, Animated } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { CelebrationOverlay } from '../../src/design-system/CelebrationOverlay';
 
@@ -55,5 +56,53 @@ describe('CelebrationOverlay', () => {
     });
     expect(() => unmount()).not.toThrow();
     jest.useRealTimers();
+  });
+
+  // Regression tests for the premium-polish accessibility pass: the card
+  // entrance and celebration bubble always used a bouncy Animated.spring,
+  // completely ignoring the OS "reduce motion" setting — a real
+  // vestibular-safety gap, not a style nitpick, since this component backs
+  // every activity's completion celebration (Quiz, Puzzle, Tic-Tac-Toe,
+  // Video).
+  describe('reduced motion', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    // In real usage, CelebrationOverlay's host screen mounts it well before
+    // the activity actually finishes (`visible` starts false and only flips
+    // true later), so the async reduce-motion check has already resolved by
+    // the time an entrance animation is ever requested. The test mirrors
+    // that: mount with visible=false first, let the check resolve, THEN
+    // flip visible to true and assert on the entrance that follows.
+    it('skips the bouncy spring entirely when the OS reduce-motion setting is on, animating opacity only', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      const springSpy = jest.spyOn(Animated, 'spring');
+      const timingSpy = jest.spyOn(Animated, 'timing');
+
+      const { rerender } = await render(
+        <CelebrationOverlay visible={false} title="Great job!" emoji="🎉" tone="success" />
+      );
+      await act(async () => {
+        rerender(<CelebrationOverlay visible title="Great job!" emoji="🎉" tone="success" />);
+      });
+
+      expect(springSpy).not.toHaveBeenCalled();
+      expect(timingSpy).toHaveBeenCalled();
+    });
+
+    it('still uses the normal bouncy spring when reduce-motion is off', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      const { rerender } = await render(
+        <CelebrationOverlay visible={false} title="Great job!" emoji="🎉" tone="success" />
+      );
+      await act(async () => {
+        rerender(<CelebrationOverlay visible title="Great job!" emoji="🎉" tone="success" />);
+      });
+
+      expect(springSpy).toHaveBeenCalled();
+    });
   });
 });

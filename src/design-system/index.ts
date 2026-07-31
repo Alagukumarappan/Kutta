@@ -6,6 +6,7 @@
 export * from './tokens';
 export * from './paperTheme';
 export * from './useTiltPress';
+export * from './useReducedMotion';
 export * from './AnimatedPressable';
 export * from './SurfaceWash';
 export * from './RaisedCard';

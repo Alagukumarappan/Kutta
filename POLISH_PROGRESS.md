@@ -297,6 +297,32 @@ pieces" label (new `puzzleDifficultyOptionLabel` i18n key), and
 selected-state, the backdrop's label, and German translations (523 total
 tests passing, up from 520).
 
+### Iteration 14 — Respect the OS reduce-motion setting in CelebrationOverlay
+**Component:** `CelebrationOverlay` (shared by Quiz, Puzzle, Tic-Tac-Toe,
+and Video's completion moments).
+**Problem:** Accessibility audit into a previously-flagged, deliberately
+broad gap: no screen anywhere checked the OS "reduce motion" accessibility
+setting. Scoped down to one concrete piece rather than an all-8-files
+sweep: `CelebrationOverlay`'s card entrance and celebration bubble always
+played a bouncy `Animated.spring`, regardless of that setting — a real
+vestibular-safety concern (large overshooting scale transforms can cause
+discomfort for users who've enabled it), not a style nitpick, and this one
+component backs every activity's finish moment.
+**Fix:** New `src/design-system/useReducedMotion.ts` hook reads
+`AccessibilityInfo.isReduceMotionEnabled()` and stays live via the
+`reduceMotionChanged` event. When enabled, `CelebrationOverlay` jumps the
+card/bubble scale straight to their resting value (no spring) and animates
+opacity only — still visibly "appears," just without the bounce. Unchanged
+when the setting is off. Documented one accepted edge case: if a screen
+mounts with `visible` already `true` (rather than becoming true later),
+the async check's brief default-`false` window can let one bounce start
+before immediately stopping and restarting fade-only — a harmless one-time
+flash, not a bug, given every real usage in this app mounts the component
+well before `visible` ever flips true.
+**Tests:** Two new regression tests (spring is/isn't called depending on a
+mocked reduce-motion setting) plus all 5 pre-existing CelebrationOverlay
+tests still pass unmodified (525 total tests passing, up from 523).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -347,6 +373,8 @@ tests passing, up from 520).
 - Quiz (Next button double-tap/skip bug fixed)
 - AgePicker / Onboarding + Settings (accessibility semantics added)
 - Puzzle gallery (difficulty modal accessibility semantics added)
+- CelebrationOverlay / Quiz + Puzzle + Tic-Tac-Toe + Video completion
+  moments (reduce-motion support added)
 
 ## Remaining polish opportunities (not yet done)
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
@@ -395,16 +423,19 @@ tests passing, up from 520).
 - Accessibility: check color-contrast and font-scaling behavior on the new
   design-system components under Android's large-font accessibility
   setting.
-- `PieceCountPicker` (puzzle difficulty picker, same shared-component shape
-  as `AgePicker` but a separate implementation) has the exact same
-  accessibility gap `AgePicker` had before iteration 12 — trigger, backdrop,
-  and all 4 options are unlabeled. Good next candidate, same fix shape.
-- No screen calls `AccessibilityInfo.isReduceMotionEnabled` — every
-  spring/timing animation (celebration bubbles, score-card pop-in, progress
-  dots, tilt-press) ignores the OS reduced-motion setting entirely. Real
-  vestibular-safety gap, but touching it properly means auditing every
-  `Animated` call site across ~8 files — too broad for a single iteration;
-  flagged here rather than done partially.
+- Correction to an earlier note: `PieceCountPicker` was flagged here as a
+  next accessibility candidate, but iteration 13 found it's actually dead
+  code (never imported anywhere) — the live component fixed instead was
+  `PuzzleGallery.tsx`'s inline difficulty modal. See iteration 13's entry.
+- Reduce-motion support: iteration 14 covered `CelebrationOverlay` (the
+  shared completion-celebration component), but other spring/timing
+  animations still ignore the OS setting entirely — QuizScreen's own
+  score-card pop-in (separate from CelebrationOverlay, hand-rolled the same
+  spring recipe), progress dots, and every `useTiltPress`-driven
+  press/lift feedback across the app. Same fix shape as iteration 14
+  (`useReducedMotion()` + skip the spring, animate opacity/skip entirely);
+  worth doing incrementally, one component at a time, rather than all at
+  once.
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a
