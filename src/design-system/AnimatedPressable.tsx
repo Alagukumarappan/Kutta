@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, Pressable, type StyleProp, type ViewStyle, type GestureResponderEvent } from 'react-native';
+import { Animated, Pressable, StyleSheet, type StyleProp, type ViewStyle, type GestureResponderEvent } from 'react-native';
 import { useTiltPress, type TiltVariant } from './useTiltPress';
 
 // The reusable "tilt and lift" pressable wrapper the brief calls for:
@@ -70,7 +70,21 @@ export function AnimatedPressable({
       hitSlop={hitSlop}
       style={style}
     >
-      <Animated.View style={[tiltStyle, innerStyle]}>{children}</Animated.View>
+      <Animated.View style={[styles.fill, tiltStyle, innerStyle]}>{children}</Animated.View>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  // Without this, the inner Animated.View has no height of its own — Yoga's
+  // default `alignItems: 'stretch'` only stretches the CROSS axis (width in
+  // a column), not the main axis (height), so a sized outer Pressable (e.g.
+  // RaisedCard's flex:1 card slot) doesn't propagate its height down to this
+  // child at all. The child then collapses to fit-content (its border alone,
+  // ~8px), which is exactly the "cards render as a thin colored line" bug
+  // this fixes. `innerStyle` is still merged in AFTER this, so a caller that
+  // genuinely wants a fixed (non-filling) size can still override it.
+  fill: {
+    flex: 1,
+  },
+});

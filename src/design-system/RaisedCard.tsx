@@ -83,6 +83,7 @@ export function RaisedCard({
 
 const styles = StyleSheet.create({
   cardFace: {
+    flex: 1,
     borderRadius: radii.xl,
     borderWidth: 4,
   },
