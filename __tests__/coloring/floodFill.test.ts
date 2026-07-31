@@ -91,4 +91,30 @@ describe('floodFill', () => {
     expect(floodFill(px, 3, 3, 0, 3, [255, 0, 0, 255])).toEqual(px);
     expect(() => floodFill(px, 3, 3, 3, 0, [255, 0, 0, 255])).not.toThrow();
   });
+
+  it('treats a color difference exactly equal to tolerance as a match (inclusive boundary)', () => {
+    // 1x3 row: seed pixel white (255,255,255,255), a neighbor whose red
+    // channel differs by exactly `tolerance` (5), and a third pixel whose
+    // red channel differs by more than tolerance (15) that must stay
+    // unfilled. This pins down colorsMatch's `<=` comparison: a diff exactly
+    // equal to tolerance must still count as "close enough to match", not
+    // just diffs strictly less than tolerance.
+    const px = new Uint8ClampedArray(3 * 1 * 4);
+    const setPixel = (x: number, rgba: [number, number, number, number]) => {
+      const i = x * 4;
+      px[i] = rgba[0];
+      px[i + 1] = rgba[1];
+      px[i + 2] = rgba[2];
+      px[i + 3] = rgba[3];
+    };
+    setPixel(0, [255, 255, 255, 255]); // seed
+    setPixel(1, [250, 255, 255, 255]); // diff = 5, exactly == tolerance
+    setPixel(2, [240, 255, 255, 255]); // diff = 15, well beyond tolerance
+
+    const result = floodFill(px, 3, 1, 0, 0, [0, 255, 0, 255], 5);
+
+    expect(getPixel(result, 3, 0, 0)).toEqual([0, 255, 0, 255]);
+    expect(getPixel(result, 3, 1, 0)).toEqual([0, 255, 0, 255]);
+    expect(getPixel(result, 3, 2, 0)).toEqual([240, 255, 255, 255]);
+  });
 });

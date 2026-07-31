@@ -1,27 +1,28 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 7
-- Latest completed improvement: added 2 tests to
-  `__tests__/coloring/floodFill.test.ts` covering out-of-range seed
-  coordinates (`startX`/`startY` negative or `>= width`/`height`) passed to
-  `floodFill`, including single-axis-only combinations (X-only out of range
-  with Y in range, and vice versa), asserting no throw and an unchanged
-  output copy. No production code changed — verified via a temporary TDD
-  sabotage (clamped `startX`/`startY` into valid range both when computing
-  `targetColor` and when seeding the traversal stack, confirmed all 6
-  equality assertions across both new tests failed for the intended reason —
-  the sabotaged version incorrectly started a real flood-fill from a
-  clamped boundary pixel instead of no-op'ing — then restored the original
-  file exactly; `git diff --stat` on the production file showed no change
-  afterward). A code-review subagent caught that the first draft only
-  asserted equality for both-axes-out-of-range combos (`(-1,-1)`, `(3,3)`)
-  and left single-axis combos checked only with a weak `not.toThrow()`; this
-  was fixed before committing by adding `toEqual(px)` assertions for the
-  single-axis cases too, and the TDD sabotage was re-run to confirm those
-  specific assertions also catch the same class of regression.
-- Test status: 22/22 suites passing, 154/154 tests passing (was 22/22 suites,
-  152/152 tests before this iteration's 2 added tests).
+- Phase: 1 (baseline verification + inventory), Iteration: 8
+- Latest completed improvement: added 1 test to
+  `__tests__/coloring/floodFill.test.ts` covering the tolerance-exact-boundary
+  case in `colorsMatch` — a color difference exactly equal to `tolerance`
+  must be treated as a match (the `<=` comparison is inclusive), not just
+  diffs strictly less than tolerance. Built a 1x3 image with a seed pixel, a
+  neighbor whose red channel differs by exactly the given `tolerance` (5),
+  and a third pixel differing by more (15); asserted the tolerance-boundary
+  pixel gets filled while the beyond-tolerance pixel does not. No production
+  code changed — verified via a temporary TDD sabotage (changed `colorsMatch`
+  from `<=` to `<`), confirmed the new test failed for the intended reason
+  (the boundary pixel stayed unfilled), then restored the original file
+  exactly; `git diff --stat` on the production file showed no change
+  afterward. A code-review subagent independently re-traced the flood-fill
+  stack order for the 1x3 buffer and confirmed the filled/filled/unfilled
+  pattern could only arise from the intended `<=` boundary check (not an
+  unrelated traversal-order coincidence), confirmed it's the only test in the
+  file passing a custom (non-default) tolerance, and approved with no
+  required changes (one optional nit — extracting a shared `setPixel` helper
+  — not applied, judged not worth it for a one-off fixture).
+- Test status: 22/22 suites passing, 155/155 tests passing (was 22/22 suites,
+  154/154 tests before this iteration's 1 added test).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -287,12 +288,46 @@
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add floodFill out-of-range-seed coverage`.
 
+10. **loop: add floodFill tolerance-exact-boundary coverage** (iteration 8)
+    - Files: `__tests__/coloring/floodFill.test.ts` (test-only change; no
+      production code modified)
+    - Checked first: read the full existing test file (8 tests as of
+      iteration 7) and confirmed neither of iteration 7's two named `Next`
+      candidates — tolerance-exact-boundary and a 1x1 image — were covered:
+      none of the existing tests pass a custom `tolerance` argument (all use
+      the default 10), and none use a 1x1 image. Picked
+      tolerance-exact-boundary as the single focused improvement.
+    - Test added (1): "treats a color difference exactly equal to tolerance
+      as a match (inclusive boundary)" — a 1x3 image with a seed pixel, a
+      neighbor whose red channel differs by exactly the given `tolerance`
+      (5), and a third pixel differing by more (15); asserts the
+      exactly-at-tolerance neighbor is filled and the beyond-tolerance pixel
+      is not, pinning down `colorsMatch`'s `Math.abs(diff) <= tolerance` as
+      genuinely inclusive.
+    - TDD-verified: temporarily changed `colorsMatch` in
+      `src/coloring/floodFill.ts` from `<= tolerance` to `< tolerance` on all
+      four channel comparisons; the new test failed for the intended reason
+      (the exactly-at-tolerance pixel stayed unfilled at its original color
+      instead of the fill color). Restored the original production file
+      exactly afterward; `git diff --stat` confirmed zero production-code
+      change remained. The test passes against the real, unmodified
+      implementation — no bug found, pure coverage addition.
+    - A code-review subagent independently traced the flood-fill traversal
+      order for the 1x3 buffer and confirmed the filled/filled/unfilled
+      result pattern can only arise from the intended `<=` boundary
+      semantics (not an unrelated mechanism like traversal order or
+      visited-marking), confirmed this is the only test in the file using a
+      non-default tolerance (genuinely new, non-overlapping coverage), and
+      approved with no required changes.
+    - Commit: see `git log` on `overnight-improvements` branch, message
+      `loop: add floodFill tolerance-exact-boundary coverage`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
 | Module | Purpose | Existing tests | Possible future edge cases |
 |---|---|---|---|
-| `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (8 tests as of iteration 7) — now also covers out-of-range seed coordinates (negative and `>= width`/`height`, including single-axis-only combinations) | tolerance boundary (`tolerance` exactly matching a diff); 1x1 image; fully-filled image (no border) |
+| `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (9 tests as of iteration 8) — now also covers out-of-range seed coordinates and the tolerance-exact-boundary case (`Math.abs(diff) === tolerance` treated as a match) | 1x1 image (`width=1, height=1`); fully-filled image (no border) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
 | `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
 | `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (34 tests as of iteration 6) — now also covers `groupPiecesIntoRows`'s ragged-final-row and shorter-than-`cols` cases | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. No further known gaps in this module as of iteration 6. |
@@ -317,26 +352,22 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 8 priority: `src/coloring/floodFill.ts`'s remaining two named gaps
-— tolerance-exact-boundary (`tolerance` exactly matching a color diff, i.e.
-`Math.abs(diff) === tolerance`, which the `<=` comparison in `colorsMatch`
-should treat as a match, not just diffs strictly less than tolerance) or a
-1x1 image (`width=1, height=1`, seed `(0,0)`) — first read
-`__tests__/coloring/floodFill.test.ts` in full to confirm neither is already
-covered (as of iteration 7 the file has 8 tests: 4 basic-fill/border tests,
-2 already-fill-colored no-op tests, and 2 out-of-range-seed tests added this
-iteration — none appear to touch tolerance-exact-boundary or a 1x1 image),
-then add whichever is genuinely uncovered. If both turn out covered, fall
-back to (in priority order): `src/coloring/base64.ts`'s malformed-input
-cases (non-multiple-of-4 length, empty string, whitespace-only), or
-`src/quiz/loadQuestions.ts`'s `minAge > maxAge` rejection and
-missing-both-text-and-image rejection. If the pure-logic inventory has no
-remaining genuinely-uncovered items by the time iteration 8 checks, start
-Phase 1 item 8 (error-state audit): review each screen under `src/*/​*Screen.tsx`
-for loading/empty/error/success state handling, uncaught async errors, and
-setState-after-unmount risk (note the pre-existing, already-documented
-`PuzzleScreen.test.tsx` act() warning under BLOCKED below is a related but
-separate test-hygiene item, not itself the audit).
+Iteration 9 priority: `src/coloring/floodFill.ts`'s one remaining named gap
+— a 1x1 image (`width=1, height=1`, seed `(0,0)`). First read
+`__tests__/coloring/floodFill.test.ts` in full to confirm it's still
+uncovered (as of iteration 8 the file has 9 tests, none using a 1x1 image),
+then add a test if genuinely uncovered. If already covered by the time
+iteration 9 checks, fall back to (in priority order): `src/coloring/base64.ts`'s
+malformed-input cases (non-multiple-of-4 length, empty string,
+whitespace-only), or `src/quiz/loadQuestions.ts`'s `minAge > maxAge`
+rejection and missing-both-text-and-image rejection. If the pure-logic
+inventory has no remaining genuinely-uncovered items by the time iteration 9
+checks, start Phase 1 item 8 (error-state audit): review each screen under
+`src/*/​*Screen.tsx` for loading/empty/error/success state handling,
+uncaught async errors, and setState-after-unmount risk (note the
+pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning under
+BLOCKED below is a related but separate test-hygiene item, not itself the
+audit).
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -424,6 +455,14 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
+- What changed (iteration 8): one test-only commit adding 1 test to
+  `__tests__/coloring/floodFill.test.ts` covering the tolerance-exact-boundary
+  case in `colorsMatch` (a color diff exactly equal to `tolerance` must
+  count as a match, per the `<=` comparison). No production/runtime code
+  changed. No UI changed. Confirms a real child-usability detail: the
+  coloring tool's "closeness" fuzziness at the tolerance's exact edge
+  behaves as designed (inclusive), which affects how forgiving flood-fill is
+  near anti-aliased line-art edges.
 - What changed (iteration 7): one test-only commit adding 2 tests (6
   assertions) to `__tests__/coloring/floodFill.test.ts` covering out-of-range
   seed coordinates passed to `floodFill` (negative and `>= width`/`height`,
