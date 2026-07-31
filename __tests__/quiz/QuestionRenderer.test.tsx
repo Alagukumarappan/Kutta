@@ -295,6 +295,23 @@ describe('QuestionRenderer', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  // No test here fires raw 'pressIn'/'pressOut' events on an option, in
+  // either the pre- or post-answer state: HomeScreen's own card-tilt tests
+  // (see "card press animation / navigation safety" in HomeScreen.test.tsx)
+  // found that doing so — even when the app's own handler is a no-op, as it
+  // is here once hasAnswered is true — exercises Pressable's own internal
+  // animation machinery, which starts a real native-driver Animated call
+  // with no native module backing it under Jest and corrupts the test
+  // renderer for every later test in the file (confirmed by trying it here
+  // too). Plain fireEvent.press (used throughout this file already) never
+  // touches that path, so the existing "calls onSelect"/"does not call
+  // onSelect again once answered" tests above already cover, end to end,
+  // that onSelect firing correctly is unaffected by adding the tilt. The
+  // gating itself (`!hasAnswered &&` on both onPressIn and onPressOut in
+  // QuestionRenderer.tsx's renderOption) is small enough to verify by
+  // reading the source directly, matching HomeScreen's own precedent of
+  // relying on code-reading rather than driving Animated values in tests.
+
   it('renders BOTH the image and the text for the question and every option (combined content)', async () => {
     const { getByTestId, getByText } = await render(
       <QuestionRenderer

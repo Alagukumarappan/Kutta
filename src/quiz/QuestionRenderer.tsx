@@ -180,7 +180,82 @@ export function QuestionRenderer({
     [question.options[2], question.options[3]],
   ];
 
-  function renderOption(option: Question['options'][number]) {
+  // Same "tilt-and-lift" press feedback HomeScreen's cards use (iteration
+  // 1's cardScales/cardTiltStyle), adapted to this screen's 4 answer
+  // options. Question['options'] is a fixed 4-tuple (see types/quiz.ts), so
+  // (unlike per-id keying) these 4 Animated.Values are created once via
+  // useRef and reused by GRID SLOT INDEX (0-3) across question changes —
+  // they're purely transient per-tap feedback that always rests at 1, so it
+  // doesn't matter that the option occupying slot 0 differs from question to
+  // question.
+  const optionScales = React.useRef(
+    [0, 1, 2, 3].map(() => new Animated.Value(1))
+  ).current;
+
+  // Mirrors HomeScreen's activeAnimationsRef: any in-flight per-slot spring,
+  // stopped on unmount below instead of left running past this screen's
+  // lifetime.
+  const activeOptionAnimationsRef = React.useRef<Array<Animated.CompositeAnimation | null>>([
+    null,
+    null,
+    null,
+    null,
+  ]);
+
+  function animateOption(index: number, toValue: number) {
+    // Native-driven, gentle, no-overshoot spring — only ever touches
+    // `transform`, never layout, so it can't affect this screen's flex-ratio
+    // sizing (see the top-of-file comment) or the S22 screen-fit it protects.
+    const animation = Animated.spring(optionScales[index], {
+      toValue,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 0,
+    });
+    activeOptionAnimationsRef.current[index] = animation;
+    animation.start();
+  }
+
+  // Once the answer is revealed, options must show a clear, STATIC
+  // correct/incorrect state — no residual tilt from whichever option was
+  // mid-press when the answer landed. Stopping + snapping every slot back to
+  // its resting value (1) here, keyed on hasAnswered, guarantees that even if
+  // a press-in and the answer reveal race (pressIn fires, then onSelect's
+  // state update lands before pressOut does), the tilt can't linger into the
+  // highlighted state.
+  React.useEffect(() => {
+    if (!hasAnswered) return;
+    optionScales.forEach((value, index) => {
+      activeOptionAnimationsRef.current[index]?.stop();
+      value.setValue(1);
+    });
+  }, [hasAnswered, optionScales]);
+
+  React.useEffect(() => {
+    return () => {
+      activeOptionAnimationsRef.current.forEach((animation) => animation?.stop());
+    };
+  }, []);
+
+  // Derives the same perspective/rotateX/rotateY/translateY/scale transform
+  // HomeScreen's cardTiltStyle uses, off one slot's driving value. Kept a
+  // touch gentler (5deg/-3deg vs Home's 6/-4) since these 4 cards sit much
+  // closer together than Home's row of 4 — a smaller card reads a slightly
+  // larger rotation more strongly at the same angle.
+  function optionTiltStyle(index: number) {
+    const driver = optionScales[index];
+    return {
+      transform: [
+        { perspective: 900 },
+        { rotateX: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['5deg', '0deg'] }) },
+        { rotateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['-3deg', '0deg'] }) },
+        { translateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: [2, 0] }) },
+        { scale: driver },
+      ],
+    };
+  }
+
+  function renderOption(option: Question['options'][number], index: number) {
     const isCorrectOption = option.id === question.correctOptionId;
     const isSelectedOption = option.id === selectedOptionId;
     // Once answered: highlight the correct option green, and — if the child
@@ -193,35 +268,49 @@ export function QuestionRenderer({
         key={option.id}
         testID={`option-${option.id}`}
         onPress={() => !hasAnswered && onSelect(option.id)}
-        style={[
-          styles.optionCard,
-          highlight === 'correct' && styles.optionCorrect,
-          highlight === 'incorrect' && styles.optionIncorrect,
-        ]}
+        // Gated the same way onPress already is: once hasAnswered, a
+        // press-in/out can't start a new tilt, so the correct/incorrect
+        // highlight below is the only thing the child sees — nothing
+        // animates in front of it or delays it.
+        onPressIn={() => !hasAnswered && animateOption(index, 0.95)}
+        onPressOut={() => !hasAnswered && animateOption(index, 1)}
+        style={styles.optionPressable}
       >
-        {option.image && (
-          <ImageWithFallback uri={option.image} testID={`option-image-${option.id}`} style={styles.optionImage} fallbackIconSize={22} />
-        )}
-        {option.text && (
-          <Text
-            style={styles.optionText}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
-          >
-            {option.text[language]}
-          </Text>
-        )}
-        {highlight === 'correct' && (
-          <View testID={`option-mark-${option.id}`} style={styles.correctMark}>
-            <Text style={styles.markText}>✓</Text>
-          </View>
-        )}
-        {highlight === 'incorrect' && (
-          <View testID={`option-mark-${option.id}`} style={styles.incorrectMark}>
-            <Text style={styles.markText}>✕</Text>
-          </View>
-        )}
+        {/* This inner Animated.View ("option face") is what tilts — the
+            outer Pressable's own layout box/hit area never changes, same
+            separation HomeScreen's cardFace/Pressable split uses. */}
+        <Animated.View
+          style={[
+            styles.optionCard,
+            optionTiltStyle(index),
+            highlight === 'correct' && styles.optionCorrect,
+            highlight === 'incorrect' && styles.optionIncorrect,
+          ]}
+        >
+          {option.image && (
+            <ImageWithFallback uri={option.image} testID={`option-image-${option.id}`} style={styles.optionImage} fallbackIconSize={22} />
+          )}
+          {option.text && (
+            <Text
+              style={styles.optionText}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {option.text[language]}
+            </Text>
+          )}
+          {highlight === 'correct' && (
+            <View testID={`option-mark-${option.id}`} style={styles.correctMark}>
+              <Text style={styles.markText}>✓</Text>
+            </View>
+          )}
+          {highlight === 'incorrect' && (
+            <View testID={`option-mark-${option.id}`} style={styles.incorrectMark}>
+              <Text style={styles.markText}>✕</Text>
+            </View>
+          )}
+        </Animated.View>
       </Pressable>
     );
   }
@@ -271,21 +360,37 @@ export function QuestionRenderer({
         )}
 
         <View style={styles.questionCard}>
-          {question.question.image && (
-            <ImageWithFallback uri={question.question.image} testID="question-image" style={styles.questionImage} fallbackIconSize={40} />
-          )}
-          {question.question.text && (
-            <Text style={styles.questionText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
-              {question.question.text[language]}
-            </Text>
-          )}
+          {/* Same two-tone semi-transparent wash technique as HomeScreen's
+              CardBackground (iteration 1) — two overlapping absolute Views
+              instead of a real gradient library (none is installed) — just
+              recolored to this card's periwinkle scheme and layered under a
+              still-white base rather than a vivid card color, since this
+              card carries body text that needs to stay clearly legible.
+              overflow:'hidden' lives on this inner clip view, not on
+              questionCard itself, so the border/shadow on the outer view
+              isn't clipped away with it (same iOS shadow-clipping reason
+              Home's cardFace/cardClip split exists). */}
+          <View style={styles.questionCardClip}>
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <View style={styles.questionCardHighlight} />
+              <View style={styles.questionCardShadow} />
+            </View>
+            {question.question.image && (
+              <ImageWithFallback uri={question.question.image} testID="question-image" style={styles.questionImage} fallbackIconSize={40} />
+            )}
+            {question.question.text && (
+              <Text style={styles.questionText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {question.question.text[language]}
+              </Text>
+            )}
+          </View>
         </View>
 
         <View testID="quiz-options-grid" style={styles.grid}>
           {rows.map((rowOptions, rowIndex) => (
             <View key={rowIndex} testID={`quiz-options-row-${rowIndex}`} style={styles.gridRow}>
-              {renderOption(rowOptions[0])}
-              {renderOption(rowOptions[1])}
+              {renderOption(rowOptions[0], rowIndex * 2)}
+              {renderOption(rowOptions[1], rowIndex * 2 + 1)}
             </View>
           ))}
         </View>
@@ -436,18 +541,49 @@ const styles = StyleSheet.create({
   questionCard: {
     flex: 2,
     minHeight: 70,
-    flexDirection: 'row',
     backgroundColor: colors.white,
     borderRadius: radii.xl,
     borderWidth: 4,
     borderColor: colors.periwinkleDark,
-    padding: spacing.sm,
     marginBottom: spacing.sm,
+    ...shadow,
+    elevation: 4,
+  },
+  // Holds the actual content + wash layers, clipped to the card's rounded
+  // corners — split out from questionCard above purely so overflow:'hidden'
+  // never lands on the same view as the border/shadow.
+  questionCardClip: {
+    flex: 1,
+    flexDirection: 'row',
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    padding: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
     columnGap: spacing.sm,
-    ...shadow,
-    elevation: 4,
+  },
+  // Light periwinkle wash over the top ~55%, subtle periwinkle-dark wash
+  // under the bottom ~45% — same proportions as HomeScreen's
+  // cardBackgroundHighlight/cardBackgroundShadow, recolored so the flat
+  // white fill reads as gently lit from above rather than perfectly flat,
+  // while staying pale enough that questionText (dark ink) stays legible.
+  questionCardHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    backgroundColor: colors.periwinkle,
+    opacity: 0.12,
+  },
+  questionCardShadow: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    backgroundColor: colors.periwinkleDark,
+    opacity: 0.08,
   },
   questionImage: {
     height: '100%',
@@ -471,9 +607,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     columnGap: spacing.xs,
   },
-  optionCard: {
+  // The Pressable's own hit box/layout slot — kept minimal (just flex sizing
+  // + a touch-target minHeight) and separate from optionCard below, same
+  // split HomeScreen uses between its Pressable and the tilting cardFace, so
+  // the tilt transform on optionCard never affects this row's flex layout.
+  optionPressable: {
     flex: 1,
     minHeight: 44,
+  },
+  optionCard: {
+    flex: 1,
     flexDirection: 'row',
     borderRadius: radii.lg,
     borderWidth: 3,
