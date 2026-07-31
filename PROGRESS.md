@@ -1,14 +1,17 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 3
-- Latest completed improvement: added 2 tests to
-  `__tests__/quiz/quizSession.test.ts` covering the "0 eligible questions"
-  boundary of `buildSession`/`initialSessionState` in
-  `src/quiz/quizSession.ts`. No production code changed — both new tests
-  passed against the existing implementation unmodified on first run.
-- Test status: 22/22 suites passing, 148/148 tests passing (was 22/22 suites,
-  146/146 tests before this iteration's added tests).
+- Phase: 1 (baseline verification + inventory), Iteration: 4
+- Latest completed improvement: added 1 test to
+  `__tests__/storage/folderMigration.test.ts` covering the sibling-folder
+  prefix boundary case ("Kutta" vs "KuttaBackup") of `isSameOrNestedWithin`
+  in `src/storage/folderMigration.ts`. No production code changed — the new
+  test passed against the existing implementation unmodified on first run,
+  and was manually verified to fail for the right reason (temporarily
+  reverted the boundary-char fix to a naive `startsWith`, confirmed the test
+  failed as expected, then restored the original file exactly).
+- Test status: 22/22 suites passing, 149/149 tests passing (was 22/22 suites,
+  148/148 tests before this iteration's added test).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -105,6 +108,43 @@
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add quizSession 0-eligible-questions coverage`.
 
+6. **loop: add folderMigration sibling-prefix boundary coverage** (iteration 4)
+   - Files: `__tests__/storage/folderMigration.test.ts` (test-only change;
+     no production code modified)
+   - Checked first: iteration 3's `Next` note's top recommendation
+     (`computePuzzleBoardSize`'s "insets exceed window entirely" boundary)
+     was assessed and judged already adequately covered — see Technical
+     Decisions below for why — so the documented fallback was used instead:
+     `folderMigration.ts`'s `isSameOrNestedWithin` sibling-prefix boundary
+     case. Confirmed the exact "primary:" volume-root boundary case was
+     already covered by an existing test
+     ("refuses to migrate...whole-storage grant..."), but the *other*
+     documented gap — sibling folders where one name is a textual prefix of
+     another (e.g. "Kutta" vs "KuttaBackup") should NOT be treated as
+     nested — had no test anywhere in the file.
+   - Test added (1): "does NOT treat a sibling folder whose name is a prefix
+     of another as nested (e.g. \"Kutta\" vs \"KuttaBackup\")" — builds two
+     sibling SAF tree URIs (`primary:Kutta`, `primary:KuttaBackup`) with a
+     full parallel folder tree for both, asserts `migrateContent` succeeds
+     and `copyAsync` is called (i.e. the migration is NOT wrongly blocked as
+     "nested").
+   - TDD-verified: temporarily replaced `isSameOrNestedWithin`'s
+     boundary-character check with a naive `candidate.startsWith(ancestor)`
+     to confirm the new test fails for the intended reason (migration
+     incorrectly blocked as nested) — it did, then the production file was
+     restored exactly (`git diff --stat` showed no change to the production
+     file afterward). The test passes against the real, unmodified
+     implementation. No bug found — pure coverage addition, closing the last
+     documented gap in `isSameOrNestedWithin`.
+   - A code-review subagent independently reviewed the diff: approved with
+     no required changes. It confirmed the test is non-tautological, doesn't
+     overlap existing nesting tests, and correctly exercises the
+     boundary-char logic; it also noted the check is only exercised in one
+     direction (KuttaBackup-as-candidate) but judged this adequate since the
+     underlying check is symmetric.
+   - Commit: see `git log` on `overnight-improvements` branch, message
+     `loop: add folderMigration sibling-prefix boundary coverage`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -113,13 +153,13 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (6 tests after this iteration) | out-of-range `startX`/`startY` (negative or >= width/height) passed as the initial seed before the loop begins — currently only guarded inside the stack loop, not at entry; tolerance boundary (`tolerance` exactly matching a diff); 1x1 image; fully-filled image (no border) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
 | `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
-| `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` | `computePuzzleBoardSize` with insets that exceed window size entirely (available < 0 before `Math.max` floor); `shufflePieceOrder` with `pieceCount` of exactly 2 (only 2 possible permutations, guaranteed-non-identity swap logic); `groupPiecesIntoRows` with `items.length` not evenly divisible by `cols` |
+| `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test (both exercise the same `Math.max(..., PUZZLE_MIN_SIZE)` clamp on a negative pre-floor value — the only difference is whether the negative comes from a small window or from oversized insets, which is not a distinct branch); not treated as a real gap. Remaining real gaps: `shufflePieceOrder` with `pieceCount` of exactly 2 (only 2 possible permutations, guaranteed-non-identity swap logic); `groupPiecesIntoRows` with `items.length` not evenly divisible by `cols` |
 | `src/quiz/filterQuestions.ts` | Age-range filter | `__tests__/quiz/filterQuestions.test.ts` | already well covered (in-range, boundary-inclusive, empty-result) |
 | `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | duplicate option IDs (partially covered per `isValidQuestion`'s Set-size check — verify test exists); `minAge > maxAge` rejection; question with neither `text` nor `image`; option `text` present but missing one language key |
 | `src/quiz/quizSession.ts` | Session building (shuffle + slice to 20), score/finish state machine | `__tests__/quiz/quizSession.test.ts` (10 tests as of iteration 3) — now covers fewer-than-20-eligible, 0-eligible, already-finished no-op, and normal score/advance paths | well covered now; no further gaps identified in this module |
 | `src/quiz/shuffle.ts` | Fisher-Yates shuffle | `__tests__/quiz/shuffle.test.ts` | empty array, single-element array, custom deterministic `rng` producing a known permutation |
 | `src/storage/folderAccess.ts` | SAF folder helpers: `leafNameOf`, `findChildUri`, `ensureContentStructure` | `__tests__/storage/folderAccess.test.ts` | `leafNameOf` with unencoded/partially-encoded URI, trailing slash, no slash at all |
-| `src/storage/folderMigration.ts` | Copy+verify+delete folder migration, `isSameOrNestedWithin` same/nested detection | `__tests__/storage/folderMigration.test.ts` | `isSameOrNestedWithin` with a volume-root URI ending exactly in `primary:` (boundary char logic at line 31-33); sibling folders with one name being a prefix of another (e.g. "Kutta" vs "KuttaBackup") — should NOT be treated as nested, verify a regression test exists for the boundary-char fix already documented in comments |
+| `src/storage/folderMigration.ts` | Copy+verify+delete folder migration, `isSameOrNestedWithin` same/nested detection | `__tests__/storage/folderMigration.test.ts` (10 tests as of iteration 4) — covers same-folder, real nesting both directions, the `primary:` volume-root boundary, and (as of iteration 4) the sibling-prefix-name non-nested case | well covered now; no further gaps identified in this module |
 | `src/storage/folderPathDisplay.ts` | SAF URI → human-readable path | `__tests__/storage/folderPathDisplay.test.ts` (7 tests, added iteration 2) — covers primary/non-primary volumes, malformed encoding, missing `/tree/` marker, empty path after volume, fully empty input, doubled-slash collapsing | well covered now; could add a Windows-style/UNC-ish edge case if one is ever reported, but not a known real-world SAF shape |
 | `src/storage/profileStore.ts` | AsyncStorage get/save profile with JSON parse guard | `__tests__/storage/profileStore.test.ts` | corrupted/non-JSON stored value (should return `null`, not throw) — verify covered |
 | `src/types/*.ts` | Type-only, no runtime logic | n/a | n/a |
@@ -129,19 +169,26 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 had zero dedicated tests; now has 7 covering all documented fallback paths.
 No remaining zero-coverage pure-logic modules found in the inventory table
 above as of iteration 2. As of iteration 3, `src/quiz/quizSession.ts` is also
-fully covered (its previously-listed gaps are closed).
+fully covered (its previously-listed gaps are closed). As of iteration 4,
+`src/storage/folderMigration.ts` is also fully covered (the sibling-prefix
+gap is closed; the `primary:` boundary gap was already covered before this
+iteration).
 
 ## Next
-Iteration 4 priority: `src/puzzle/puzzleGrid.ts`'s `computePuzzleBoardSize`
-"insets exceed window entirely" boundary case (available space goes negative
-before the `Math.max` floor is applied) — read
-`__tests__/puzzle/puzzleGrid.test.ts` first to confirm it isn't already
-covered. If it is, fall back to `src/storage/folderMigration.ts`'s
-"volume-root URI ending exactly in `primary:`" boundary case in
-`isSameOrNestedWithin` (line ~31-33), or `src/puzzle/puzzleGrid.ts`'s
-`shufflePieceOrder` with `pieceCount` of exactly 2, or `groupPiecesIntoRows`
-with `items.length` not evenly divisible by `cols` (all listed in the
-inventory table above).
+Iteration 5 priority: `src/puzzle/puzzleGrid.ts`'s `shufflePieceOrder` with
+`pieceCount` of exactly 2 — only 2 possible permutations exist for 2
+elements, so `shuffle`'s output is either the identity or its single swap;
+worth confirming the guaranteed-non-identity fallback (swapping the first
+two elements when `shuffle` returns identity) is exercised and that the
+result is always `[1, 0]` for `pieceCount === 2` regardless of which branch
+fires. First read `__tests__/puzzle/puzzleGrid.test.ts`'s existing
+`shufflePieceOrder` tests to confirm this exact case isn't already covered.
+If it is, fall back to `groupPiecesIntoRows` with `items.length` not evenly
+divisible by `cols` (last remaining item in the inventory table above), or
+the `src/coloring/floodFill.ts` out-of-range seed / tolerance-boundary /
+1x1-image cases, or `src/coloring/base64.ts` malformed-input cases, or
+`src/quiz/loadQuestions.ts`'s `minAge > maxAge` rejection and
+missing-both-text-and-image rejection.
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -183,6 +230,21 @@ None found that affect correctness. Notes:
   and a readable path shown to parents in Settings/Onboarding, so its
   fallback-on-any-parsing-surprise design (never throw, never show nothing)
   is worth having pinned down by tests.
+- Iteration 4: assessed iteration 3's top recommendation
+  (`computePuzzleBoardSize`'s "insets exceed window entirely" case) and
+  decided NOT to add a test for it, judging it not a genuinely distinct gap:
+  the existing "floors to the minimum size when the window is very small"
+  test already exercises the exact same code path — `Math.max(negativeValue,
+  PUZZLE_MIN_SIZE)` — that "insets exceed window entirely" would hit; the
+  only difference between the two scenarios is *which* subtraction produces
+  the negative pre-floor value (small window vs. oversized insets), and both
+  feed the identical `Math.max` clamp with no separate branch or code path
+  in between. Adding a second test asserting the same 200-floor outcome via
+  a different arithmetic route would not exercise new logic, so per this
+  iteration's own instructions ("do not manufacture a change if coverage is
+  already adequate; pick a genuinely uncovered case instead") the documented
+  fallback was used: `folderMigration.ts`'s sibling-prefix-name boundary
+  case, which was a real, previously-untested gap (see Completed #6).
 
 ## BLOCKED
 None. No pre-existing uncommitted changes were found (`git status` was clean
@@ -201,20 +263,21 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
-- What changed (iteration 3): one test-only commit adding 2 tests to
-  `__tests__/quiz/quizSession.test.ts` covering the 0-eligible-questions
-  boundary of `buildSession`/`initialSessionState`. No production/runtime
-  code changed. No UI changed.
-- What's valuable: closes the remaining coverage gaps in
-  `src/quiz/quizSession.ts` flagged since iteration 1's inventory; confirms
-  (with independent subagent review) the empty-session state machine
-  behaves safely (a child with no age-eligible questions sees an
-  immediately-finished quiz rather than a crash on `state.session[0]`).
-- What needs visual testing: nothing from this iteration (test-only). Worth
-  a manual sanity check whenever convenient: does the QuizScreen UI actually
-  handle `isFinished: true` on mount gracefully (e.g. if a profile's age
-  somehow matches zero questions) — not verified end-to-end in this
-  test-only iteration, only the state-machine logic.
+- What changed (iteration 4): one test-only commit adding 1 test to
+  `__tests__/storage/folderMigration.test.ts` covering the sibling-prefix
+  boundary of `isSameOrNestedWithin` (e.g. "Kutta" vs "KuttaBackup" should
+  not be treated as nested). No production/runtime code changed. No UI
+  changed. Also documented (in Technical Decisions) a decision NOT to add a
+  test for iteration 3's originally-recommended `computePuzzleBoardSize`
+  case, since it turned out to be the same code path as an existing test.
+- What's valuable: closes the last documented coverage gap in
+  `src/storage/folderMigration.ts`; the added test is a genuine regression
+  guard against a subtle real-world SAF footgun — a naive prefix check could
+  have wrongly blocked (or worse, silently mis-scoped) a migration between
+  two similarly-named but unrelated sibling folders, which the fix and now
+  the test both explicitly protect against.
+- What needs visual testing: nothing from this iteration (test-only, and the
+  underlying logic touches SAF folder migration, not any rendered UI).
 - Risks: none identified — intentionally conservative, test-only iteration.
 - Open questions for the developer: none blocking. Java version note: your
   default global `java -version` reports JDK 25; the project needs JDK 17 for
