@@ -117,4 +117,12 @@ describe('floodFill', () => {
     expect(getPixel(result, 3, 1, 0)).toEqual([0, 255, 0, 255]);
     expect(getPixel(result, 3, 2, 0)).toEqual([240, 255, 255, 255]);
   });
+
+  it('fills a 1x1 image (single pixel, seed and only pixel are the same)', () => {
+    const px = new Uint8ClampedArray([255, 255, 255, 255]); // one white pixel
+    const result = floodFill(px, 1, 1, 0, 0, [255, 0, 0, 255]);
+    expect(getPixel(result, 1, 0, 0)).toEqual([255, 0, 0, 255]);
+    expect(result).not.toBe(px);
+    expect(px).toEqual(new Uint8ClampedArray([255, 255, 255, 255])); // input untouched
+  });
 });
