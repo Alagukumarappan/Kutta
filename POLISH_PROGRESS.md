@@ -523,6 +523,42 @@ via `git stash` that both genuinely fail without the fix (536 total tests
 passing — same count as iteration 22, since these are new assertions
 inside existing tests, not new test cases).
 
+### Iteration 24 — Extend reduce-motion support to useTiltPress (app-wide)
+**Component:** `useTiltPress` (shared press-feedback hook used by
+`RaisedButtonBase` and `AnimatedPressable` — which in turn backs
+`RaisedCard`, `HomeScreen`'s cards, `QuestionRenderer`'s quiz/puzzle
+options, and every raised button in the app).
+**Problem:** Investigated 5 different bug-hunt angles first (puzzle-swap
+races, tic-tac-toe's computer-thinking window, coloring's flood-fill,
+profileStore/folderAccess read-then-write atomicity, stale-avatar on
+profile-picture change) — all five investigated thoroughly and confirmed
+CLEAN, no real issue found; reported honestly rather than fabricating a
+speculative finding. Pivoted to a previously-deferred, already-flagged real
+gap instead: `useTiltPress`'s press-in/press-out "tilt + lift + scale"
+feedback always used a bouncy `Animated.spring`, ignoring the OS
+reduce-motion setting — the same parallax-like motion category
+`CelebrationOverlay` (iteration 14) and Quiz's score card (iteration 16)
+were already fixed for, but flagged as deferred since this hook is shared
+much more widely and needed extra care.
+**Fix:** Applied `useReducedMotion()` CENTRALLY in the one shared hook
+(not at each of its many call sites) — when enabled, `animateTo()` stops
+any in-flight spring and jumps the driver value straight to the target via
+`setValue`, instead of animating. This one change reaches every consumer
+app-wide at once.
+**Extra diligence given the wider blast radius:** self-review specifically
+audited every call site (only 2: `Buttons.tsx`, `AnimatedPressable.tsx`)
+for any assumption of gradual (vs. instant) value changes — confirmed
+neither reads the returned `driver` value directly, so nothing depends on
+it interpolating gradually. Also confirmed the `activeAnimationRef.current
+?.stop()` call in the new branch isn't dead code: it's reachable if the OS
+setting flips ON mid-press (a spring already in flight from before the
+toggle), since `useReducedMotion` subscribes live to that change.
+**Tests:** New regression test exercising the fix through
+`RaisedPrimaryButton` as a representative consumer; confirmed via
+`git stash` that it genuinely fails without the fix. Full suite (537
+tests, up from 536) run and passing, deliberately including every
+consumer's own test file given the shared hook's wide reach.
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -592,6 +628,8 @@ inside existing tests, not new test cases).
 - Quiz (error state restyled onto RaisedCard+RaisedPrimaryButton)
 - Puzzle gallery + Video gallery (empty-state title/message split to match
   Coloring's tone/hierarchy)
+- useTiltPress / app-wide (every raised button/card/pressable now respects
+  reduce-motion for its press feedback)
 
 ## Remaining polish opportunities (not yet done)
 - Investigated, not confirmed: SettingsScreen's `performReset` calls
@@ -672,16 +710,11 @@ inside existing tests, not new test cases).
   next accessibility candidate, but iteration 13 found it's actually dead
   code (never imported anywhere) — the live component fixed instead was
   `PuzzleGallery.tsx`'s inline difficulty modal. See iteration 13's entry.
-- Reduce-motion support: iterations 14 and 16 covered `CelebrationOverlay`
-  and Quiz's score-card pop-in, but other spring/timing animations still
-  ignore the OS setting entirely — progress dots, and every
-  `useTiltPress`-driven press/lift feedback across the app (HomeScreen
-  cards, buttons, RaisedCard, QuestionRenderer's answer options). Same fix
-  shape (`useReducedMotion()` + skip the spring); worth doing
-  incrementally, one component at a time, rather than all at once. Note
-  `useTiltPress` is shared much more widely than the previous two fixes, so
-  changing it touches more render paths — worth extra care/broader test
-  coverage when this is picked up.
+- Reduce-motion support: iterations 14, 16, and 24 covered
+  `CelebrationOverlay`, Quiz's score-card pop-in, and `useTiltPress`
+  (app-wide press feedback) respectively — the progress-dots row is the
+  one remaining spring/timing animation still ignoring the OS setting.
+  Small, same fix shape (`useReducedMotion()` + skip the spring).
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a

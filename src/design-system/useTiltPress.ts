@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
 import { motion, tilt as tiltPresets } from './tokens';
+import { useReducedMotion } from './useReducedMotion';
 
 export type TiltVariant = keyof typeof tiltPresets;
 
@@ -18,6 +19,16 @@ export function useTiltPress(variant: TiltVariant = 'regular') {
   const config = tiltPresets[variant];
   const driver = useRef(new Animated.Value(1)).current;
   const activeAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  // With reduce-motion enabled, this press feedback's 3D tilt/lift (a
+  // parallax-like transform, not just a fade) is exactly the kind of motion
+  // the OS setting exists to suppress — see useReducedMotion.ts and the
+  // same treatment already applied to CelebrationOverlay/QuizScreen's score
+  // card. Applied centrally here (the one shared hook every raised
+  // button/card/pressable in the app calls) rather than at each of its many
+  // call sites, so this fix reaches all of them at once without touching
+  // HomeScreen, QuestionRenderer, RaisedCard, or the raised buttons
+  // individually.
+  const reducedMotion = useReducedMotion();
 
   // Stop (don't leave running) any in-flight spring on unmount — same
   // convention as HomeScreen's activeAnimationsRef/QuestionRenderer's
@@ -31,6 +42,14 @@ export function useTiltPress(variant: TiltVariant = 'regular') {
   }, []);
 
   function animateTo(toValue: number) {
+    if (reducedMotion) {
+      // Jump straight to the target value — still communicates "pressed"
+      // (every interpolation below still reflects the new driver value
+      // instantly), just without the spring/bounce/tilt motion itself.
+      activeAnimationRef.current?.stop();
+      driver.setValue(toValue);
+      return;
+    }
     const animation = Animated.spring(driver, {
       toValue,
       useNativeDriver: true,

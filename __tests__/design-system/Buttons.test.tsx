@@ -1,6 +1,6 @@
 import React from 'react';
-import { Animated } from 'react-native';
-import { render, fireEvent } from '@testing-library/react-native';
+import { AccessibilityInfo, Animated } from 'react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { RaisedPrimaryButton, RaisedSecondaryButton } from '../../src/design-system/Buttons';
 import { paperTheme } from '../../src/design-system/paperTheme';
@@ -47,6 +47,40 @@ describe('RaisedPrimaryButton', () => {
     expect(toValues).toContain(1);
 
     springSpy.mockRestore();
+  });
+
+  // Regression test for the premium-polish accessibility pass: useTiltPress
+  // (the shared press-feedback hook every raised button/card/pressable in
+  // the app calls) always used a spring for its 3D tilt/lift transform,
+  // regardless of the OS reduce-motion setting — the same parallax-like
+  // motion category CelebrationOverlay/QuizScreen's score card were already
+  // fixed for. Applied centrally in the one shared hook so every consumer
+  // benefits without touching each call site individually; this test
+  // exercises it through RaisedPrimaryButton as one representative consumer.
+  it('skips the spring press feedback when the OS reduce-motion setting is on, jumping straight to the pressed value', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    const springSpy = jest.spyOn(Animated, 'spring');
+
+    const { getByText, rerender } = await render(
+      withPaper(<RaisedPrimaryButton testID="primary" label="Start" onPress={jest.fn()} />)
+    );
+    // Let the async reduce-motion check resolve before exercising press
+    // feedback — same reasoning as CelebrationOverlay's own reduce-motion
+    // tests: a fresh mount's hook state starts `false` until the check
+    // resolves, so a re-render (here, a no-op prop rerender) ensures the
+    // resolved value is in effect for the press events below.
+    await act(async () => {
+      rerender(withPaper(<RaisedPrimaryButton testID="primary" label="Start" onPress={jest.fn()} />));
+    });
+
+    const label = getByText('Start');
+    await fireEvent(label, 'pressIn');
+    await fireEvent(label, 'pressOut');
+
+    expect(springSpy).not.toHaveBeenCalled();
+
+    springSpy.mockRestore();
+    jest.restoreAllMocks();
   });
 });
 
