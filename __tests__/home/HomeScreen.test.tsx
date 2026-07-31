@@ -26,4 +26,17 @@ describe('HomeScreen', () => {
     await fireEvent.press(getByText('Videos'));
     expect(onNavigate).toHaveBeenCalledWith('video');
   });
+
+  it('exposes the settings icon button to screen readers with an accessible name', async () => {
+    const onNavigate = jest.fn();
+    const { findByLabelText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <HomeScreen childName="Sam" onNavigate={onNavigate} />
+      </LanguageProvider>
+    );
+
+    const settingsButton = await findByLabelText('Settings');
+    await fireEvent.press(settingsButton);
+    expect(onNavigate).toHaveBeenCalledWith('settings');
+  });
 });

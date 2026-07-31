@@ -74,7 +74,13 @@ export function HomeScreen({
           </Text>
         </View>
 
-        <Pressable testID="home-settings-icon" onPress={() => onNavigate('settings')} style={styles.settingsButton}>
+        <Pressable
+          testID="home-settings-icon"
+          onPress={() => onNavigate('settings')}
+          style={styles.settingsButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('settingsTitle')}
+        >
           <Text style={styles.settingsIcon}>⚙️</Text>
         </Pressable>
       </View>
