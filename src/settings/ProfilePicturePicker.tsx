@@ -3,7 +3,13 @@ import { View, Text, FlatList, Pressable, Image, Modal, StyleSheet, Alert } from
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLanguage } from '../i18n/LanguageContext';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { colors, radii, spacing, elevation } from '../design-system';
+
+// Grid layout for the thumbnail list — 3 columns reads as a proper "picture
+// grid" (per this redesign's brief) instead of the previous single-column
+// scrolling list, and fits comfortably within this modal's fixed
+// maxWidth/maxHeight (see `card`/`list` styles below).
+const GRID_COLUMNS = 3;
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
@@ -157,6 +163,8 @@ export function ProfilePicturePicker({
               data={images}
               keyExtractor={(uri) => uri}
               style={styles.list}
+              numColumns={GRID_COLUMNS}
+              columnWrapperStyle={styles.gridRow}
               renderItem={({ item, index }) => (
                 <Pressable
                   testID={`profile-picture-item-${item}`}
@@ -181,7 +189,11 @@ export function ProfilePicturePicker({
             testID="profile-picture-picker-browse-anywhere"
             onPress={handleBrowseAnywhere}
             disabled={browsing}
-            style={[styles.browseButton, browsing && styles.browseButtonDisabled]}
+            style={({ pressed }) => [
+              styles.browseButton,
+              browsing && styles.browseButtonDisabled,
+              pressed && !browsing && styles.pressedSubtle,
+            ]}
             accessibilityRole="button"
             accessibilityLabel={t('profilePictureBrowseAnywhere')}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -192,7 +204,7 @@ export function ProfilePicturePicker({
           <Pressable
             testID="profile-picture-picker-cancel"
             onPress={onClose}
-            style={styles.cancelButton}
+            style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedSubtle]}
             accessibilityRole="button"
             accessibilityLabel={t('cancel')}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -208,25 +220,26 @@ export function ProfilePicturePicker({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(45, 49, 66, 0.5)',
+    backgroundColor: 'rgba(49, 66, 75, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.parent.surface,
     borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.parent.border,
     padding: spacing.md,
     width: '100%',
     maxWidth: 420,
     maxHeight: '85%',
-    ...shadow,
-    elevation: 4,
+    ...elevation.level3,
   },
   title: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.ink,
+    fontWeight: '800',
+    color: colors.parent.ink,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
@@ -235,61 +248,78 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stateText: {
-    color: colors.ink,
+    color: colors.parent.ink,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
   retryText: {
-    color: colors.skyDark,
-    fontWeight: 'bold',
+    color: colors.parent.accentDark,
+    fontWeight: '700',
     fontSize: 16,
   },
   list: {
     maxHeight: 320,
   },
+  // A real 3-column picture grid (per this redesign's brief), replacing the
+  // previous single-column scrolling list — sized by percentage width
+  // (rather than a fixed px thumb) so it stays correct if `card`'s maxWidth
+  // ever changes.
+  gridRow: {
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
   thumbWrap: {
-    marginBottom: spacing.sm,
+    flex: 1,
+    aspectRatio: 1,
     borderRadius: radii.md,
     overflow: 'hidden',
-    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.parent.border,
   },
   thumb: {
-    width: 100,
-    height: 100,
+    width: '100%',
+    height: '100%',
   },
   browseButton: {
     marginTop: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
+    minHeight: 48,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.xl,
-    backgroundColor: colors.sky,
-    ...shadow,
-    elevation: 2,
+    borderRadius: radii.pill,
+    backgroundColor: colors.parent.accent,
+    ...elevation.level1,
   },
   browseButtonDisabled: {
     backgroundColor: colors.disabledBg,
-    elevation: 0,
     shadowOpacity: 0,
+    elevation: 0,
   },
   browseButtonText: {
     color: colors.white,
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 16,
   },
   cancelButton: {
     marginTop: spacing.sm,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
     paddingVertical: spacing.sm,
-    borderRadius: radii.xl,
-    borderWidth: 2,
-    borderColor: colors.disabledBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.parent.border,
   },
   cancelButtonText: {
-    color: colors.ink,
-    fontWeight: 'bold',
+    color: colors.parent.ink,
+    fontWeight: '700',
     fontSize: 16,
+  },
+  // Same calm, non-bouncy pressed feedback as SettingsScreen's own
+  // `pressedSubtle` — a plain opacity dip via Pressable's `pressed` render
+  // prop, no Animated driver.
+  pressedSubtle: {
+    opacity: 0.75,
   },
 });

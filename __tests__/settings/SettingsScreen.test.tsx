@@ -7,6 +7,7 @@ import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as folderMigration from '../../src/storage/folderMigration';
 import * as FileSystem from 'expo-file-system/legacy';
+import { colors as dsColors } from '../../src/design-system';
 
 jest.mock('../../src/storage/profileStore');
 jest.mock('../../src/storage/folderAccess');
@@ -370,6 +371,59 @@ describe('SettingsScreen', () => {
       expect(title.fontSize).toBeLessThanOrEqual(24);
       expect(title.marginTop).toBeLessThanOrEqual(8);
       expect(title.marginBottom).toBeLessThanOrEqual(8);
+    });
+  });
+
+  describe('calmer parent-facing redesign', () => {
+    // This screen deliberately switched to the desaturated `colors.parent`
+    // family (see src/design-system/tokens.ts) instead of the playful
+    // bubblegum/violet/jade child-facing palette used elsewhere in this
+    // redesign — pinning a couple of these choices stops a future edit from
+    // silently reverting Settings back to a toy-colored look.
+    it('renders the selected language pill with the calmer parent accent color, not the child-facing palette', async () => {
+      const { StyleSheet } = require('react-native');
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+      await findByTestId('settings-loaded');
+
+      const selected = StyleSheet.flatten(getByTestId('settings-lang-en').props.style);
+      expect(selected.backgroundColor).toBe(dsColors.parent.accent);
+
+      const unselected = StyleSheet.flatten(getByTestId('settings-lang-de').props.style);
+      expect(unselected.backgroundColor).not.toBe(dsColors.parent.accent);
+    });
+
+    it('gives the enabled Save button a minimum touch target of 48dp', async () => {
+      const { StyleSheet } = require('react-native');
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+      await findByTestId('settings-loaded');
+
+      const save = StyleSheet.flatten(getByTestId('settings-save').props.style);
+      expect(save.minHeight).toBeGreaterThanOrEqual(48);
+    });
+
+    it('gives the "Remove picture" button clear destructive styling using the shared error hue', async () => {
+      (profileStore.getProfile as jest.Mock).mockResolvedValue({
+        ...initialProfile,
+        pictureUri: 'content://tree/pictures/old.jpg',
+      });
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      const removeButton = StyleSheet.flatten((await findByTestId('settings-picture-remove')).props.style);
+      expect(removeButton.borderColor).toBe(dsColors.berry);
     });
   });
 });

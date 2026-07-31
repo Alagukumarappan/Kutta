@@ -271,6 +271,56 @@ describe('ProfilePicturePicker', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it('lays the thumbnails out as a multi-column grid (a flexible share of the row), not a fixed-width single-column list', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/pictures/beach.jpg',
+      'content://tree/pictures/park.jpg',
+      'content://tree/pictures/zoo.jpg',
+    ]);
+    const { StyleSheet } = require('react-native');
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={jest.fn()}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+
+    const item = await findByTestId('profile-picture-item-content://tree/pictures/beach.jpg');
+    // The previous single-column layout gave each thumbnail a fixed
+    // 100x100 px box; the new grid instead gives each thumbnail an equal
+    // `flex: 1` share of its row (several per row, via the FlatList's
+    // `numColumns`/`columnWrapperStyle`), so pinning `flex` here protects
+    // the grid restyle from silently regressing back to one column.
+    const style = StyleSheet.flatten(item.props.style);
+    expect(style.flex).toBe(1);
+  });
+
+  it('gives "Browse anywhere" and "Cancel" a minimum touch target of 48dp', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    const { StyleSheet } = require('react-native');
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={jest.fn()}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+
+    const browse = StyleSheet.flatten((await findByTestId('profile-picture-picker-browse-anywhere')).props.style);
+    expect(browse.minHeight).toBeGreaterThanOrEqual(48);
+    const cancel = StyleSheet.flatten((await findByTestId('profile-picture-picker-cancel')).props.style);
+    expect(cancel.minHeight).toBeGreaterThanOrEqual(48);
+  });
+
   it('ignores a rapid second tap on "Browse anywhere" while the first pick is still in flight', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
     let resolvePicker: (value: unknown) => void = () => {};
