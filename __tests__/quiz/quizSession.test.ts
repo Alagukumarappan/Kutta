@@ -35,6 +35,12 @@ describe('buildSession', () => {
     const session = buildSession([...inRange, ...outOfRange], 3);
     expect(session.every((q) => q.minAge <= 3 && q.maxAge >= 3)).toBe(true);
   });
+
+  it('returns an empty session when no question is eligible for the given age', () => {
+    const outOfRange = makeQuestions(5, 6, 8);
+    const session = buildSession(outOfRange, 2);
+    expect(session).toHaveLength(0);
+  });
 });
 
 describe('quiz session reducer', () => {
@@ -44,6 +50,14 @@ describe('quiz session reducer', () => {
     expect(state.currentIndex).toBe(0);
     expect(state.score).toBe(0);
     expect(state.isFinished).toBe(false);
+  });
+
+  it('marks isFinished true immediately when the session has 0 questions', () => {
+    const state = initialSessionState([]);
+    expect(state.session).toHaveLength(0);
+    expect(state.currentIndex).toBe(0);
+    expect(state.score).toBe(0);
+    expect(state.isFinished).toBe(true);
   });
 
   it('increments score on a correct answer and advances', () => {

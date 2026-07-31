@@ -1,14 +1,14 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 2
-- Latest completed improvement: added a new test file
-  `__tests__/storage/folderPathDisplay.test.ts` covering `toReadableFolderPath`
-  (previously zero test coverage). No production code changed — all 7 new
-  tests passed against the existing implementation unmodified on first run
-  (confirms the module's parsing/fallback logic is already correct).
-- Test status: 22/22 suites passing, 146/146 tests passing (was 21/21 suites,
-  139/139 tests before this iteration's added tests).
+- Phase: 1 (baseline verification + inventory), Iteration: 3
+- Latest completed improvement: added 2 tests to
+  `__tests__/quiz/quizSession.test.ts` covering the "0 eligible questions"
+  boundary of `buildSession`/`initialSessionState` in
+  `src/quiz/quizSession.ts`. No production code changed — both new tests
+  passed against the existing implementation unmodified on first run.
+- Test status: 22/22 suites passing, 148/148 tests passing (was 22/22 suites,
+  146/146 tests before this iteration's added tests).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -73,6 +73,38 @@
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add folderPathDisplay coverage`.
 
+5. **loop: add quizSession 0-eligible-questions coverage** (iteration 3)
+   - Files: `__tests__/quiz/quizSession.test.ts` (test-only change; no
+     production code modified)
+   - Checked first: the "fewer than 20 eligible questions" case recommended
+     by iteration 2's `Next` note was already covered by the existing test
+     "uses all eligible questions when fewer than 20 exist" — so only the
+     "0 eligible questions" gap remained and was targeted instead.
+   - Tests added (2 total):
+     - `buildSession`: "returns an empty session when no question is
+       eligible for the given age" — 5 questions with `minAge/maxAge` 6-8,
+       queried at age 2 (genuinely fails the range filter, not just an empty
+       input array), asserts the resulting session has length 0. This closes
+       a gap the pre-existing "excludes questions outside the age range"
+       test left open (that test only asserts a property over whatever
+       remains, which is vacuously true on an empty result).
+     - reducer: "marks isFinished true immediately when the session has 0
+       questions" — calls `initialSessionState([])` directly, asserts
+       `isFinished: true` with `currentIndex`/`score` still at their zero
+       defaults. No prior test exercised the `session.length === 0` branch
+       of `initialSessionState`.
+   - Both tests passed on first run against the unmodified implementation —
+     confirms no bug in the empty-session boundary logic. Pure coverage
+     addition. A code-review subagent independently re-traced both tests
+     against `filterQuestionsByAge`'s age-range check and
+     `initialSessionState`'s ternary, confirmed both are non-tautological and
+     exercise the intended branches, and approved with no required fixes
+     (one optional style nit about the exact out-of-range age value used,
+     not applied — the chosen value already unambiguously fails the range
+     check).
+   - Commit: see `git log` on `overnight-improvements` branch, message
+     `loop: add quizSession 0-eligible-questions coverage`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -84,7 +116,7 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` | `computePuzzleBoardSize` with insets that exceed window size entirely (available < 0 before `Math.max` floor); `shufflePieceOrder` with `pieceCount` of exactly 2 (only 2 possible permutations, guaranteed-non-identity swap logic); `groupPiecesIntoRows` with `items.length` not evenly divisible by `cols` |
 | `src/quiz/filterQuestions.ts` | Age-range filter | `__tests__/quiz/filterQuestions.test.ts` | already well covered (in-range, boundary-inclusive, empty-result) |
 | `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | duplicate option IDs (partially covered per `isValidQuestion`'s Set-size check — verify test exists); `minAge > maxAge` rejection; question with neither `text` nor `image`; option `text` present but missing one language key |
-| `src/quiz/quizSession.ts` | Session building (shuffle + slice to 20), score/finish state machine | `__tests__/quiz/quizSession.test.ts` | fewer than 20 eligible questions (session shorter than `SESSION_LENGTH`); calling `answerCurrentQuestion` after `isFinished` is already true (should be a no-op — appears handled, confirm test exists); 0 eligible questions (`initialSessionState` with empty array marks `isFinished: true` immediately) |
+| `src/quiz/quizSession.ts` | Session building (shuffle + slice to 20), score/finish state machine | `__tests__/quiz/quizSession.test.ts` (10 tests as of iteration 3) — now covers fewer-than-20-eligible, 0-eligible, already-finished no-op, and normal score/advance paths | well covered now; no further gaps identified in this module |
 | `src/quiz/shuffle.ts` | Fisher-Yates shuffle | `__tests__/quiz/shuffle.test.ts` | empty array, single-element array, custom deterministic `rng` producing a known permutation |
 | `src/storage/folderAccess.ts` | SAF folder helpers: `leafNameOf`, `findChildUri`, `ensureContentStructure` | `__tests__/storage/folderAccess.test.ts` | `leafNameOf` with unencoded/partially-encoded URI, trailing slash, no slash at all |
 | `src/storage/folderMigration.ts` | Copy+verify+delete folder migration, `isSameOrNestedWithin` same/nested detection | `__tests__/storage/folderMigration.test.ts` | `isSameOrNestedWithin` with a volume-root URI ending exactly in `primary:` (boundary char logic at line 31-33); sibling folders with one name being a prefix of another (e.g. "Kutta" vs "KuttaBackup") — should NOT be treated as nested, verify a regression test exists for the boundary-char fix already documented in comments |
@@ -96,18 +128,20 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 **Highest-value gap identified (resolved iteration 2):** `src/storage/folderPathDisplay.ts`
 had zero dedicated tests; now has 7 covering all documented fallback paths.
 No remaining zero-coverage pure-logic modules found in the inventory table
-above as of iteration 2.
+above as of iteration 2. As of iteration 3, `src/quiz/quizSession.ts` is also
+fully covered (its previously-listed gaps are closed).
 
 ## Next
-Iteration 3 priority: pick the next-highest-value inventory gap since no
-module now has zero coverage — recommend `src/quiz/quizSession.ts`'s
-"fewer than 20 eligible questions" and "0 eligible questions" cases (session
-shorter than `SESSION_LENGTH`; empty array should mark `isFinished: true`
-immediately). Read `__tests__/quiz/quizSession.test.ts` first to confirm
-these aren't already covered before writing new tests — if they are, fall
-back to `src/puzzle/puzzleGrid.ts`'s "insets exceed window entirely" case or
-`src/storage/folderMigration.ts`'s "volume-root URI ending exactly in
-`primary:`" boundary case (both listed in the inventory table above).
+Iteration 4 priority: `src/puzzle/puzzleGrid.ts`'s `computePuzzleBoardSize`
+"insets exceed window entirely" boundary case (available space goes negative
+before the `Math.max` floor is applied) — read
+`__tests__/puzzle/puzzleGrid.test.ts` first to confirm it isn't already
+covered. If it is, fall back to `src/storage/folderMigration.ts`'s
+"volume-root URI ending exactly in `primary:`" boundary case in
+`isSameOrNestedWithin` (line ~31-33), or `src/puzzle/puzzleGrid.ts`'s
+`shufflePieceOrder` with `pieceCount` of exactly 2, or `groupPiecesIntoRows`
+with `items.length` not evenly divisible by `cols` (all listed in the
+inventory table above).
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -167,15 +201,20 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
-- What changed (iteration 2): one test-only commit adding a new 7-test file
-  `__tests__/storage/folderPathDisplay.test.ts` for `toReadableFolderPath`.
-  No production/runtime code changed. No UI changed.
-- What's valuable: closes the last zero-coverage row in the pure-logic
-  inventory table; confirms (with independent subagent review) that the
-  SAF-URI-to-readable-path logic shown in Settings/Onboarding has no hidden
-  bugs across its fallback paths (malformed encoding, missing marker,
-  non-primary volumes, empty segments).
-- What needs visual testing: nothing from this iteration (test-only).
+- What changed (iteration 3): one test-only commit adding 2 tests to
+  `__tests__/quiz/quizSession.test.ts` covering the 0-eligible-questions
+  boundary of `buildSession`/`initialSessionState`. No production/runtime
+  code changed. No UI changed.
+- What's valuable: closes the remaining coverage gaps in
+  `src/quiz/quizSession.ts` flagged since iteration 1's inventory; confirms
+  (with independent subagent review) the empty-session state machine
+  behaves safely (a child with no age-eligible questions sees an
+  immediately-finished quiz rather than a crash on `state.session[0]`).
+- What needs visual testing: nothing from this iteration (test-only). Worth
+  a manual sanity check whenever convenient: does the QuizScreen UI actually
+  handle `isFinished: true` on mount gracefully (e.g. if a profile's age
+  somehow matches zero questions) — not verified end-to-end in this
+  test-only iteration, only the state-machine logic.
 - Risks: none identified — intentionally conservative, test-only iteration.
 - Open questions for the developer: none blocking. Java version note: your
   default global `java -version` reports JDK 25; the project needs JDK 17 for
