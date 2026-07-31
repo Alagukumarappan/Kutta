@@ -1,8 +1,22 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 19
-- Latest completed improvement (iteration 19, one commit): quiz progress
+- Phase: 3 (delight/polish), Iteration: 20
+- Latest completed improvement (iteration 20, one commit): investigated
+  the quiz progress-dots row's large-session-count overflow risk flagged
+  after iteration 19 — concluded it is NOT a genuine risk (see Technical
+  Decisions for the full investigation) and added one test pinning down
+  and documenting the current safe behavior at the real maximum session
+  length (20 dots), rather than manufacturing an unneeded fix.
+  - Baseline before this iteration: tsc clean, 25/25 suites, 203/203 tests.
+  - After this iteration: tsc clean, 25/25 suites, **204/204 tests** (+1
+    new test in `__tests__/quiz/QuestionRenderer.test.tsx`'s existing
+    `describe('progress indicator', ...)` block; no existing test
+    modified/removed/skipped; no production code changed at all this
+    iteration).
+  - Commit: `<see git log — loop: pin down safe quiz progress-dot layout
+    at the real max session length>`.
+- Previous iteration's completed improvement (iteration 19, one commit): quiz progress
   clarity (Phase 3 item 3) — see Completed entry below for full detail.
   - Baseline before this iteration: tsc clean, 25/25 suites, 196/196 tests.
   - After this iteration: tsc clean, 25/25 suites, **203/203 tests** (+7 new
@@ -1334,31 +1348,44 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 20 priority: **harden the quiz's progress-dots row
-(`QuestionRenderer.tsx`'s `progressRow`, see Completed #20) against large
-session counts, since it was left visually/layout-wise UNCHANGED this
-iteration.** `quizSession.ts`'s `SESSION_LENGTH` caps a session at up to 20
-questions — meaning the dots row can render up to 20 small `View`s in a
-single non-wrapping (`flexDirection:'row'`, no `flexWrap`) row with no
-explicit `overflow`/max-width handling. Iteration 19 deliberately did NOT
-touch this (added only a screen-reader `accessibilityLabel`, zero visual
-change, to keep that diff minimal/low-risk) but flagged it as a real,
-unverified scale question: at 20 dots (14-18px each + `spacing.xs/2` margin
-per side) the row is roughly ~360px wide, which back-of-envelope fits a
-Galaxy S22's landscape width comfortably — but this has NOT been confirmed
-against the actual rendered insets/padding on a real device, and dots that
-small in that quantity may also simply be too visually busy/hard to
-distinguish for a young child even if they technically fit. Suggested
-approach: either (a) add a computed max-row-width guard/test (similar in
-spirit to `puzzleGrid.ts`'s aspect-ratio-aware sizing tests) that fails if
-dot-count × (dot-width + margin) could ever exceed a reasonable device
-width budget, informing a cap/collapse strategy (e.g. switch to a compact
-"3 / 20"-style numeric text once totalQuestions exceeds some threshold), or
-(b) if real question banks in practice are always much smaller than 20 (spot-
-check `sample-content/quiz/questions.json`'s actual count first before
-assuming this is a real problem), document that finding instead and close
-this as a non-issue. Either way, this is a code-level/computable task, not
-one that needs to block on real-device access.
+Iteration 20 closed out the progress-dots overflow question definitively
+(see Technical Decisions: NOT a genuine risk, given the app's landscape-only
+lock — no code change needed, one documenting test added). It should not be
+re-investigated without new evidence.
+
+Iteration 21 priority: **give the quiz completion screen (`QuizScreen.tsx`,
+`state.isFinished` branch, ~line 82-102) actual actions.** Confirmed this
+iteration (see Technical Decisions) that it currently renders a static star
+rating + score text with **zero buttons** — no "play again"/retry-quiz
+action at all, and "return home" only works via React Navigation's native
+header back arrow (not an explicit, friendly, child-facing button). This is
+Phase 3/4's "positive completion screen" item and is a real, unclaimed gap,
+not a re-tread of anything already done. Suggested approach:
+- Add two clearly-labeled `Pressable`s to the `isFinished` branch: a
+  "Play Again" action that rebuilds a fresh session (likely calling the
+  same session-construction path `QuizScreen` already uses on mount —
+  check how `state` is first initialized, probably re-invoking
+  `buildSession`/`initialSessionState` with a new shuffle) and a
+  "Home" action that navigates back (this screen doesn't currently receive
+  `navigation`/`onNavigate` — see how `HomeScreen`/`ColoringGallery` receive
+  theirs in `RootNavigator.tsx` and wire the same pattern in for `quiz`).
+- New i18n strings needed in both `en`/`de` in `src/i18n/strings.ts` for
+  both button labels (e.g. `quizPlayAgain`/`quizReturnHome` or similar —
+  check existing naming conventions like `quizNext`/`quizScore` first).
+- Keep the existing encouraging tone: the star-rating logic already
+  guarantees a minimum of 1 star regardless of score (see `starCount`
+  calc) so no wording needs to apologize for a low score — reuse that
+  existing "always encouraging" design intent for the new buttons' copy
+  too (no "try harder" framing).
+- Child-facing constraint: this screen must not require scrolling — verify
+  two new buttons fit within `centeredScreen`'s existing layout without
+  pushing content off-screen on a short landscape height (same screen-fit
+  discipline as `QuestionRenderer.tsx`'s documented ScrollView safety net).
+- TDD: `QuizScreen.test.tsx` likely already has a test reaching the
+  finished state (check first) — extend it or add a new one asserting both
+  buttons render, "Play Again" produces a fresh in-progress state (score
+  reset, currentIndex 0), and "Home" calls whatever navigation hook is
+  wired in.
 
 Still-open, deliberately deferred real-device check (unchanged from
 iteration 19, still cannot be verified by this loop — see Visual Review
@@ -1678,6 +1705,72 @@ None found that affect correctness. Notes:
   with no device/emulator available in this environment.
 
 ## Technical Decisions
+- **Iteration 20: quiz progress-dots row large-session-count overflow —
+  investigated and closed as NOT a genuine risk.** Full investigation
+  (this is the definitive answer; do not re-investigate in a future
+  iteration without new evidence):
+  - `src/quiz/quizSession.ts`'s `SESSION_LENGTH` is 20 (`buildSession`
+    slices the shuffled eligible-question list to at most 20). This is not
+    a rare edge case: `sample-content/quiz/questions.json` has exactly 20
+    questions eligible (by `minAge`/`maxAge`) for every one of ages 2
+    through 7 (counted directly: 20, 20, 20, 20, 20, 20, 0 for ages 2-8),
+    so a full 20-question session is the everyday case, not a worst case.
+  - `src/quiz/QuestionRenderer.tsx`'s progress row (`progressRow` style,
+    ~line 383) renders one `View` per question in a plain
+    `flexDirection: 'row'` with `justifyContent: 'center'`, no `flexWrap`,
+    no max-width/overflow style. Each dot (`progressDot`) is 14x14 with
+    `marginHorizontal: spacing.xs / 2` (2px/side, `spacing.xs` = 4 from
+    `theme/tokens.ts`); the current dot (`progressDotCurrent`) is
+    18x18. Worst case at 20 dots: 19 x (14+4) + 1 x (18+4) = 342 + 22 =
+    **364px** total row width — a real, computed number, not an estimate.
+  - The decisive fact: this app is **landscape-only**.
+    `src/navigation/RootNavigator.tsx` locks orientation to `LANDSCAPE` via
+    `expo-screen-orientation` and only then reveals the app shell
+    (`setProfile(...)` runs after the landscape lock's `await` resolves) —
+    the quiz screen cannot be reached before that lock takes effect. So the
+    row's binding dimension is the device's **landscape width**, not its
+    portrait width. Even a narrow ~320-412dp-portrait-width phone has a
+    landscape width in the 600-900dp range for any normal phone aspect
+    ratio — comfortably (200-500px) above the 364px this row needs, with
+    room to spare even accounting for `scrollContent`'s `spacing.md` (16px)
+    padding on each side. There is no realistic phone on which this row
+    would overflow or force ugly wrapping.
+  - One acknowledged, pre-existing, unrelated edge case surfaced while
+    verifying this (found by the code-review subagent, not a new issue):
+    `RootNavigator.tsx`'s landscape-lock call has a `.catch()` that only
+    logs a warning — if `lockAsync` itself rejected on some real device,
+    the app would proceed unconstrained (effectively portrait-capable)
+    without the developer/user being told beyond a console warning. This
+    is an existing, separate robustness gap in the orientation-lock code
+    itself (not the progress-dots row), noted here for visibility but out
+    of scope for this iteration's dots investigation.
+  - Conclusion: no production code change. Added one test instead —
+    `__tests__/quiz/QuestionRenderer.test.tsx`, `describe('progress
+    indicator', ...)`, "renders all 20 dots at the real maximum session
+    length without the row exceeding a landscape-safe width budget" —
+    which renders 20 dots, asserts all 20 (and no 21st) exist, sums each
+    dot's actual flattened `width + marginHorizontal*2`, and asserts the
+    total is `< 500` (comfortably above the real 364px so it isn't flaky,
+    comfortably below any real landscape width so a genuine regression —
+    e.g. dot size or margin growing significantly, or `SESSION_LENGTH`
+    growing well past 20 — would fail it). A code-review subagent
+    independently re-verified the landscape-lock code path, the pixel
+    arithmetic, the threshold's tautology-resistance (it doesn't hardcode
+    the source constants or the exact 364 result), and confirmed only the
+    test file changed. Approved with no changes.
+  - Investigated but explicitly NOT pursued this iteration as a follow-on
+    (see Next): `src/quiz/QuizScreen.tsx`'s quiz-completion screen
+    (`state.isFinished` branch, ~line 82-102) shows a static star-rating
+    score card with **no actions at all** — no button to retry the quiz or
+    return home. The only way off that screen today is React Navigation's
+    native header back button (the quiz screen has `headerShown: true`
+    with a default back arrow, confirmed in `RootNavigator.tsx`), which
+    does work for "return home" but is not an explicit, encouraging,
+    child-facing action, and there is no "play again" action at all. This
+    is a real, unclaimed gap (Phase 3/4's "positive completion screen"
+    item) — see Next for why it was deliberately deferred to its own
+    iteration rather than rushed in alongside this iteration's
+    investigation.
 - Iteration 16: ran a fast Explore-agent scan across the three secondary
   candidates named in this iteration's brief before picking one. Findings,
   for future iterations' reference:

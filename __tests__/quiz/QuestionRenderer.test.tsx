@@ -560,6 +560,55 @@ describe('QuestionRenderer', () => {
       await findByLabelText('Frage 1 von 3');
     });
 
+    it('renders all 20 dots at the real maximum session length without the row exceeding a landscape-safe width budget', async () => {
+      // Investigation (iteration 20, see PROGRESS.md Technical Decisions):
+      // quizSession.ts's SESSION_LENGTH caps a session at 20 questions, and
+      // sample-content/quiz/questions.json genuinely has exactly 20 eligible
+      // questions for every supported age (2-7) — so 20 is not a
+      // hypothetical worst case, it is the everyday session length. But this
+      // app is landscape-only (RootNavigator.tsx locks orientation to
+      // landscape before any content screen renders), so the row's fixed
+      // dimension budget is the device's landscape WIDTH, not its portrait
+      // width. Even the smallest realistic phones have a landscape width
+      // well over 600px (a portrait width of ~320-412dp maps to a landscape
+      // width in the 600-900dp range for any normal phone aspect ratio),
+      // comfortably above the ~364px this row needs for 20 dots (19 dots at
+      // 14px + 1 larger 18px current dot, each with spacing.xs/2 margin per
+      // side). This test pins that arithmetic down concretely so a future
+      // change to dot size/spacing/SESSION_LENGTH can't silently regress
+      // past a real landscape-width budget without a test failing.
+      const { getByTestId, queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={3}
+          totalQuestions={20}
+        />
+      );
+
+      for (let i = 0; i < 20; i++) {
+        expect(getByTestId(`quiz-progress-dot-${i}`)).toBeTruthy();
+      }
+      expect(queryByTestId('quiz-progress-dot-20')).toBeNull();
+
+      const { StyleSheet } = require('react-native');
+      let totalWidth = 0;
+      for (let i = 0; i < 20; i++) {
+        const style = StyleSheet.flatten(getByTestId(`quiz-progress-dot-${i}`).props.style);
+        const marginHorizontal = typeof style.marginHorizontal === 'number' ? style.marginHorizontal : 0;
+        totalWidth += style.width + marginHorizontal * 2;
+      }
+
+      // Comfortably fits any real phone's landscape width (600px+), even
+      // though it would NOT fit a portrait width (~360-412dp) — a non-issue
+      // here specifically because this row only ever renders on the
+      // landscape-locked quiz screen.
+      expect(totalWidth).toBeLessThan(500);
+    });
+
     it('does not render a progress row at all when currentIndex/totalQuestions are not provided', async () => {
       const { queryByTestId } = await render(
         <QuestionRenderer
