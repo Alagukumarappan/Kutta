@@ -43,6 +43,12 @@ export const UI_STRINGS = {
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
+  // Screen-reader-only accessible name for the progress-dots row in
+  // QuestionRenderer (the dots themselves are plain, unlabeled <View>s so
+  // sighted children get a simple visual without any digits/text cluttering
+  // the screen — see QuestionRenderer's progressRow). {current} is always
+  // 1-based (currentIndex + 1) to match how a person would count aloud.
+  quizProgressLabel: { en: 'Question {current} of {total}', de: 'Frage {current} von {total}' },
   quizCorrect: { en: 'Correct!', de: 'Richtig!' },
   // Age-tiered wrong-answer feedback (replaces the old single `quizIncorrect`
   // wording — see QuestionRenderer). Never harsh/shaming; younger children

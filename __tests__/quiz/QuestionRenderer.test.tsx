@@ -470,4 +470,108 @@ describe('QuestionRenderer', () => {
       expect(getAllByTestId('quiz-celebration', { includeHiddenElements: true })).toHaveLength(1);
     });
   });
+
+  describe('progress indicator', () => {
+    it('renders exactly one dot per question and marks the current one, without a done dot at index 0', async () => {
+      const { getByTestId, queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={0}
+          totalQuestions={3}
+        />
+      );
+
+      expect(getByTestId('quiz-progress-dot-0')).toBeTruthy();
+      expect(getByTestId('quiz-progress-dot-1')).toBeTruthy();
+      expect(getByTestId('quiz-progress-dot-2')).toBeTruthy();
+      // Exactly 3 dots for 3 questions — no extra/missing dot.
+      expect(queryByTestId('quiz-progress-dot-3')).toBeNull();
+
+      // The current dot (index 0) is visually distinguished by its own
+      // larger size (18x18 vs the default 14x14) — a concrete, non-color
+      // structural assertion rather than relying on internal style-object
+      // identity.
+      const { StyleSheet } = require('react-native');
+      const currentDotStyle = StyleSheet.flatten(getByTestId('quiz-progress-dot-0').props.style);
+      const laterDotStyle = StyleSheet.flatten(getByTestId('quiz-progress-dot-2').props.style);
+      expect(currentDotStyle.width).toBe(18);
+      expect(laterDotStyle.width).toBe(14);
+    });
+
+    it('distinguishes done dots (before the current index) from the not-yet-reached ones', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={4}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const doneStyle = StyleSheet.flatten(getByTestId('quiz-progress-dot-0').props.style);
+      const notYetStyle = StyleSheet.flatten(getByTestId('quiz-progress-dot-3').props.style);
+      const currentStyle = StyleSheet.flatten(getByTestId('quiz-progress-dot-2').props.style);
+
+      expect(doneStyle.backgroundColor).not.toBe(notYetStyle.backgroundColor);
+      expect(currentStyle.width).toBe(18);
+      expect(notYetStyle.width).toBe(14);
+    });
+
+    it('exposes a localized "Question X of Y" accessibility label (1-based) without any visible digits cluttering the screen', async () => {
+      const { findByLabelText, queryByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={1}
+          totalQuestions={5}
+        />
+      );
+
+      await findByLabelText('Question 2 of 5');
+      // Purely visual for sighted children — no "2 of 5"/"2/5" text node.
+      expect(queryByText('2 / 5')).toBeNull();
+      expect(queryByText(/of 5/)).toBeNull();
+    });
+
+    it('exposes the accessibility label in German', async () => {
+      const { findByLabelText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="de"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={0}
+          totalQuestions={3}
+        />
+      );
+
+      await findByLabelText('Frage 1 von 3');
+    });
+
+    it('does not render a progress row at all when currentIndex/totalQuestions are not provided', async () => {
+      const { queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(queryByTestId('quiz-progress')).toBeNull();
+    });
+  });
 });

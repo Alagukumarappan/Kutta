@@ -180,4 +180,60 @@ describe('QuizScreen', () => {
 
     await findByText('2 + 2?');
   });
+
+  describe('progress indicator wiring to real session state', () => {
+    it('advances the progress label on Next but leaves it unchanged across a Try Again retry', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { findByText, getByText, getByTestId, findByLabelText, queryByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await findByLabelText('Question 1 of 2');
+
+      // Wrong answer, then "Try Again" — this must NOT be treated as
+      // progress (still the first, unfinished question), since scoring
+      // (and advancing) only ever happens via Next/answerCurrentQuestion,
+      // never via onRetry (see QuizScreen.handleRetry).
+      await fireEvent.press(getByText('3'));
+      await fireEvent.press(getByTestId('quiz-retry-answer'));
+      expect(queryByLabelText('Question 2 of 2')).toBeNull();
+      await findByLabelText('Question 1 of 2');
+
+      // Now actually answer and press Next — real progress.
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await findByText('1 + 1?');
+      await findByLabelText('Question 2 of 2');
+    });
+
+    it('shows no stale/leftover progress indicator once the quiz is finished', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { findByText, getByText, getByTestId, queryByLabelText, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await waitFor(() => expect(getByText('Quiz done! Your score: 2 / 2')).toBeTruthy());
+      expect(queryByTestId('quiz-progress')).toBeNull();
+      expect(queryByLabelText('Question 2 of 2')).toBeNull();
+      expect(queryByLabelText(/Question \d+ of \d+/)).toBeNull();
+    });
+  });
 });

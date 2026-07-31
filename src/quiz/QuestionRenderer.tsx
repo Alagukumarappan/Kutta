@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, Pressable, StyleSheet, ScrollView, Animated } from 'react-native';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
-import { t } from '../i18n/strings';
+import { t, tFormat } from '../i18n/strings';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 
 // This screen rebuilds the quiz UI as a single-question, STACKED layout
@@ -240,7 +240,22 @@ export function QuestionRenderer({
     >
       <View style={styles.column}>
         {showProgress && (
-          <View testID="quiz-progress" style={styles.progressRow}>
+          <View
+            testID="quiz-progress"
+            style={styles.progressRow}
+            // The dots themselves stay plain, unlabeled decoration — simple
+            // enough for a 2-4 year old to glance at without any digits on
+            // screen. `accessible` collapses the whole row (and its child
+            // dot Views) into ONE screen-reader-focusable node carrying this
+            // label, so TalkBack/VoiceOver announces "Question 2 of 5" once
+            // instead of reading out N separate, unlabeled dot views.
+            accessible
+            accessibilityRole="text"
+            accessibilityLabel={tFormat('quizProgressLabel', language, {
+              current: (currentIndex as number) + 1,
+              total: totalQuestions as number,
+            })}
+          >
             {Array.from({ length: totalQuestions as number }).map((_, i) => (
               <View
                 key={i}

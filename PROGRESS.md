@@ -1,8 +1,17 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 18
-- Latest completed improvement (iteration 18, one commit): age-appropriate,
+- Phase: 3 (delight/polish), Iteration: 19
+- Latest completed improvement (iteration 19, one commit): quiz progress
+  clarity (Phase 3 item 3) — see Completed entry below for full detail.
+  - Baseline before this iteration: tsc clean, 25/25 suites, 196/196 tests.
+  - After this iteration: tsc clean, 25/25 suites, **203/203 tests** (+7 new
+    tests across `__tests__/quiz/QuestionRenderer.test.tsx` (5) and
+    `__tests__/quiz/QuizScreen.test.tsx` (2); no existing test
+    modified/removed/skipped).
+  - Commit: `<see git log — loop: add a screen-reader progress label to the
+    quiz's existing progress dots>`.
+- Previous iteration's completed improvement (iteration 18, one commit): age-appropriate,
   encouraging wrong-answer feedback in the quiz flow (Phase 3 item 2) — see
   Completed entry below for full detail.
   - Baseline before this iteration: tsc clean, 25/25 suites, 186/186 tests.
@@ -1223,6 +1232,77 @@
     - Commit: see `git log` on `overnight-improvements`, message `loop: add
       age-tiered encouraging wrong-answer feedback and a Try Again action to
       the quiz`.
+20. **loop: add a screen-reader progress label to the quiz's existing
+    progress dots** (iteration 19, Phase 3 item 3, "quiz progress clarity").
+    - First read `QuizScreen.tsx`/`QuestionRenderer.tsx`/`quizSession.ts` in
+      full per this iteration's instructions, expecting to build a progress
+      indicator from scratch — instead found the app **already has** a row
+      of small progress dots (`quiz-progress`, one `quiz-progress-dot-${i}`
+      per question, `progressDotDone`/`progressDotCurrent` styling), wired
+      correctly to the real `currentIndex`/`totalQuestions` props that
+      `QuizScreen.tsx` already passes down from `QuizSessionState`. This
+      predates the overnight loop (`git log` traces it to a pre-loop commit,
+      `0bb51e7 "Polish quiz screen: progress dots, ..."`) and had **zero**
+      test coverage anywhere in the repo and **no accessibility label** —
+      the dots are plain, unlabeled `<View>`s, so a screen-reader user got
+      no progress information at all. Given the existing dots already
+      satisfy the brief's "row of simple markers... lightweight, no new
+      dependencies, no clutter for ages 2-4" guidance visually, judged the
+      right-sized iteration-19 improvement to be closing the two real gaps
+      (accessibility, tests) rather than redesigning or duplicating an
+      already-correct visual, per the brief's own explicit review checklist
+      item: "should the progress indicator have an accessibilityLabel like
+      'Question 2 of 5'?".
+    - Added a new i18n key, `quizProgressLabel` (en: `"Question {current} of
+      {total}"`, de: `"Frage {current} von {total}"`) to `src/i18n/
+      strings.ts`, alongside both languages in the same commit.
+    - In `QuestionRenderer.tsx`, added `accessible`, `accessibilityRole=
+      "text"`, and `accessibilityLabel={tFormat('quizProgressLabel', ...)}`
+      (1-based `currentIndex + 1`) to the existing `progressRow` View. No
+      new visible `Text`/`View` was added — `accessible={true}` on the
+      parent collapses the row (and its unlabeled dot children) into ONE
+      screen-reader-focusable node carrying the label, instead of TalkBack/
+      VoiceOver reading N separate unlabeled dots. This is a pure
+      accessibility addition: zero visual/layout change, so zero new
+      screen-fit risk on a Galaxy S22 (verified by inspection — the diff
+      touches only props on an already-unchanged-size View).
+    - Correctness against real session state (traced, not assumed):
+      `quizSession.ts`'s `initialSessionState` sets `currentIndex: 0`
+      (confirms 0-based, hence the `+1` for the 1-based spoken label);
+      `answerCurrentQuestion` (only called from `QuizScreen.handleNext`) is
+      the only place `currentIndex` ever changes; `QuizScreen.handleRetry`
+      only calls `setSelectedOptionId(null)` and never touches session
+      state — so the label can never appear to move/reset during a "Try
+      Again" retry, and `QuizScreen`'s `state.isFinished` branch renders the
+      score card instead of `QuestionRenderer` entirely, so no stale
+      progress label/dots exist once the quiz ends.
+    - TDD: wrote 5 new tests in `__tests__/quiz/QuestionRenderer.test.tsx`
+      (dot count matches `totalQuestions` with no extra/missing dot,
+      current-dot-vs-later-dot size distinction via `StyleSheet.flatten`,
+      the en/de accessibility label text, and confirming no visible "2 of
+      5"/"2 / 5" text node exists) and 2 in `__tests__/quiz/
+      QuizScreen.test.tsx` (label unchanged across a real wrong-answer +
+      "Try Again" cycle but advances correctly on Next; no `quiz-progress`
+      testID or matching accessibility label survives into the finished/
+      score-card state) — all confirmed failing for the right reason
+      (`Unable to find an element with accessibility label: ...`) before
+      implementing the `accessibilityLabel` prop.
+    - A code-review subagent independently re-traced the same
+      `quizSession.ts`/`QuizScreen.tsx` call graph, confirmed
+      `accessible`+`accessibilityRole="text"`+`accessibilityLabel` on a View
+      is the standard correct RN collapsing pattern (no TalkBack/VoiceOver
+      conflict), confirmed `tFormat`'s generic `{key}`-replace works
+      identically for `{current}`/`{total}` as it does for the pre-existing
+      `{score}`/`{total}` in `quizScore`, confirmed the German phrasing is
+      natural, confirmed the hardcoded `14`/`18` pixel values in the new
+      tests match the actual pre-existing `progressDot`/`progressDotCurrent`
+      styles (not invented), confirmed no visible UI was added, and
+      confirmed no pre-existing test was weakened/removed/skipped. Approved
+      with no required or optional changes.
+    - Verified `npx tsc --noEmit` clean, full suite 25/25 suites and
+      **203/203 tests** (196 baseline + 7 new, 0 removed/modified).
+    - Commit: see `git log` on `overnight-improvements`, message `loop: add
+      a screen-reader progress label to the quiz's existing progress dots`.
 
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
@@ -1254,15 +1334,36 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 19 priority: **real-device visual verification of iteration 18's
-age-tiered wrong-answer feedback + Try Again action** (see the Visual Review
-Required entry above) — specifically confirm on a Galaxy S22 that the new
-two-button wrong-answer footer (`quiz-retry-answer` + `quiz-next`) doesn't
-feel cramped next to the longer new wording in either language/age tier, and
-that nothing scrolls at any point in that flow. If a genuine layout issue is
-found, fix it directly (e.g. adjust `feedbackButtonGroup`/button padding or
-font sizes); if it looks fine, this can be closed with a note and the next
-item below picked up instead.
+Iteration 20 priority: **harden the quiz's progress-dots row
+(`QuestionRenderer.tsx`'s `progressRow`, see Completed #20) against large
+session counts, since it was left visually/layout-wise UNCHANGED this
+iteration.** `quizSession.ts`'s `SESSION_LENGTH` caps a session at up to 20
+questions — meaning the dots row can render up to 20 small `View`s in a
+single non-wrapping (`flexDirection:'row'`, no `flexWrap`) row with no
+explicit `overflow`/max-width handling. Iteration 19 deliberately did NOT
+touch this (added only a screen-reader `accessibilityLabel`, zero visual
+change, to keep that diff minimal/low-risk) but flagged it as a real,
+unverified scale question: at 20 dots (14-18px each + `spacing.xs/2` margin
+per side) the row is roughly ~360px wide, which back-of-envelope fits a
+Galaxy S22's landscape width comfortably — but this has NOT been confirmed
+against the actual rendered insets/padding on a real device, and dots that
+small in that quantity may also simply be too visually busy/hard to
+distinguish for a young child even if they technically fit. Suggested
+approach: either (a) add a computed max-row-width guard/test (similar in
+spirit to `puzzleGrid.ts`'s aspect-ratio-aware sizing tests) that fails if
+dot-count × (dot-width + margin) could ever exceed a reasonable device
+width budget, informing a cap/collapse strategy (e.g. switch to a compact
+"3 / 20"-style numeric text once totalQuestions exceeds some threshold), or
+(b) if real question banks in practice are always much smaller than 20 (spot-
+check `sample-content/quiz/questions.json`'s actual count first before
+assuming this is a real problem), document that finding instead and close
+this as a non-issue. Either way, this is a code-level/computable task, not
+one that needs to block on real-device access.
+
+Still-open, deliberately deferred real-device check (unchanged from
+iteration 19, still cannot be verified by this loop — see Visual Review
+Required): iteration 18's age-tiered wrong-answer feedback + Try Again
+action's two-button footer on a real Galaxy S22.
 
 Secondary/fallback candidates (if the above turns out to need no code
 change): visual polish follow-ups for iteration 17's quiz celebration,
@@ -1383,6 +1484,35 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 19's quiz progress-dots accessibility label** (no new visible
+  UI — included here for completeness/audit trail, not because a sighted
+  visual check is expected to find anything):
+  - **Screen**: `QuizScreen` while a question is showing, rendered via
+    `QuestionRenderer.tsx` — the existing small progress-dots row above the
+    question card (`quiz-progress`, present since before this loop; visually
+    unchanged by this iteration).
+  - **Expected behavior**: purely non-visual. With a screen reader (TalkBack)
+    enabled, focusing the dots row should announce "Question 2 of 5" (or the
+    German equivalent, "Frage 2 von 5") as ONE spoken item — not silence, and
+    not N separate unlabeled items read one after another. Visually,
+    absolutely nothing should look different from before this iteration (no
+    new text, no resized dots, no layout shift).
+  - **Interaction steps**: enable TalkBack/VoiceOver, open the Quiz screen,
+    swipe/focus onto the progress-dots row (above the question card), and
+    listen for the announcement; then answer a question wrong, press "Try
+    Again", and re-focus the row — it should announce the SAME "Question 1
+    of N" (not "2 of N") since a retry doesn't advance.
+  - **EN+DE check**: switch the app language in Settings and repeat with a
+    screen reader in each language; confirm "Question X of Y" / "Frage X von
+    Y" both sound natural read aloud.
+  - **Small-screen check**: on a Galaxy S22 in landscape, visually confirm
+    the dots row still looks exactly as it did before this iteration (no
+    diff expected) — see the separate, still-open Next-section item about
+    whether the dots row itself scales safely up to 20 questions, which is a
+    distinct, larger concern this iteration deliberately did not touch.
+  - **Ages affected**: all ages 2-8, but specifically matters for
+    screen-reader-dependent users of any age in that range; sighted children
+    are unaffected by this change (nothing changed for them to see).
 - **Iteration 18's age-tiered wrong-answer feedback + "Try Again" action**
   (new visible UI, same screen as iteration 17's celebration above):
   - **Screen**: `QuizScreen` while a question is showing, rendered via
