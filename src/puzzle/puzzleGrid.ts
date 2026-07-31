@@ -83,10 +83,14 @@ const GRID_DIMENSIONS_LANDSCAPE: Record<4 | 6 | 9 | 12, { rows: number; cols: nu
 };
 
 // For a given piece count, the "landscape" (wide) shape above is the default;
-// for a portrait photo we use the transposed (tall) shape instead, so pieces
-// end up roughly matching the photo's real proportions instead of always
-// being wide rectangles cut from a photo that's actually tall. Piece COUNTS
-// (4/6/9/12) never change - only the rows x cols shape for a given count.
+// for a portrait photo we use the transposed (tall) shape instead. This is
+// NOT about making each piece's crop match the photo's own aspect ratio (a
+// piece is a rectangular crop either way) - it's about keeping individual
+// PIECES roughly square rather than long thin slivers: transposing picks a
+// grid whose own row/col split is taller for a photo that's actually taller,
+// so each cell's width-to-height ratio stays closer to 1:1 instead of being
+// stretched the wrong way. Piece COUNTS (4/6/9/12) never change - only the
+// rows x cols shape for a given count.
 export function computeGridDimensions(
   pieceCount: 4 | 6 | 9 | 12,
   isPortrait: boolean
@@ -121,6 +125,24 @@ export function computePieceRects(imageWidth: number, imageHeight: number, rows:
   }
 
   return rects;
+}
+
+// Splits a flat, row-major list of items (e.g. the puzzle's `order` array) into
+// `rows` arrays of exactly `cols` items each, for explicit row-by-row rendering.
+// This exists so the board's column count is a deterministic property of the
+// array structure itself, rather than relying on a `flexWrap: 'wrap'` container
+// to "naturally" break each row after `cols` items - that approach depends on
+// Yoga's line-breaking float arithmetic (`cols * pieceWidth` vs container width)
+// landing on the exact right side of a strict `>` comparison, which real device
+// window widths (often fractional, e.g. pixels ÷ density) cannot be trusted to
+// do reliably. Grouping explicitly means the column count is exactly `cols` no
+// matter what the container's floating-point width turns out to be.
+export function groupPiecesIntoRows<T>(items: T[], cols: number): T[][] {
+  const grouped: T[][] = [];
+  for (let i = 0; i < items.length; i += cols) {
+    grouped.push(items.slice(i, i + cols));
+  }
+  return grouped;
 }
 
 function isIdentity(order: number[]): boolean {

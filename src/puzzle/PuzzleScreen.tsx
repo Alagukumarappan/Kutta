@@ -18,16 +18,22 @@ import {
   computePieceRects,
   computePuzzleBoardSize,
   shufflePieceOrder,
+  groupPiecesIntoRows,
   PieceRect,
 } from './puzzleGrid';
 
 // Thin border drawn around every piece slot so young children can see the
 // grid structure (where each piece belongs) even before it's filled in
 // correctly. Because React Native uses border-box sizing, this border sits
-// *inside* the slot's rect rather than around it, so it crops a few px off
-// each edge of the piece's image content (a minor trade-off — not worth
-// insetting the image to compensate, since the crop is small and the
-// border's visual purpose matters more than pixel-perfect image cropping).
+// *inside* the slot's rect rather than around it. Since the piece's <Image>
+// is anchored to the slot's top-left corner (marginLeft: -rect.x, marginTop:
+// -rect.y puts the crop's own top-left exactly at the content box's origin),
+// the border only eats into the visible crop on the RIGHT and BOTTOM edges
+// (the far edges of the content box, which is `SLOT_BORDER` px narrower/
+// shorter than the outer rect on each of those sides) - the top and left
+// edges of the crop are left untouched. Not worth insetting the image to
+// compensate, since the crop is small and the border's visual purpose
+// matters more than pixel-perfect image cropping.
 const SLOT_BORDER = 3;
 
 function PuzzlePiece({
@@ -173,6 +179,7 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
             onClose={() => setPieceCountModalVisible(false)}
             placeholder={t('puzzlePickPieces')}
             testIDPrefix="puzzle-piece-count"
+            isPortrait={isPortrait}
           />
         </View>
       </ScrollView>
@@ -211,21 +218,38 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
         </View>
 
         <View style={styles.boardFrame}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: board.width }}>
-            {order.map((pieceIndex, slotIndex) => (
-              <Pressable
-                key={slotIndex}
-                testID={`puzzle-slot-${slotIndex}`}
-                onPress={() => handleTapSlot(slotIndex)}
-              >
-                <PuzzlePiece
-                  imageUri={imageUri}
-                  rect={rects[pieceIndex]}
-                  containerWidth={board.width}
-                  containerHeight={board.height}
-                  selected={selectedSlot === slotIndex}
-                />
-              </Pressable>
+          {/* Explicit row-by-row rendering instead of a single flexWrap:'wrap'
+              container: relying on Yoga to "naturally" break a line after
+              exactly `cols` pieces depends on cols*pieceWidth landing on the
+              exact right side of Yoga's strict `>` float comparison against
+              the container's width - real device widths are routinely
+              fractional and this comparison isn't reliable (it was observed
+              to wrap one piece early for 3-column layouts). Grouping the
+              `order` array into rows of exactly `cols` items up front makes
+              the column count exact and deterministic regardless of any
+              floating-point width. */}
+          <View style={{ width: board.width }}>
+            {groupPiecesIntoRows(order, cols).map((rowPieceIndices, rowIndex) => (
+              <View key={rowIndex} style={{ flexDirection: 'row' }}>
+                {rowPieceIndices.map((pieceIndex, colIndex) => {
+                  const slotIndex = rowIndex * cols + colIndex;
+                  return (
+                    <Pressable
+                      key={slotIndex}
+                      testID={`puzzle-slot-${slotIndex}`}
+                      onPress={() => handleTapSlot(slotIndex)}
+                    >
+                      <PuzzlePiece
+                        imageUri={imageUri}
+                        rect={rects[pieceIndex]}
+                        containerWidth={board.width}
+                        containerHeight={board.height}
+                        selected={selectedSlot === slotIndex}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
             ))}
           </View>
         </View>
@@ -303,7 +327,11 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   completeBanner: {
-    marginTop: spacing.lg,
+    // Kept deliberately compact (modest marginTop/paddingVertical, smaller
+    // emoji than a first pass had) so this one-time celebration banner is
+    // less likely to push the board past the available vertical space and
+    // trigger a short scroll right at the moment the child solves it.
+    marginTop: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -312,13 +340,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: 4,
     borderColor: colors.sunDark,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     ...shadow,
     elevation: 5,
   },
   completeEmoji: {
-    fontSize: 32,
+    fontSize: 28,
   },
   completeText: {
     fontSize: 24,
