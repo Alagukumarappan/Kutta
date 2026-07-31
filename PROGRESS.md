@@ -1,8 +1,72 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 15
-- Latest completed improvement (iteration 15, one commit): Phase 2 item 3
+- Phase: 1 (baseline verification + inventory), Iteration: 16
+- Latest completed improvements (iteration 16, two commits): a direct
+  `palette.ts` smoke test (this iteration's primary task, `Next` item 1 from
+  iteration 15) plus a touch-target-sizing fix for `ColoringScreen`'s
+  palette swatches (secondary, Phase 2 fast-follow).
+  1. **`__tests__/coloring/palette.test.ts`** (new file, test-only, 8
+     tests). `src/coloring/palette.ts`'s 12-entry `PALETTE` array was only
+     ever exercised indirectly, and only for 4 of 12 colors, via
+     `ColoringScreen.test.tsx`'s palette-label tests. This adds a dedicated
+     smoke test asserting: exactly 12 entries; no duplicate `display` hex
+     values; no duplicate `fill` RGBA values; no duplicate `nameKey`
+     values; every `display` matches `/^#[0-9A-Fa-f]{6}$/`; every `fill` is
+     a well-formed 4-integer 0-255 tuple with alpha fixed at 255; and every
+     `nameKey` resolves via `t(key, 'en')`/`t(key, 'de')` to a non-empty,
+     non-whitespace string. All 8 assertions passed on first run against
+     the unmodified module — TDD-verified by temporarily duplicating one
+     `nameKey` (`paletteColorOrange` → `paletteColorRed`) in
+     `src/coloring/palette.ts`, confirming the "no duplicate nameKey"
+     assertion failed for exactly that reason, then restoring the file
+     exactly (`git diff --stat` showed zero production change afterward).
+     Pure coverage addition, no bug found, no production code touched.
+     A code-review subagent independently confirmed the assertions are
+     non-tautological, import paths match sibling test-file conventions,
+     no `any`/unsafe casts, no meaningful overlap with
+     `ColoringScreen.test.tsx`'s existing (different-purpose) palette
+     tests, and no existing test/config was modified. Approved with no
+     changes.
+     - Commit: `e7e9100` — `loop: add a direct smoke test for coloring's
+       PALETTE data`.
+  2. **Touch-target sizing for `ColoringScreen`'s palette swatches**
+     (secondary; scanned via a fast Explore-agent sweep of touch-target
+     sizing, motion safety, and Galaxy S22 screen-fit per this iteration's
+     brief — see Technical Decisions for the full scan results). The 12
+     palette swatches (`src/coloring/ColoringScreen.tsx`, `Pressable` at
+     ~line 404) are visually 44x44px circles — the app's only interactive
+     control found under the ~48x48 logical-pixel touch-target guideline;
+     every other control scanned (`PieceCountPicker`'s `optionRow`,
+     `AgePicker`'s field/options, all retry/nav buttons) already has
+     `minHeight`/padding comfortably at or above 48px.
+     - TDD: added a test to `ColoringScreen.test.tsx` asserting
+       `redSwatch.props.hitSlop` has `top`/`bottom`/`left`/`right` all
+       `>= 2`. Confirmed it failed for the right reason first
+       (`hitSlop` was `undefined`) before implementing.
+     - Fix: added `hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}` to
+       each swatch's `Pressable`, bringing the effective tap target to
+       ~48x48. Verified no overlap risk: swatches sit `spacing.sm` (8px)
+       apart horizontally (`marginRight`), so 2px hitSlop per side leaves a
+       4px gap between neighboring hit zones; vertically the swatches are a
+       single row inside a horizontal `ScrollView` with no sibling
+       above/below, so vertical hitSlop has nothing to overlap. No visual
+       change — `hitSlop` only affects the tappable area, not rendering.
+     - Verified `npx tsc --noEmit` clean, full suite 25/25 suites and
+       178/178 tests passing (177 baseline + 1 new). No existing test
+       touched, skipped, or renamed.
+     - A code-review subagent independently re-verified the 8px-gap /
+       2px-hitSlop-per-side no-overlap math against `theme/tokens.ts`'s
+       actual `spacing.sm`/`spacing.xs` values, confirmed vertical hitSlop
+       is safe given the single-row horizontal-`ScrollView` layout,
+       confirmed `hitSlop` doesn't interfere with the parent `ScrollView`'s
+       pan-responder/scroll gesture, confirmed the new test is
+       non-tautological (would fail if hitSlop were removed or set below
+       2), and confirmed only the two intended files changed. Approved
+       with no required or optional changes.
+     - Commit: `959f846` — `loop: add hitSlop to ColoringScreen's palette
+       swatches for touch-target sizing`.
+- Previous iteration's completed improvement (iteration 15, one commit): Phase 2 item 3
   (palette-color-swatch accessibility labels, deferred from iteration 14's
   `Next` item 1). `src/coloring/ColoringScreen.tsx`'s 12 palette swatches
   (`palette-color-${i}`, ~lines 401-431) were plain colored circles with no
@@ -428,7 +492,11 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 24/24 suites passing, 169/169 tests passing (up from
+- Test status: 25/25 suites passing, 178/178 tests passing (up from
+  24/24 suites, 169/169 tests — iteration 16 added 1 new suite,
+  `__tests__/coloring/palette.test.ts` with 8 tests, plus 1 new test to
+  `ColoringScreen.test.tsx` covering palette-swatch `hitSlop`).
+- Previous test status: 24/24 suites passing, 169/169 tests passing (up from
   24/24 suites, 167/167 tests — iteration 15 added 2 new tests to
   `ColoringScreen.test.tsx`, covering palette-swatch labels/selection state
   in English and German).
@@ -977,24 +1045,66 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 16 priority: the accessibility-label pass on every retry button
-(all 7, iterations 12-13), the app's one unambiguous icon-only-control gap
-(the home settings-icon button, iteration 14), and the palette-swatch
-accessibility labels (iteration 15) are now all complete. Remaining options,
-in priority order:
-1. **`palette.ts` smoke test (small, optional fast-follow from iteration
-   15).** No dedicated test file exists for `src/coloring/palette.ts`
-   itself — its `nameKey`/`display`/`fill` correctness is currently only
-   exercised indirectly through `ColoringScreen.test.tsx`'s two palette
-   tests (which check 4 of the 12 colors' labels, not all 12, and don't
-   check for accidental duplicate `fill`/`display` values or malformed RGBA
-   tuples). A small `__tests__/coloring/palette.test.ts` asserting, for all
-   12 entries: `fill`/`display` correspond to the same color, no duplicate
-   `fill` values, every RGBA channel in `[0,255]`, and every `nameKey`
-   resolves to a non-empty string in both `en`/`de` via `t()` — would close
-   this out cheaply (pure data validation, no production code change
-   expected).
-2. **Optional smaller follow-up (unchanged from iteration 10)**: the
+Iteration 17 priority: **begin Phase 3 item 1, a joyful/brief/cancellable
+correct-answer celebration in the quiz flow.** This was scoped but
+deliberately NOT started in iteration 16 (out of that iteration's normal
+scope alongside the two already-completed improvements) — the plan below is
+concrete and ready to execute:
+- **Where to hook in**: `src/quiz/QuestionRenderer.tsx` is the file that
+  renders the correct/incorrect feedback today (the static 🎉 emoji + `<Text>`
+  banner using `t('quizCorrect')`, around lines 197-201, driven by the
+  existing `optionCorrect`/`correctMark` styling at ~lines 91-138/310-345 and
+  the `feedbackCorrectText`/`feedbackIncorrectText` styles at ~lines
+  379-385) — NOT `QuizScreen.tsx`. Scoring itself happens later, in
+  `src/quiz/quizSession.ts`'s `answerCurrentQuestion` (lines 28-39), called
+  from `QuizScreen.tsx`'s `handleNext` (lines 111-114) when the child taps
+  "Next" — `handleSelect` (`QuizScreen.tsx:107`) only sets
+  `selectedOptionId` and does not itself score. The correct place to trigger
+  a celebration is `QuestionRenderer.tsx`, keyed off its existing
+  `hasAnswered && isCorrect`-style condition (whatever local prop/derived
+  value already drives the current static 🎉 banner) — do NOT move scoring
+  or restructure `QuizScreen`'s flow.
+- **No animation API is in use anywhere in this codebase today** — a
+  repo-wide grep (iteration 16) found zero uses of `Animated`,
+  `useAnimatedStyle`, `withTiming`, `withSpring`, `Reanimated`,
+  `LayoutAnimation`, `setInterval`, or `requestAnimationFrame` in `src/`.
+  Use React Native's built-in `Animated` API (`import { Animated } from
+  'react-native'` — already available, no new dependency) rather than
+  reanimated (not installed, and the hard limits forbid new dependencies).
+  A `useRef(new Animated.Value(...)).current` + `Animated.sequence(...)` or
+  a single `Animated.spring`/`Animated.timing` pulse (e.g. scale 1 → 1.15 →
+  1, or a brief fade-in) triggered in a `useEffect` keyed on the
+  correct-answer condition is the standard, minimal pattern.
+- **Hard-limit compliance to build in from the start**: keep the animation
+  brief (a few hundred ms, not a long/looping sequence — must be
+  non-flashing per the hard limits), clean it up on unmount (call
+  `.stop()` on the `Animated.CompositeAnimation` returned by
+  `.start()`/`.stop()` in the `useEffect` cleanup — same discipline as this
+  app's existing effect-cleanup patterns elsewhere, e.g. the
+  `cancelled`-flag guards in `QuizScreen`/`ColoringScreen`), and must NOT
+  block or delay the child's ability to tap "Next" — the celebration should
+  play alongside the existing UI, never gate/disable the Next button or
+  auto-advance on a timer (there is currently no `setTimeout`-driven
+  auto-advance anywhere in the quiz flow; do not introduce one, since a
+  forced-wait timer could itself become a "blocks navigation" hard-limit
+  violation for an impatient or accidentally-double-tapping child).
+- **No new i18n strings are needed** — the existing `t('quizCorrect')` text
+  stays; this is a purely visual/motion addition layered on top of it.
+- **Test plan**: extend `QuestionRenderer.test.tsx` (not a new file) with a
+  test that selects a correct option and asserts the animation actually
+  starts (e.g. via `Animated.Value`'s tracked value using
+  `jest.spyOn`/reading `_value`, or by asserting the relevant `Animated.View`
+  renders) — avoid a real-time-based assertion (no `jest.advanceTimersByTime`
+  race against a genuine timing-dependent animation, per the hard limits'
+  "no arbitrary sleeps or timing-dependent tests").
+- **Minor, much smaller optional check to bundle in if time remains**: this
+  iteration's touch-target scan flagged `src/components/AgePicker.tsx`'s
+  field/option rows as "likely fine" (padding-only sizing, no explicit
+  fixed height) but not explicitly measured/tested the way
+  `ColoringScreen`'s swatches now are — a quick follow-up could add an
+  explicit `minHeight: 48`-equivalent style/test if inspection shows any
+  row falling short, though nothing found so far indicates an actual gap.
+- **Optional smaller follow-up (unchanged from iteration 10)**: the
    `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
    `HomeScreen.tsx` remain untyped against `RootStackParamList` because
    React Navigation's `RouteConfigComponent` type declares that render-prop's
@@ -1016,6 +1126,15 @@ under BLOCKED below is a related but separate test-hygiene item, not itself
 part of the error-state audit.)
 
 ## Visual Review Required
+- Iteration 16's two changes are both invisible on-screen: the
+  `palette.test.ts` addition is test-only (no production code changed), and
+  the `hitSlop` addition on `ColoringScreen`'s palette swatches only
+  extends the tappable (not visible) area — no rendering/layout change. No
+  visual review strictly needed. Recommended (not required) real-device
+  check: on the Galaxy S22, with a small child's finger/thumb, confirm the
+  palette swatches (especially the edge ones adjoining the "Clear" button
+  and the scroll boundary) now feel comfortably tappable without
+  accidentally triggering horizontal scroll or missing the target.
 - Iteration 15's `ColoringScreen` palette-swatch accessibility changes
   (`accessibilityLabel`/`accessibilityRole`/`accessibilityState`) are
   invisible on-screen — no new visual indicator was added or changed; the
@@ -1067,6 +1186,43 @@ None found that affect correctness. Notes:
   with no device/emulator available in this environment.
 
 ## Technical Decisions
+- Iteration 16: ran a fast Explore-agent scan across the three secondary
+  candidates named in this iteration's brief before picking one. Findings,
+  for future iterations' reference:
+  - **Touch-target sizing**: only `ColoringScreen.tsx`'s 44x44 palette
+    swatches were found under the ~48x48 guideline (fixed this iteration
+    via `hitSlop`). `PieceCountPicker.tsx`'s tiny 12x12 `miniGridCell` is a
+    decorative preview element inside a 64px-tall `optionRow`, not itself a
+    separate tap target — not a real gap. `AgePicker.tsx`'s field/option
+    rows use padding-only sizing with no explicit min-height guard; likely
+    fine given text + padding, but not explicitly measured/tested (left as
+    an optional item in `Next`).
+  - **Motion safety**: the entire `src/` tree has zero animation code today
+    (no `Animated`/`Reanimated`/`LayoutAnimation`/manual
+    `setInterval`/`requestAnimationFrame` usage anywhere) — motion safety is
+    not a live risk, but also means Phase 3's celebration feature (see
+    `Next`) will be the app's first animation, so its brevity/cleanup/
+    non-blocking properties need to be built in from scratch rather than
+    copied from an existing convention.
+  - **Galaxy S22 screen-fit**: `QuestionRenderer.tsx` already wraps in a
+    `ScrollView` with an explicit code comment describing it as a
+    documented "safety net" for short screens (pre-existing, from earlier
+    iterations' quiz-layout work). `PuzzleScreen.tsx` also has two
+    `ScrollView`s (loading state and main view) with no explanatory
+    comment — not confirmed as a problem, just unannotated; worth a quick
+    on-device check but not picked as this iteration's fix since nothing
+    concrete indicated an actual overflow bug. `OnboardingScreen`/
+    `SettingsScreen` use `ScrollView` for their forms, which is expected.
+    `HomeScreen`/`VideoGallery`/`ColoringGallery`/`PuzzleGallery` have no
+    `ScrollView` and nothing was found stacking large fixed-height content
+    that would risk overflow on a small screen.
+  - Chose touch-target sizing as this iteration's secondary fix (smallest,
+    most concrete, directly continues iteration 15's palette-swatch
+    accessibility work) and deferred Phase 3's celebration feature to a
+    scoped `Next` plan rather than starting it, since implementing a new
+    animation pattern (the app's first) plus its test coverage was judged
+    likely to exceed one iteration's safe scope alongside the two
+    improvements already completed.
 - Iteration 15: kept "Orange" and "Pink" identical in English and German
   rather than substituting a "more German" alternative (e.g. "Rosa" for
   pink) — both are fully naturalized loanwords in everyday German
