@@ -14,19 +14,20 @@ import { LanguageProvider } from '../../src/i18n/LanguageContext';
 // this exercises the screen's actual effect/listener/retry code, it doesn't
 // fake the behavior under test.
 type StatusChangePayload = { status: 'idle' | 'loading' | 'readyToPlay' | 'error' };
-type Listener = (payload: StatusChangePayload) => void;
+type Listener = (payload?: StatusChangePayload) => void;
 
 interface MockVideoPlayer {
   play: jest.Mock;
   replace: jest.Mock;
   addListener: jest.Mock;
-  emit: (event: 'statusChange', payload: StatusChangePayload) => void;
+  emit(event: 'statusChange', payload: StatusChangePayload): void;
+  emit(event: 'playToEnd'): void;
 }
 
 jest.mock('expo-video', () => {
   const ReactLib = require('react');
   const RN = require('react-native');
-  const listenersByEvent = new Map<string, Set<(payload: StatusChangePayload) => void>>();
+  const listenersByEvent = new Map<string, Set<Listener>>();
 
   const mockPlayer: MockVideoPlayer = {
     play: jest.fn(),
@@ -36,9 +37,9 @@ jest.mock('expo-video', () => {
       listenersByEvent.get(event)!.add(cb);
       return { remove: jest.fn(() => listenersByEvent.get(event)?.delete(cb)) };
     }),
-    emit: (event, payload) => {
+    emit: ((event: string, payload?: StatusChangePayload) => {
       listenersByEvent.get(event)?.forEach((cb) => cb(payload));
-    },
+    }) as MockVideoPlayer['emit'],
   };
 
   return {
@@ -114,6 +115,51 @@ describe('VideoPlayerScreen', () => {
       __mockPlayer.emit('statusChange', { status: 'readyToPlay' });
     });
     expect(queryByTestId('video-player-error')).toBeNull();
+  });
+
+  // Regression tests for the premium-polish child-delight pass: previously
+  // this screen gave a child NO feedback at all when a video finished — it
+  // just sat on its last frame with native controls, unlike every other
+  // activity (Quiz/Puzzle/Tic-Tac-Toe), which all celebrate completion via
+  // the shared CelebrationOverlay.
+  describe('completion celebration', () => {
+    it('shows a celebration with a "Watch Again" action once the video reaches its end', async () => {
+      const { findByTestId, findByText, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoPlayerScreen videoUri={VIDEO_URI} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('video-view');
+      expect(queryByTestId('video-finished')).toBeNull();
+
+      await act(async () => {
+        __mockPlayer.emit('playToEnd');
+      });
+
+      await findByTestId('video-finished');
+      expect(await findByText('Nice watching! 🎬')).toBeTruthy();
+      await findByText('Watch Again');
+    });
+
+    it('"Watch Again" replays the same video and dismisses the celebration', async () => {
+      const { findByTestId, findByLabelText, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoPlayerScreen videoUri={VIDEO_URI} />
+        </LanguageProvider>
+      );
+
+      await act(async () => {
+        __mockPlayer.emit('playToEnd');
+      });
+      await findByTestId('video-finished');
+
+      await fireEvent.press(await findByLabelText('Watch Again'));
+
+      expect(__mockPlayer.replace).toHaveBeenCalledWith(VIDEO_URI);
+      expect(__mockPlayer.play).toHaveBeenCalled();
+      expect(queryByTestId('video-finished')).toBeNull();
+    });
   });
 
   it('does not update state (and does not warn) when a status event arrives after the screen has been unmounted', async () => {

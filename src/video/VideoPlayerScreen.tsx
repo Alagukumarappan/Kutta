@@ -3,7 +3,15 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useLanguage } from '../i18n/LanguageContext';
-import { colors, spacing, typography, getActivityPalette, RaisedCard, RaisedPrimaryButton } from '../design-system';
+import {
+  colors,
+  spacing,
+  typography,
+  getActivityPalette,
+  RaisedCard,
+  RaisedPrimaryButton,
+  CelebrationOverlay,
+} from '../design-system';
 
 // Video's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
 // getActivityPalette) — used for the player frame's border and the error
@@ -14,6 +22,13 @@ const palette = getActivityPalette('video');
 export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const { t } = useLanguage();
   const [error, setError] = useState(false);
+  // Previously this screen gave a child NO feedback at all when a video
+  // finished — it just sat on its last frame with native controls, unlike
+  // every other activity (Quiz/Puzzle/Tic-Tac-Toe), which all celebrate a
+  // completion moment via the shared CelebrationOverlay. `playToEnd` is
+  // expo-video's own end-of-playback event (see VideoPlayerEvents.types.d.ts),
+  // fired once when the video reaches its end without looping.
+  const [finished, setFinished] = useState(false);
   // Shown with headerShown:true (see RootNavigator), so the native header
   // already covers the top inset — only left/right/bottom are ours to
   // handle (a notch or gesture-nav bar sits at one of the sides in this
@@ -30,6 +45,13 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     return () => subscription.remove();
   }, [player]);
 
+  useEffect(() => {
+    const subscription = player.addListener('playToEnd', () => {
+      setFinished(true);
+    });
+    return () => subscription.remove();
+  }, [player]);
+
   // Unlike QuizScreen/ColoringGallery/ColoringScreen/VideoGallery, which all
   // re-run a fresh fetch/read effect on retry (bumping a `retryToken` in
   // their dependency array), the video player already holds a live,
@@ -41,6 +63,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   // lets a subsequent `statusChange` (success or failure) drive the UI again.
   const handleRetry = useCallback(() => {
     setError(false);
+    setFinished(false);
     player.replace(videoUri);
     player.play();
   }, [player, videoUri]);
@@ -72,6 +95,15 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
           <VideoView player={player} style={styles.videoView} nativeControls />
         </View>
       </RaisedCard>
+
+      <CelebrationOverlay
+        visible={finished}
+        tone="success"
+        emoji="🎉"
+        title={t('videoFinished')}
+        testID="video-finished"
+        actions={[{ label: t('videoWatchAgain'), onPress: handleRetry, testID: 'video-watch-again' }]}
+      />
     </View>
   );
 }

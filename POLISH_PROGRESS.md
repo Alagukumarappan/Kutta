@@ -128,6 +128,26 @@ instead of 1) before committing.
 `saveProfile` promise resolves, asserting exactly one save and one
 navigate-home (509 total tests passing, up from 508).
 
+### Iteration 7 — Give the video player a completion celebration
+**Screen:** Video (VideoPlayerScreen).
+**Problem:** Child-delight audit across all 5 activities' completion
+moments. Quiz, Puzzle, and Tic-Tac-Toe all celebrate finishing via the
+shared `CelebrationOverlay` — Video was the one exception: a video just
+ended and sat on its last frame with native controls, with literally zero
+feedback that anything had happened. (Coloring has no natural "finish
+line" to detect cheaply and was left alone; Video, by contrast, has a
+crisp, already-available completion signal.)
+**Fix:** Listens for expo-video's own `playToEnd` event (fires once when
+playback reaches the end without looping) to show the same
+`CelebrationOverlay` every other activity uses — new `videoFinished`
+("Nice watching! 🎬") title and a "Watch Again" action reusing the
+existing retry-replay logic (which now also resets the new `finished`
+flag, not just `error`). No new dependencies, no new animation
+infrastructure — pure reuse of what already exists.
+**Tests:** Two new regression tests (celebration appears on `playToEnd`
+with the right wording/action; "Watch Again" replays the video and
+dismisses the celebration) — 511 total tests passing, up from 509.
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -156,8 +176,20 @@ _(none yet)_
 - Quiz (accessibility label for image-only options)
 - Tic-Tac-Toe board screen (cells now accessible)
 - Settings (Save button double-tap protection)
+- Video player (completion celebration added)
 
 ## Remaining polish opportunities (not yet done)
+- Tic-Tac-Toe's win overlay doesn't distinguish WHO won for tone/emoji
+  purposes: `tone === 'won' ? 'success' : 'neutral'` fires confetti/success
+  styling even when "Computer wins" — worth a tone-aware follow-up (e.g.
+  neutral/encouraging tone specifically for a human loss against the
+  computer, vs. success for a human win or a friend-mode win).
+- Coloring has no completion celebration at all, unlike the other four
+  activities — but genuinely has no natural "finished" signal to detect
+  (fills/strokes are open-ended and re-doable indefinitely), so this needs
+  real design thought (e.g. a manual "I'm done!" button) rather than a
+  cheap reuse of existing infrastructure — out of scope for a quick single
+  iteration.
 - Rapid-tap audit (iteration 6) also found two harmless-but-inconsistent
   spots, not real bugs (every underlying operation is idempotent, so a
   double-fire causes no corruption or visible glitch) — low priority, but

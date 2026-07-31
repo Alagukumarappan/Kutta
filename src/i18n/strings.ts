@@ -129,6 +129,8 @@ export const UI_STRINGS = {
   tictactoeCellEmptyLabel: { en: 'Row {row}, column {column}, empty', de: 'Reihe {row}, Spalte {column}, leer' },
   tictactoeCellFilledLabel: { en: 'Row {row}, column {column}, {mark}', de: 'Reihe {row}, Spalte {column}, {mark}' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
+  videoFinished: { en: 'Nice watching! 🎬', de: 'Schön geschaut! 🎬' },
+  videoWatchAgain: { en: 'Watch Again', de: 'Nochmal ansehen' },
   coloringImageLoadError: {
     en: 'This picture could not be loaded for coloring.',
     de: 'Dieses Bild konnte nicht zum Ausmalen geladen werden.',
