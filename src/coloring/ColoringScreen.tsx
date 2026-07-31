@@ -18,6 +18,7 @@ import { computeResponsiveRectSize } from '../theme/tokens';
 import { colors, spacing, radii, shadow } from '../theme/tokens';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
+import Slider from '@react-native-community/slider';
 
 // Reserves room for the toolbar + palette footer strip rendered below the
 // canvas, and outer margins, so the canvas gets as much of the screen as
@@ -34,15 +35,27 @@ const CANVAS_RESERVED_WIDTH = 32;
 const CANVAS_MIN_SIZE = 200;
 const CANVAS_MAX_SIZE = 900;
 
-// Visually chunky stroke width sized for a child's fingertip, not a thin
-// hairline.
-const PEN_STROKE_WIDTH = 14;
+// Default stroke width — visually chunky, sized for a child's fingertip,
+// not a thin hairline — plus the adjustable range the pen-size slider lets
+// the parent/child pick within.
+const PEN_STROKE_WIDTH_DEFAULT = 14;
+const PEN_STROKE_WIDTH_MIN = 4;
+const PEN_STROKE_WIDTH_MAX = 40;
+const PEN_STROKE_WIDTH_STEP = 2;
+
+// The pen-size slider row (~40dp) + its marginBottom (8dp) only renders in
+// pen mode, so it must only be reserved then too — otherwise switching to
+// pen mode would make the real footer taller than CANVAS_RESERVED_HEIGHT
+// budgeted for, pushing the footer down past what the canvas's fixed
+// height already assumed instead of shrinking the canvas to make room.
+const PEN_SIZE_ROW_RESERVED_HEIGHT = 48;
 
 type ToolMode = 'fill' | 'pen';
 
 interface Stroke {
   path: SkPath;
   color: string;
+  width: number;
 }
 
 export function ColoringScreen({ imageUri }: { imageUri: string }) {
@@ -72,6 +85,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const [retryToken, setRetryToken] = useState(0);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const [toolMode, setToolMode] = useState<ToolMode>('fill');
   // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's on-screen
   // nav bar; they don't know about *this* device's actual notch/gesture-bar
   // geometry, which varies (e.g. a Samsung S22's cutout and 3-button/gesture
@@ -92,7 +106,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const { width: canvasWidth, height: canvasHeight } = computeResponsiveRectSize(
     width,
     height,
-    CANVAS_RESERVED_HEIGHT + insets.bottom,
+    CANVAS_RESERVED_HEIGHT + (toolMode === 'pen' ? PEN_SIZE_ROW_RESERVED_HEIGHT : 0) + insets.bottom,
     CANVAS_RESERVED_WIDTH + insets.left + insets.right,
     CANVAS_MIN_SIZE,
     CANVAS_MAX_SIZE
@@ -102,9 +116,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const [pixels, setPixels] = useState<Uint8ClampedArray | null>(null);
   const [filledImage, setFilledImage] = useState<SkImage | null>(null);
 
-  const [toolMode, setToolMode] = useState<ToolMode>('fill');
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentPath, setCurrentPath] = useState<SkPath | null>(null);
+  const [penWidth, setPenWidth] = useState(PEN_STROKE_WIDTH_DEFAULT);
 
   // PanResponder callbacks are created once and must always act on the
   // latest state/props, so mirror the values that change over time into
@@ -115,6 +129,8 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   selectedColorRef.current = selectedColor;
   const selectedDisplayColorRef = useRef(selectedDisplayColor);
   selectedDisplayColorRef.current = selectedDisplayColor;
+  const penWidthRef = useRef(penWidth);
+  penWidthRef.current = penWidth;
   const canvasWidthRef = useRef(canvasWidth);
   canvasWidthRef.current = canvasWidth;
   const canvasHeightRef = useRef(canvasHeight);
@@ -266,7 +282,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     const finished = activePathRef.current;
     activePathRef.current = null;
     if (finished) {
-      setStrokes((prev) => [...prev, { path: finished, color: selectedDisplayColorRef.current }]);
+      // Each stroke keeps the width it was drawn with, captured at the
+      // moment it's committed — moving the pen-size slider afterward must
+      // only affect the NEXT stroke, not retroactively resize ones already
+      // on the canvas (the same reasoning `color` above already follows).
+      setStrokes((prev) => [
+        ...prev,
+        { path: finished, color: selectedDisplayColorRef.current, width: penWidthRef.current },
+      ]);
     }
     setCurrentPath(null);
   }
@@ -368,7 +391,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                 path={stroke.path}
                 color={stroke.color}
                 style="stroke"
-                strokeWidth={PEN_STROKE_WIDTH}
+                strokeWidth={stroke.width}
                 strokeCap="round"
                 strokeJoin="round"
               />
@@ -378,7 +401,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                 path={currentPath}
                 color={selectedDisplayColor}
                 style="stroke"
-                strokeWidth={PEN_STROKE_WIDTH}
+                strokeWidth={penWidth}
                 strokeCap="round"
                 strokeJoin="round"
               />
@@ -511,6 +534,34 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             </Pressable>
           )}
         </View>
+
+        {toolMode === 'pen' && (
+          // Only shown in pen mode — fill mode has no use for a stroke
+          // width, and showing it unconditionally would permanently cost
+          // this already-tight footer extra height for no benefit.
+          <View
+            testID="pen-size-row"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}
+          >
+            <Text style={{ color: colors.ink, fontWeight: '600' }}>{t('penSizeLabel')}</Text>
+            <Slider
+              testID="pen-size-slider"
+              style={{ flex: 1, height: 40 }}
+              minimumValue={PEN_STROKE_WIDTH_MIN}
+              maximumValue={PEN_STROKE_WIDTH_MAX}
+              step={PEN_STROKE_WIDTH_STEP}
+              value={penWidth}
+              onValueChange={setPenWidth}
+              minimumTrackTintColor={colors.skyDark}
+              maximumTrackTintColor={colors.disabledBorder}
+              thumbTintColor={colors.sky}
+              accessibilityLabel={t('penSizeLabel')}
+            />
+            <Text testID="pen-size-value" style={{ color: colors.ink, fontWeight: '600', minWidth: 28 }}>
+              {penWidth}
+            </Text>
+          </View>
+        )}
 
         <ScrollView
           testID="coloring-palette"

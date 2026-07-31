@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { ensureContentStructure, leafNameOf } from '../../src/storage/folderAccess';
+import { getSampleQuestionsJson } from '../../src/storage/sampleContent';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: {
@@ -48,7 +49,7 @@ describe('ensureContentStructure', () => {
     expect(madeDirs).not.toContain('pictures');
   });
 
-  it('writes a template questions.json when quiz/questions.json is missing', async () => {
+  it('writes the bundled sample questions when quiz/questions.json is missing', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
     (FileSystem.StorageAccessFramework.createFileAsync as jest.Mock).mockResolvedValue('content://tree/root/quiz/questions.json');
 
@@ -59,9 +60,13 @@ describe('ensureContentStructure', () => {
       'questions.json',
       'application/json'
     );
+    // A brand-new quiz folder should not be left with zero questions — see
+    // sampleContent.ts's getSampleQuestionsJson(), sourced from
+    // /sample-content/quiz/questions.json so a first-time parent's quiz
+    // card isn't empty.
     expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledWith(
       expect.any(String),
-      JSON.stringify({ questions: [] }, null, 2)
+      getSampleQuestionsJson()
     );
   });
 

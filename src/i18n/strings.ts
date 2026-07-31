@@ -133,6 +133,7 @@ export const UI_STRINGS = {
   addPuzzlePicture: { en: '+ Add puzzle picture', de: '+ Puzzlebild hinzufügen' },
   addVideo: { en: '+ Add video', de: '+ Video hinzufügen' },
   addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
+  penSizeLabel: { en: 'Pen size', de: 'Stiftgröße' },
   profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
   // {name}'s Home-screen avatar accessible name/fallback — decorative only
   // (not tappable), but still needs a real label for screen readers per

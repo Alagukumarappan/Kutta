@@ -532,4 +532,83 @@ describe('ColoringScreen', () => {
       expect(flattened.flexWrap).toBe('wrap');
     });
   });
+
+  describe('pen size slider', () => {
+    it('is hidden in fill mode and appears once pen mode is selected', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, queryByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      expect(queryByTestId('pen-size-slider')).toBeNull();
+
+      await fireEvent.press(getByTestId('tool-pen'));
+      await findByTestId('pen-size-slider');
+
+      await fireEvent.press(getByTestId('tool-fill'));
+      expect(queryByTestId('pen-size-slider')).toBeNull();
+    });
+
+    it('starts at a sensible default width, within the slider\'s configured range', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      const slider = await findByTestId('pen-size-slider');
+      expect(slider.props.value).toBe(14);
+      expect(slider.props.minimumValue).toBeLessThan(14);
+      expect(slider.props.maximumValue).toBeGreaterThan(14);
+      expect(await findByTestId('pen-size-value')).toHaveTextContent('14');
+    });
+
+    it('updates the displayed size as the slider value changes', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      // The community Slider component destructures `onValueChange` into
+      // its own internal handler and forwards the underlying native
+      // component's raw change event as `onChange` instead — so this
+      // simulates the native `onChange({ nativeEvent: { value } })` event
+      // the real slider would fire, rather than calling `onValueChange`
+      // (which isn't a prop of the rendered native element) directly.
+      const slider = await findByTestId('pen-size-slider');
+      await act(async () => {
+        slider.props.onChange({ nativeEvent: { value: 30 } });
+      });
+
+      expect(await findByTestId('pen-size-value')).toHaveTextContent('30');
+    });
+
+    it('gives the slider an accessibility label', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      const slider = await findByTestId('pen-size-slider');
+      expect(slider.props.accessibilityLabel).toBe('Pen size');
+    });
+  });
 });
