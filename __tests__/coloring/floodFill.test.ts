@@ -48,4 +48,23 @@ describe('floodFill', () => {
     floodFill(px, 3, 3, 0, 0, [255, 0, 0, 255]);
     expect(px).toEqual(original);
   });
+
+  it('returns an unchanged copy when the tapped pixel already matches the fill color (no-op re-tap)', () => {
+    const px = makeTestImage();
+    // (0,0) starts white (255,255,255,255); filling it white again should hit
+    // the early "already this color" exit rather than doing a full traversal.
+    const result = floodFill(px, 3, 3, 0, 0, [255, 255, 255, 255]);
+    expect(result).toEqual(px);
+    expect(result).not.toBe(px); // still returns a fresh copy, not the same reference
+  });
+
+  it('is a no-op when starting from a border pixel that already matches the fill color (does not leak into either neighboring region)', () => {
+    const px = makeTestImage();
+    // Re-filling the already-black border with black should also be a no-op,
+    // not attempt to flood across the border into unrelated regions.
+    const result = floodFill(px, 3, 3, 1, 0, [0, 0, 0, 255]);
+    expect(getPixel(result, 3, 0, 0)).toEqual([255, 255, 255, 255]);
+    expect(getPixel(result, 3, 2, 0)).toEqual([255, 255, 255, 255]);
+    expect(getPixel(result, 3, 1, 0)).toEqual([0, 0, 0, 255]);
+  });
 });
