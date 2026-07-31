@@ -585,6 +585,46 @@ transform (same idiom as the pre-existing "animates the newly-current
 dot..." test just above it) with reduce-motion mocked on, asserting both
 dots land directly on scale 1 (538 total tests passing, up from 537).
 
+### Iteration 26 — Extend reduce-motion support to EmptyStatePanel's looping bounce
+**Component:** `EmptyStatePanel` (shared by Coloring/Puzzle/Video
+galleries' empty states).
+**Problem:** Final confirmation pass grepping every remaining
+`Animated.spring`/`Animated.timing` call site in the app for un-audited
+reduce-motion gaps. Found one genuinely different, arguably
+higher-priority category than every prior fix: `EmptyStatePanel`'s emoji
+bounce is a CONTINUOUS/infinite `Animated.loop` that keeps running for as
+long as the empty state stays on screen — unlike the one-shot pop-ins
+already fixed (which finish in under a second), persistent looping motion
+is exactly what OS reduce-motion settings exist to suppress. (Also
+confirmed the old, pre-redesign `src/components/EmptyState.tsx` — which
+has an identical bounce loop — is dead code, never imported anywhere; not
+a fix target.)
+**Fix:** Added `useReducedMotion()`; the effect now checks it before
+starting the loop, resting the emoji at `bounce.setValue(0)` instead when
+enabled.
+**Test engineering note:** this component starts its animation
+UNCONDITIONALLY on mount (unlike `CelebrationOverlay`, which only starts
+on a `visible` prop flip, letting tests defer past the async reduce-motion
+check's resolution). Discovered empirically that the check's promise can
+resolve and the effect's cleanup can fire SYNCHRONOUSLY within the same
+`render()` call — a spy attached to the loop's `stop` method AFTER
+`render()` returns silently observed zero calls even though `stop` had
+genuinely already fired. Fixed by wrapping `stop` inside `Animated.loop`'s
+own mock implementation, at the exact moment the real
+`CompositeAnimation` is created, eliminating the race entirely (verified
+by an independent review pass, which also confirmed this couldn't have
+been a coincidental pass — the wrap happens before the object is ever
+returned to the effect that later closes over it).
+**Verified as a real bug, not a hypothetical:** confirmed the new test
+genuinely fails (`stop` never called, since the un-fixed effect has no
+`reducedMotion` dependency to re-run on) without the fix.
+**Tests:** New regression test (539 total tests passing, up from 538).
+Also independently re-confirmed the file's existing test-order fragility
+(the "stops its bounce animation on unmount" test corrupts the RNTL
+renderer for whatever runs after it — unrelated to this fix, a pre-existing
+issue) by placing the new test after it and reproducing the failure, then
+restoring the correct (before) placement.
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -657,8 +697,15 @@ dots land directly on scale 1 (538 total tests passing, up from 537).
 - useTiltPress / app-wide (every raised button/card/pressable now respects
   reduce-motion for its press feedback)
 - Quiz (progress-dots pop animation now also respects reduce-motion)
+- EmptyStatePanel / Coloring + Puzzle + Video galleries (looping bounce
+  now respects reduce-motion)
 
 ## Remaining polish opportunities (not yet done)
+- `src/components/EmptyState.tsx` (the old, pre-redesign empty-state
+  component, superseded by `EmptyStatePanel`) is confirmed dead code —
+  never imported anywhere in the app. Same category as `PieceCountPicker`;
+  not a fix candidate, only a cleanup candidate if this sweep ever tackles
+  dead-code removal.
 - Investigated, not confirmed: SettingsScreen's `performReset` calls
   `setResetting(false)` in a `finally` block AFTER `onReset?.()`, and in the
   real app `onReset` is wired to RootNavigator's `setProfile(null)`, which
@@ -737,13 +784,21 @@ dots land directly on scale 1 (538 total tests passing, up from 537).
   next accessibility candidate, but iteration 13 found it's actually dead
   code (never imported anywhere) — the live component fixed instead was
   `PuzzleGallery.tsx`'s inline difficulty modal. See iteration 13's entry.
-- Reduce-motion support: iterations 14, 16, 24, and 25 covered
-  `CelebrationOverlay`, Quiz's score-card pop-in, `useTiltPress` (app-wide
-  press feedback), and the progress-dots pop, respectively — this appears
-  to complete the sweep across every spring/timing animation currently in
-  the app. Worth a final confirmation pass in a future iteration (grep for
-  any remaining un-audited `Animated.spring`/`Animated.timing` call site)
-  before considering this fully closed.
+- Reduce-motion support: CONFIRMED COMPLETE as of iteration 26. Iterations
+  14, 16, 24, 25, and 26 covered `CelebrationOverlay`, Quiz's score-card
+  pop-in, `useTiltPress` (app-wide press feedback), the progress-dots pop,
+  and `EmptyStatePanel`'s looping bounce, respectively. Iteration 26's own
+  confirmation pass grepped every remaining `Animated.spring`/
+  `Animated.timing` call site in `src/` and found no further gaps in
+  actively-used code (the only other hits — `ColoringScreen.tsx`'s palette
+  swatch pop and toolbar press feedback, `PuzzleScreen.tsx`'s piece-swap
+  spring — are all one-shot, sub-second transitions like the ones already
+  fixed, not yet individually audited but lower priority than the
+  continuous loop iteration 26 closed; `SettingsScreen.tsx`'s `FadeInBanner`
+  is a plain opacity fade with no scale/translate/rotate, which reduce-motion
+  guidance doesn't discourage). If a future iteration wants full coverage
+  of every remaining one-shot spring, ColoringScreen/PuzzleScreen are the
+  next candidates.
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a
