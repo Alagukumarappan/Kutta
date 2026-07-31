@@ -282,6 +282,17 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.sm,
     alignItems: 'stretch',
+    // Centered rather than top-anchored: this form's content was originally
+    // sized for a short, wide landscape viewport, and now renders in a
+    // taller portrait one (onboarding is portrait-only, see
+    // RootNavigator.tsx) — top-anchoring left a large empty gap below the
+    // form on a real phone. Centering keeps the same compact cards but
+    // balances them within the extra vertical space instead of stranding it
+    // at the bottom. Only takes effect once content is shorter than the
+    // viewport (flexGrow:1 already handles the reverse: a smaller screen or
+    // more content still scrolls normally, since a ScrollView never clips
+    // content shorter than justifyContent would otherwise want to show).
+    justifyContent: 'center',
   },
   brandBadge: {
     fontSize: 22,

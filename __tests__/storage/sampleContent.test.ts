@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { Image } from 'react-native';
+import { Asset } from 'expo-asset';
 import {
   seedSampleColoring,
   seedSamplePictures,
@@ -8,9 +8,6 @@ import {
 } from '../../src/storage/sampleContent';
 
 jest.mock('expo-file-system/legacy', () => ({
-  cacheDirectory: 'file:///cache/',
-  downloadAsync: jest.fn(),
-  deleteAsync: jest.fn(),
   readAsStringAsync: jest.fn(),
   EncodingType: { Base64: 'base64' },
   StorageAccessFramework: {
@@ -20,20 +17,37 @@ jest.mock('expo-file-system/legacy', () => ({
   },
 }));
 
+// `Asset.fromModule(...).downloadAsync()` + `.localUri` is the SDK-official
+// way to resolve a bundled require()'d asset to a real local file:// path in
+// BOTH dev and release builds — replacing a previous
+// `Image.resolveAssetSource` + `FileSystem.downloadAsync` approach that only
+// ever worked while Metro's dev server was reachable (see sampleContent.ts's
+// own comment): on a genuine installed release APK, the resolved URI is an
+// Android `asset:///` URI, which `downloadAsync` cannot fetch since it's not
+// a network request — every seed silently failed there despite passing here
+// under the old mock and working fine against a Metro-connected dev build.
+const mockDownloadAsync = jest.fn().mockResolvedValue(undefined);
+const mockAssetState: { localUri: string | null } = { localUri: 'file:///bundled/sample-asset.png' };
+jest.mock('expo-asset', () => ({
+  Asset: {
+    fromModule: jest.fn(() => ({
+      downloadAsync: mockDownloadAsync,
+      get localUri() {
+        return mockAssetState.localUri;
+      },
+    })),
+  },
+}));
+
 describe('sampleContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (FileSystem.downloadAsync as jest.Mock).mockResolvedValue({ uri: 'file:///cache/downloaded' });
+    mockDownloadAsync.mockResolvedValue(undefined);
+    mockAssetState.localUri = 'file:///bundled/sample-asset.png';
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('ZmFrZS1iYXNlNjQ=');
     (FileSystem.StorageAccessFramework.createFileAsync as jest.Mock).mockResolvedValue(
       'content://tree/dest/created-file'
     );
-    // Jest's environment doesn't run Metro's real asset-registration
-    // pipeline, so a require()'d image module resolves to nothing usable
-    // here by default — stub it the way the bundled app actually behaves
-    // (a real, loadable asset URI) for every test except the one below that
-    // deliberately exercises the "can't be resolved" fallback.
-    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({ uri: 'asset:///bundled-sample.png' } as any);
   });
 
   describe('getSampleQuestionsJson', () => {
@@ -56,9 +70,10 @@ describe('sampleContent', () => {
       // copied into a content:// SAF directory destination (verified against
       // FileSystemLegacyModule.kt), which silently failed every seed copy on
       // a real device despite passing here when that mock returned success.
-      expect(FileSystem.downloadAsync).toHaveBeenCalledTimes(5);
+      expect(Asset.fromModule).toHaveBeenCalledTimes(5);
+      expect(mockDownloadAsync).toHaveBeenCalledTimes(5);
       expect(FileSystem.readAsStringAsync).toHaveBeenCalledTimes(5);
-      expect(FileSystem.readAsStringAsync).toHaveBeenCalledWith('file:///cache/downloaded', {
+      expect(FileSystem.readAsStringAsync).toHaveBeenCalledWith('file:///bundled/sample-asset.png', {
         encoding: 'base64',
       });
       expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledTimes(5);
@@ -68,8 +83,6 @@ describe('sampleContent', () => {
         'ZmFrZS1iYXNlNjQ=',
         { encoding: 'base64' }
       );
-      // Each downloaded cache file is cleaned up afterward.
-      expect(FileSystem.deleteAsync).toHaveBeenCalledTimes(5);
     });
 
     it('creates each destination file with the same name and mime type as the sample', async () => {
@@ -96,7 +109,7 @@ describe('sampleContent', () => {
 
       await seedSamplePictures('content://tree/pictures');
 
-      expect(FileSystem.downloadAsync).not.toHaveBeenCalled();
+      expect(mockDownloadAsync).not.toHaveBeenCalled();
       expect(FileSystem.StorageAccessFramework.createFileAsync).not.toHaveBeenCalled();
     });
 
@@ -106,7 +119,7 @@ describe('sampleContent', () => {
       );
 
       await expect(seedSampleQuizImages('content://tree/quiz/images')).resolves.toBeUndefined();
-      expect(FileSystem.downloadAsync).not.toHaveBeenCalled();
+      expect(mockDownloadAsync).not.toHaveBeenCalled();
     });
 
     it('continues seeding the remaining files when one write fails partway through', async () => {
@@ -121,14 +134,25 @@ describe('sampleContent', () => {
       expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(5);
     });
 
-    it('skips a sample whose bundled asset cannot be resolved, without throwing', async () => {
+    it('skips a sample whose bundled asset cannot be resolved to a local file, without throwing', async () => {
       (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
-      const resolveSpy = jest.spyOn(Image, 'resolveAssetSource').mockReturnValue(undefined as any);
+      mockAssetState.localUri = null;
 
       await expect(seedSamplePictures('content://tree/pictures')).resolves.toBeUndefined();
 
-      expect(FileSystem.downloadAsync).not.toHaveBeenCalled();
-      resolveSpy.mockRestore();
+      expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+      expect(FileSystem.StorageAccessFramework.createFileAsync).not.toHaveBeenCalled();
+    });
+
+    it('continues seeding the remaining files when downloadAsync rejects for one sample', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      mockDownloadAsync.mockRejectedValueOnce(new Error('asset copy failed'));
+
+      await expect(seedSampleColoring('content://tree/coloring')).resolves.toBeUndefined();
+
+      expect(Asset.fromModule).toHaveBeenCalledTimes(5);
+      // Only 4 of the 5 got past the failed download.
+      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(4);
     });
   });
 });

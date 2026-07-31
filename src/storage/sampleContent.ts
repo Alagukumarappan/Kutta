@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { Image } from 'react-native';
+import { Asset } from 'expo-asset';
 
 // Sample content bundled with the app (see /sample-content at the repo
 // root) so a parent's first-time content folder isn't empty on every card —
@@ -85,22 +85,36 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
 
   for (const sample of samples) {
     try {
-      const assetUri = Image.resolveAssetSource(sample.module)?.uri;
-      if (!assetUri) continue;
-      const cachePath = `${FileSystem.cacheDirectory}kutta-seed-${sample.name}`;
-      const { uri: downloadedUri } = await FileSystem.downloadAsync(assetUri, cachePath);
+      // `Image.resolveAssetSource(module).uri` + `FileSystem.downloadAsync`
+      // (the previous approach here) only actually works while Metro's dev
+      // server is running, where the resolved URI is a real http:// URL —
+      // `downloadAsync` fetches over the network. In a genuine standalone
+      // release build (installed via APK, no Metro server), a bundled
+      // require()'d image instead resolves to an Android `asset:///` URI,
+      // which `downloadAsync` cannot fetch (it's not a network request),
+      // so every single seed silently failed this way on a real installed
+      // device despite working in Jest (mocked) and in a Metro-connected
+      // dev build (real HTTP URL) — the two ways this was ever tested
+      // before a real release APK existed. `expo-asset`'s `Asset` is the
+      // correct, SDK-official way to resolve a bundled module to a real
+      // local `file://` path regardless of dev vs. release: it copies the
+      // asset into the app's own storage if needed and exposes that via
+      // `localUri`.
+      const asset = Asset.fromModule(sample.module);
+      await asset.downloadAsync();
+      const localUri = asset.localUri;
+      if (!localUri) continue;
+
       // StorageAccessFramework.copyAsync's native Android implementation
       // (FileSystemLegacyModule.kt) only handles a few specific from/to
       // scheme combinations, none of which is "a plain app-local file://
-      // source into a SAF content:// directory destination" — every seed
-      // copy silently failed this way on a real device despite passing in
-      // Jest (where copyAsync is mocked). read-as-base64-then-write-base64
-      // is the same technique this app already relies on elsewhere for SAF
-      // writes (e.g. ensureContentStructure's questions.json, and
-      // ColoringScreen's own photo reads), so it's proven to actually work
-      // rather than resting on an untested cross-scheme copyAsync
-      // assumption.
-      const base64 = await FileSystem.readAsStringAsync(downloadedUri, {
+      // source into a SAF content:// directory destination" — read-as-
+      // base64-then-write-base64 is the same technique this app already
+      // relies on elsewhere for SAF writes (e.g. ensureContentStructure's
+      // questions.json, and ColoringScreen's own photo reads), so it's
+      // proven to actually work rather than resting on an untested
+      // cross-scheme copyAsync assumption.
+      const base64 = await FileSystem.readAsStringAsync(localUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
@@ -111,7 +125,6 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
       await FileSystem.StorageAccessFramework.writeAsStringAsync(destUri, base64, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      await FileSystem.deleteAsync(downloadedUri, { idempotent: true });
     } catch {
       // Best-effort: move on to the next sample.
     }
