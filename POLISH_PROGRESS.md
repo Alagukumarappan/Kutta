@@ -211,6 +211,28 @@ ROW_HEIGHT * index` and re-reviewed independently to confirm.
 FlatList (via a new `puzzle-gallery-list` testID) and asserts the correct
 row-scale offsets (513 total tests passing, up from 512).
 
+### Iteration 10 — Fix a real WCAG contrast failure on 3 of 5 Home cards
+**Screen:** Home.
+**Problem:** Contrast audit of the app's most common text/background
+pairings. Every activity card used white label/tagline text on its own
+accent fill, but accent hues span a huge luminance range — computed real
+WCAG contrast ratios: white-on-bubblegum 3.04:1 and white-on-violet 4.38:1
+both cleared the 3:1 minimum for large/bold label text, but
+white-on-jade (~2.1:1), white-on-marigold (~1.8:1), and white-on-sky
+(~2.0:1) all failed it badly — the Puzzle, Video, and Tic-Tac-Toe cards'
+text was genuinely hard to read, not just a style nitpick.
+**Fix:** Added a new `onAccentText` field to `ActivityPalette` — white for
+the two accents that already pass (coloring/bubblegum, quiz/violet),
+`colors.ink` for the three that don't (puzzle/jade, video/marigold,
+tictactoe/sky; `colors.ink` clears 7.6-8.9:1 against all three, comfortably
+above even the stricter 4.5:1 bar). HomeScreen's card label/tagline now
+read this per-activity color instead of a hardcoded white.
+**Tests:** New test computes the actual WCAG relative-luminance/contrast-
+ratio (a small hand-rolled implementation, not just pinning today's color
+choices) for every activity and asserts >=3:1 — this stays meaningful if
+individual accent hues change later, and would have caught the original
+bug directly (514 total tests passing, up from 513).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -228,6 +250,9 @@ row-scale offsets (513 total tests passing, up from 512).
   iteration 6.
 - Tic-Tac-Toe celebrated a computer win against the child with the same
   confetti/success styling as a real win — fixed in iteration 8.
+- White text on 3 of 5 Home activity cards (jade/marigold/sky) failed
+  WCAG AA contrast badly (as low as 1.8:1 against a 3:1 minimum) — fixed
+  in iteration 10.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -247,8 +272,13 @@ row-scale offsets (513 total tests passing, up from 512).
 - Tic-Tac-Toe board screen (cells now accessible; win/loss tone corrected)
 - Settings (Save button double-tap protection)
 - Video player (completion celebration added)
+- Home screen (card text contrast fixed for 3 of 5 activities)
 
 ## Remaining polish opportunities (not yet done)
+- White-on-bubblegum (Coloring card) is 3.04:1 — technically passes the
+  3:1 large/bold-text minimum but with almost zero margin (0.04 above the
+  line). Not touched this iteration since it does pass, but worth a look
+  if the bubblegum hue itself ever shifts even slightly darker/lighter.
 - Coloring and Video galleries still lack `getItemLayout` (see iteration
   9's Performance note) — feasible for both, just messier math than
   Puzzle's clean fixed-px/fixed-column case.

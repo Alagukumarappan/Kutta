@@ -99,16 +99,54 @@ export interface ActivityPalette {
   accent: string;
   accentDark: string;
   accentSoft: string;
+  // The text color that reads accessibly ON TOP of `accent` (e.g. a Home
+  // card's label/tagline sitting directly on the accent fill). Contrast-
+  // audited per WCAG AA against each `accent` hue below (see
+  // src/design-system/tokens.test.ts): white clears 3:1 (the bar for
+  // large/bold label text) on the two darker/more saturated hues
+  // (bubblegum, violet), but falls drastically short on the three
+  // lighter/higher-luminance ones (jade ~2.1:1, marigold ~1.8:1, sky
+  // ~2.0:1) — those three use `colors.ink` instead, which clears both the
+  // 3:1 (label) and 4.5:1 (smaller tagline text) thresholds comfortably
+  // against a light background. This is a per-hue decision, not a fixed
+  // "always white" or "always dark" rule, precisely because accent colors
+  // span such a wide luminance range.
+  onAccentText: string;
 }
 
 const ACTIVITY_PALETTES: Record<ActivityId, ActivityPalette> = {
-  coloring: { accent: colors.bubblegum, accentDark: colors.bubblegumDark, accentSoft: colors.bubblegumSoft },
-  quiz: { accent: colors.violet, accentDark: colors.violetDark, accentSoft: colors.violetSoft },
-  puzzle: { accent: colors.jade, accentDark: colors.jadeDark, accentSoft: colors.jadeSoft },
-  video: { accent: colors.marigold, accentDark: colors.marigoldDark, accentSoft: colors.marigoldSoft },
+  coloring: {
+    accent: colors.bubblegum,
+    accentDark: colors.bubblegumDark,
+    accentSoft: colors.bubblegumSoft,
+    onAccentText: colors.white,
+  },
+  quiz: {
+    accent: colors.violet,
+    accentDark: colors.violetDark,
+    accentSoft: colors.violetSoft,
+    onAccentText: colors.white,
+  },
+  puzzle: {
+    accent: colors.jade,
+    accentDark: colors.jadeDark,
+    accentSoft: colors.jadeSoft,
+    onAccentText: colors.ink,
+  },
+  video: {
+    accent: colors.marigold,
+    accentDark: colors.marigoldDark,
+    accentSoft: colors.marigoldSoft,
+    onAccentText: colors.ink,
+  },
   // `sky` was the one brand hue not yet claimed by an activity — a natural
   // fit for the newest card added after Video.
-  tictactoe: { accent: colors.sky, accentDark: colors.skyDark, accentSoft: colors.skySoft },
+  tictactoe: {
+    accent: colors.sky,
+    accentDark: colors.skyDark,
+    accentSoft: colors.skySoft,
+    onAccentText: colors.ink,
+  },
 };
 
 // Pure lookup, unit-tested like the rest of this file's helpers — kept as a
