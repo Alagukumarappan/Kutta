@@ -168,24 +168,6 @@ mocked `getComputerMove` that defaults to the real minimax for every other
 test in the file) and asserts neutral tone + the encouraging message (512
 total tests passing, up from 511).
 
-## Bugs fixed
-- `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
-  visible) loading indicator wouldn't have centered correctly — fixed as
-  part of iteration 1.
-- `PuzzleScreen.tsx` had two byte-for-byte duplicated loading-state
-  branches (dead code smell, not a user-visible bug) — fixed in iteration 2.
-- Image-only quiz answer options had no accessibility label at all — fixed
-  in iteration 3.
-- Puzzle-piece slots had no accessibility role/label/state at all — fixed
-  in iteration 4.
-- Tic-Tac-Toe board cells had no accessibility role/label/state at all —
-  fixed in iteration 5.
-- Settings' Save button had no rapid-double-tap protection in the common
-  (no-folder-change) case, causing a double navigation to Home — fixed in
-  iteration 6.
-- Tic-Tac-Toe celebrated a computer win against the child with the same
-  confetti/success styling as a real win — fixed in iteration 8.
-
 ### Iteration 9 — getItemLayout for the Puzzle gallery's fixed-tile grid
 **Screen:** Puzzle gallery.
 **Problem:** Performance audit across all three galleries' FlatLists (none
@@ -658,23 +640,46 @@ gallery's test file confirming the selected tile reports `{selected:
 true}` and an unselected tile reports `{selected: false}` once multi-select
 mode is active (545 total tests passing, up from 539).
 
+### Iteration 28 — Expose accessibilityState.busy on AddFilesButton during in-flight picks
+**Component:** `AddFilesButton` (shared "+ Add files" control used by the
+Coloring/Video galleries to add individual files from anywhere on the
+device).
+**Problem:** Flagged in iteration 27's Remaining opportunities as
+"missing `accessibilityState.disabled`/`busy`." Before implementing,
+checked the claim against RN's own `Pressable` source
+(`node_modules/react-native/Libraries/Components/Pressable/Pressable.js`,
+~lines 227-236): the `disabled` prop is ALREADY unconditionally merged
+into `accessibilityState.disabled` by `Pressable` itself, regardless of
+what's passed to `accessibilityState` — confirmed empirically too, via a
+scratch test showing `{disabled: false}` with zero extra code. So half of
+the original finding was a false positive; the genuinely missing piece was
+only `busy`, which RN never derives automatically. A screen reader
+pressing this button during an in-flight picker/write only heard that the
+button was "dimmed," not that something was actively happening.
+**Fix:** Added `accessibilityState={{ busy }}` alongside the existing
+`disabled={busy}` prop — additive only, doesn't touch or duplicate the
+already-automatic `disabled` merge.
+**Verified as a real bug, not a hypothetical:** confirmed via `git stash`
+that the new test genuinely fails without the fix (`busy: undefined`
+instead of the correct false/true/false transition).
+**Test engineering note:** the new test needed `waitFor()` rather than a
+manual `act(async () => { await Promise.resolve(); })` to reliably observe
+the busy→settled transition (the latter left stale state intermittently).
+Also hit the same cross-test RNTL-renderer-corruption pattern iteration 26
+documented in `EmptyStatePanel.test.tsx`: this file's pre-existing "ignores
+a rapid second tap..." test (an unawaited double-`fireEvent.press` +
+manual `act()`) corrupts the renderer for whatever test runs after it in
+the same file. Fixed the same way — placed the new test BEFORE it, not
+after.
+**Extra diligence:** dispatched a review agent that independently
+re-derived the RN Pressable source claim, re-ran all 9 tests in file
+order, reproduced the reordering fragility by testing both orderings, and
+independently re-confirmed the git-stash fail/pass behavior — no issues
+found.
+**Tests:** New regression test covering the busy→settled transition (546
+total tests passing, up from 545).
+
 ## Bugs fixed
-- `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
-  visible) loading indicator wouldn't have centered correctly — fixed as
-  part of iteration 1.
-- `PuzzleScreen.tsx` had two byte-for-byte duplicated loading-state
-  branches (dead code smell, not a user-visible bug) — fixed in iteration 2.
-- Image-only quiz answer options had no accessibility label at all — fixed
-  in iteration 3.
-- Puzzle-piece slots had no accessibility role/label/state at all — fixed
-  in iteration 4.
-- Tic-Tac-Toe board cells had no accessibility role/label/state at all —
-  fixed in iteration 5.
-- Settings' Save button had no rapid-double-tap protection in the common
-  (no-folder-change) case, causing a double navigation to Home — fixed in
-  iteration 6.
-- Tic-Tac-Toe celebrated a computer win against the child with the same
-  confetti/success styling as a real win — fixed in iteration 8.
 - White text on 3 of 5 Home activity cards (jade/marigold/sky) failed
   WCAG AA contrast badly (as low as 1.8:1 against a 3:1 minimum) — fixed
   in iteration 10.
@@ -694,6 +699,8 @@ mode is active (545 total tests passing, up from 539).
 - Video/Coloring/Puzzle galleries' multi-select mode had no
   `accessibilityState.selected` on checked tiles at all — fixed in
   iteration 27.
+- `AddFilesButton`'s Pressable never set `accessibilityState.busy` while a
+  file-picker operation was in flight — fixed in iteration 28.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -737,12 +744,10 @@ mode is active (545 total tests passing, up from 539).
   now respects reduce-motion)
 - AnimatedPressable + RaisedCard / Video + Coloring + Puzzle galleries
   (multi-select "selected" state now exposed to accessibility)
+- AddFilesButton / Coloring + Video galleries (now exposes
+  accessibilityState.busy while a pick is in flight)
 
 ## Remaining polish opportunities (not yet done)
-- `src/components/AddFilesButton.tsx` sets `disabled={busy}` but never sets
-  `accessibilityState={{disabled: busy, busy}}` — a minor, single-control
-  gap (lower impact than iteration 27's gallery-wide fix, but the same
-  category). Small, safe next candidate.
 - ColoringScreen's palette-swatch pop / toolbar button press feedback, and
   PuzzleScreen's piece-swap spring: confirmed real, user-action-triggered
   (not on-mount) one-shot springs that still ignore reduce-motion — same
