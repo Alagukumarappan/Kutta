@@ -70,6 +70,7 @@ export function VideoGallery({
           onPress={() => setRetryToken((n) => n + 1)}
           accessibilityRole="button"
           accessibilityLabel={t('retry')}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
         >
           <Text>{t('retry')}</Text>
         </Pressable>

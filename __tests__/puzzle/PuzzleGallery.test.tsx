@@ -58,4 +58,25 @@ describe('PuzzleGallery', () => {
 
     await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
   });
+
+  it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
+      new Error('SAF grant revoked')
+    );
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const retryButton = await findByTestId('puzzle-gallery-retry');
+    // Same unstyled-Text-only, no-adjacent-sibling situation as
+    // ColoringGallery's retry button (see that test for the full rationale).
+    const { top, bottom, left, right } = retryButton.props.hitSlop ?? {};
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(bottom).toBeGreaterThanOrEqual(12);
+    expect(left).toBeGreaterThanOrEqual(12);
+    expect(right).toBeGreaterThanOrEqual(12);
+  });
 });

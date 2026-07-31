@@ -185,4 +185,37 @@ describe('SettingsScreen', () => {
     resolveMigration({ success: true });
     await waitFor(() => expect(profileStore.saveProfile).toHaveBeenCalled());
   });
+
+  it('gives the language pills and folder-change button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
+    const { getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+
+    // Both pills render at roughly 39px tall (paddingVertical 8*2 + a
+    // fontSize-16 line + borderWidth 4) — under the ~44px guideline. They
+    // sit side-by-side with only an 8px horizontal gap between them, so
+    // ONLY vertical hitSlop is safe here (horizontal hitSlop would risk
+    // the two pills' hit zones overlapping); there's no interactive
+    // sibling directly above/below either pill, so vertical hitSlop is
+    // safe on that axis.
+    for (const testID of ['settings-lang-en', 'settings-lang-de']) {
+      const pill = getByTestId(testID);
+      const hitSlop = pill.props.hitSlop ?? {};
+      expect(hitSlop.top).toBeGreaterThanOrEqual(4);
+      expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
+    }
+
+    // The folder-change button (~38px tall: paddingVertical 8*2 + a
+    // fontSize-18 line) has no interactive sibling directly above/below it
+    // either (only a non-interactive folder-path chip or label), so
+    // vertical hitSlop is safe there too.
+    const folderButton = getByTestId('settings-folder-picker');
+    const folderHitSlop = folderButton.props.hitSlop ?? {};
+    expect(folderHitSlop.top).toBeGreaterThanOrEqual(4);
+    expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
+  });
 });

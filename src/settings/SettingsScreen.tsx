@@ -144,6 +144,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
               testID="settings-lang-en"
               onPress={() => setProfile({ ...profile, language: 'en' as Language })}
               style={[styles.langPill, profile.language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text
                 style={[
@@ -158,6 +159,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
               testID="settings-lang-de"
               onPress={() => setProfile({ ...profile, language: 'de' as Language })}
               style={[styles.langPill, profile.language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text
                 style={[
@@ -180,7 +182,12 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
               </Text>
             </View>
           )}
-          <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+          <Pressable
+            testID="settings-folder-picker"
+            onPress={handlePickFolder}
+            style={styles.folderButton}
+            hitSlop={{ top: 6, bottom: 6 }}
+          >
             <Text style={styles.folderButtonText}>{t('settingsChangeFolder')}</Text>
           </Pressable>
         </View>

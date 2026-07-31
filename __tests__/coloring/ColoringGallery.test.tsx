@@ -62,4 +62,28 @@ describe('ColoringGallery', () => {
 
     await findByTestId('coloring-item-content://tree/coloring/cat-outline.png');
   });
+
+  it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
+      new Error('SAF grant revoked')
+    );
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const retryButton = await findByTestId('coloring-gallery-retry');
+    // The button has no style/padding of its own — just an unstyled "Retry"
+    // Text — so its rendered box is well under the touch-target guideline.
+    // It's the only interactive element in this error state (no sibling
+    // Pressable directly above/below it), so hitSlop is a safe way to
+    // enlarge the tap target without any overlap risk.
+    const { top, bottom, left, right } = retryButton.props.hitSlop ?? {};
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(bottom).toBeGreaterThanOrEqual(12);
+    expect(left).toBeGreaterThanOrEqual(12);
+    expect(right).toBeGreaterThanOrEqual(12);
+  });
 });
