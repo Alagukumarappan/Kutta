@@ -533,6 +533,44 @@ describe('ColoringScreen', () => {
     });
   });
 
+  // Regression tests for the premium-polish accessibility pass: the Fill/Pen
+  // tool-mode buttons already had accessibilityRole/Label, but no
+  // accessibilityState — a screen-reader user had no way to tell which tool
+  // was currently active, the same "which one is selected" gap this app's
+  // palette swatches (see palette-swatch-selection tests below) already
+  // avoid.
+  describe('tool-mode accessibility state', () => {
+    it('marks only the active tool (fill, by default) as selected', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      expect(getByTestId('tool-fill').props.accessibilityState).toEqual({ selected: true });
+      expect(getByTestId('tool-pen').props.accessibilityState).toEqual({ selected: false });
+    });
+
+    it('flips the selected tool once Pen is pressed', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      expect(getByTestId('tool-pen').props.accessibilityState).toEqual({ selected: true });
+      expect(getByTestId('tool-fill').props.accessibilityState).toEqual({ selected: false });
+    });
+  });
+
   describe('pen size slider', () => {
     it('is hidden in fill mode and appears once pen mode is selected', async () => {
       (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);

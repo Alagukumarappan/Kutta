@@ -387,6 +387,20 @@ role/label/selected-state, the backdrop's label, and confirming the
 backdrop label translates to German while the option labels correctly do
 not (530 total tests passing, up from 527).
 
+### Iteration 18 — Accessibility state for Coloring's Fill/Pen tool buttons
+**Screen:** Coloring.
+**Problem:** Fill/Pen tool-mode toggle buttons already had
+`accessibilityRole`/`accessibilityLabel`, but no `accessibilityState` — a
+screen-reader user had no way to tell which tool was currently active.
+This screen's own palette-swatch buttons already avoid this exact gap
+(`accessibilityState={{selected}}` on each color), so the tool buttons were
+the one inconsistent spot within the same file.
+**Fix:** Added `accessibilityState={{ selected: toolMode === 'fill' }}` /
+`{ selected: toolMode === 'pen' }}` to the two buttons — trivial, low-risk,
+purely additive (no existing test reads these Pressables' exact prop set).
+**Tests:** Two new regression tests covering the default state and the
+flip after pressing Pen (532 total tests passing, up from 530).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -442,6 +456,7 @@ not (530 total tests passing, up from 527).
 - Video player (Retry double-tap guard added, for consistency)
 - Quiz (score-card pop-in now also respects reduce-motion)
 - LanguageSelector / Onboarding + Settings (accessibility semantics added)
+- Coloring (tool-mode buttons now expose accessibilityState)
 
 ## Remaining polish opportunities (not yet done)
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
@@ -466,10 +481,6 @@ not (530 total tests passing, up from 527).
   videos/colorings at most, vs. the "1000 images" puzzle scenario). Only
   worth doing if actually measured to matter, and only with a genuinely
   fixed row height.
-- `ColoringScreen.tsx`'s Fill/Pen tool-mode buttons have `accessibilityRole`
-  + label but no `accessibilityState={{selected: toolMode === 'fill'}}` —
-  same "which one is currently active" gap LanguageSelector/AgePicker had,
-  in a screen no iteration has touched yet. Small, safe next candidate.
 - Coloring has no completion celebration at all, unlike the other four
   activities — but genuinely has no natural "finished" signal to detect
   (fills/strokes are open-ended and re-doable indefinitely), so this needs

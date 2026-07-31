@@ -572,6 +572,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             onPressOut={() => animateToolbarButton('tool-fill', 1)}
             accessibilityRole="button"
             accessibilityLabel={t('toolFill')}
+            accessibilityState={{ selected: toolMode === 'fill' }}
           >
             {/* This inner Animated.View ("button face") is what presses down —
                 the outer Pressable's own layout box/hit area never changes,
@@ -601,6 +602,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             onPressOut={() => animateToolbarButton('tool-pen', 1)}
             accessibilityRole="button"
             accessibilityLabel={t('toolPen')}
+            accessibilityState={{ selected: toolMode === 'pen' }}
           >
             <Animated.View
               testID="tool-pen-face"
