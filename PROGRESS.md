@@ -1,8 +1,133 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 4 (original-spec fast-follow items), Iteration: 28
-- Latest completed improvement (iteration 28, two commits): a two-part
+- Phase: 4 (original-spec fast-follow items), Iteration: 29
+- Latest completed improvement (iteration 29, two commits): completed Phase 4
+  item 5 (optional child profile picture) end to end — both halves iteration
+  28 deliberately deferred (the picker UI and the HomeScreen display) landed
+  in this single iteration, following iteration 28's own concrete plan in
+  Next almost exactly.
+  - Read `ColoringGallery.tsx`/`PuzzleGallery.tsx` fully first, confirmed
+    they're byte-for-byte the same folder-listing pattern (loading/error/
+    empty states, SAF `readDirectoryAsync`, a Retry affordance on failure)
+    just parameterized over a different folder/i18n key, and confirmed via
+    `RootNavigator.tsx` that `folderUris.pictures` (the "pictures" SAF
+    subfolder) is the exact folder PuzzleGallery already lists from — i.e.
+    the "already-configured pictures folder" the brief pointed at.
+  - **Part A (`<see git log>`) — the picker UI in Settings.** New
+    `src/settings/ProfilePicturePicker.tsx`, a `Modal`-based picker
+    (matching `AgePicker.tsx`'s existing transparent-overlay Modal
+    convention rather than inventing a second modal pattern) that lists
+    `picturesFolderUri` with the identical loading/error/empty/retry states
+    as the two existing galleries. Wired into `SettingsScreen.tsx`: a new
+    "Profile Picture" card showing either a circular preview (or a
+    placeholder circle if unset/failed-to-load) plus "Choose a picture"
+    (opens the modal) and, only when a picture is set, "Remove picture".
+    Selecting/removing only updates local `profile` state — exactly like
+    name/age/language above it — so nothing is written to `AsyncStorage`
+    until the existing "Save changes" button is pressed; a mis-tap on a
+    thumbnail is therefore low-stakes. `SettingsScreen` and
+    `ProfilePicturePicker` both gained a `picturesFolderUri` prop
+    (`SettingsScreen`'s is optional, defaulting the whole feature to hidden,
+    so none of iteration <29's existing `<SettingsScreen />`-with-no-props
+    tests needed touching); `RootNavigator.tsx` now passes
+    `folderUris.pictures` in for the real app.
+    - **Double-tap guard**: `ProfilePicturePicker`'s `handleSelect` uses a
+      `useRef` (not `useState`) flag, set synchronously on the very first
+      tap — a real back-to-back double-tap (two `onPress` calls dispatched
+      before any re-render) only calls `onSelect` once. A `useState` flag
+      would NOT have been sufficient here (both taps would still read the
+      pre-update value before React re-renders); confirmed by a dedicated
+      test and by the independent code-review agent.
+    - **Stale-file handling split across two layers, deliberately**: the
+      picker itself does not re-verify a tapped file still exists (that
+      failure mode is already owned by `resolveProfilePictureUri` at
+      *display* time — iteration 28's own data-layer slice); Settings'
+      preview `<Image>` additionally gets its own `onError` guard (a new
+      `previewFailed` state, reset whenever `profile.pictureUri` changes)
+      so a stale/broken preview in Settings itself never shows a broken-
+      image icon either, mirroring the exact same defensive pattern.
+    - **Accessibility / no personal-metadata leak**: each thumbnail's
+      `accessibilityLabel` is generic and index-based (`"Choose a picture
+      2"`, etc.) rather than the raw filename — a photo's filename can
+      itself carry personal metadata (e.g. "birthday-party-grandma.jpg")
+      that has no business being read aloud by a screen reader.
+  - **Part B (`<see git log>`) — HomeScreen display wiring.** `HomeScreen`
+    gained an optional `pictureUri` prop (the raw `Profile.pictureUri`,
+    resolved — existence-checked — via `resolveProfilePictureUri()` in a
+    `[pictureUri]`-keyed effect with the same `cancelled` race-guard
+    convention used throughout this codebase's async effects) rendered as a
+    small circular avatar inside the existing `greetingBadge`, to the left
+    of the child's name. Falls back to a same-sized placeholder circle with
+    the child's first initial (not a broken-image icon) for BOTH "never
+    set" and "file went missing" (both resolve to `null`) AND a third case
+    this iteration added on top — a real `<Image onError>` handler for
+    "file exists but fails to actually decode/load" — so all three failure
+    classes converge on the same graceful fallback. Purely decorative: a
+    plain `<Image>`/`<View>` with a real `accessibilityLabel`
+    (`homeProfilePictureLabel`/`homeProfilePicturePlaceholderLabel`), never
+    a `Pressable`, so a child cannot accidentally trigger anything by
+    tapping it (matches iteration 28's own Next-section guidance not to
+    make it tappable without dedicated design/testing). `RootNavigator.tsx`
+    now passes `profile.pictureUri` in for the real app.
+    - **Screen-fit**: a new `AVATAR_SIZE = 28` constant, deliberately
+      chosen so `greetingBadge`'s own `paddingVertical: spacing.xs` (4px
+      per side, 8px total) plus the avatar comes to ~36px of badge content
+      height — comfortably under the `SETTINGS_BUTTON_SIZE = 44` constant
+      `headerReserve` derives the whole header row's reserved height from.
+      Avatar and its placeholder share one base style so the badge's
+      height never differs between the two states (no layout jump when a
+      picture is picked/removed). Verified this is the correct binding
+      constant to check against by rereading `headerReserve`'s formula
+      before picking `AVATAR_SIZE`, not just assuming a value looked safe.
+  - **New EN+DE i18n keys** (`src/i18n/strings.ts`, same commits):
+    `cancel` (generic, deliberately not reusing the scoped
+    `clearDrawingConfirmCancel`/`migrationConfirmCancel`),
+    `settingsProfilePicture`, `profilePictureChoose`, `profilePictureRemove`,
+    `profilePicturePickerTitle`, `homeProfilePictureLabel` (`{name}`
+    interpolated via the existing `tFormat`), `homeProfilePicturePlaceholderLabel`.
+  - Baseline before this iteration: tsc clean, 27/27 suites, 244/244 tests.
+  - After this iteration: tsc clean, **28/28 suites** (new
+    `__tests__/settings/ProfilePicturePicker.test.tsx`), **262/262 tests**
+    (+18: 7 picker tests — list+select, no-list-while-hidden, empty state,
+    retry-after-SAF-failure, cancel-without-select, non-leaking thumbnail
+    labels, re-lists-on-reopen; 5 new SettingsScreen tests — hidden without
+    a folder, pick-then-stage-then-save, remove-then-save, broken-preview
+    fallback, cancel-leaves-picture-untouched; 6 new HomeScreen tests —
+    placeholder-when-unset, shows-picture-when-set, placeholder-when-file-
+    missing, placeholder-on-image-onError, accessible-label-and-not-
+    tappable, re-resolves-on-pictureUri-change). No existing test modified,
+    weakened, skipped, or renamed — `SettingsScreen.test.tsx`'s and
+    `HomeScreen.test.tsx`'s existing tests all still pass unchanged with no
+    `picturesFolderUri`/`pictureUri` prop, confirming the whole feature
+    degrades gracefully to "hidden"/"placeholder-only" when absent.
+  - A code-review subagent independently reviewed the diff: confirmed the
+    `useRef`-based double-tap guard is genuinely necessary (a `useState`
+    flag would not have blocked a true back-to-back double-tap) and is
+    correctly wired; confirmed picture selection is staged into local
+    state and never persisted before "Save changes"; confirmed
+    remove-picture correctly ends up with no `pictureUri` key at all in
+    persisted storage (via `saveProfile`'s existing `JSON.stringify`
+    dropping `undefined`-valued keys, established in iteration 28);
+    confirmed thumbnail/avatar accessibility including the no-filename-leak
+    labeling and that the avatar is genuinely non-interactive; confirmed
+    full EN+DE localization coverage with no hardcoded English left in the
+    new components; confirmed the `AVATAR_SIZE`/`headerReserve` screen-fit
+    math independently; confirmed the Fragment wrapping added around
+    `SettingsScreen`'s `<ScrollView>` is correctly balanced; confirmed no
+    hard-limit violations (no new deps, no unsafe casts, no new
+    permissions beyond the already-granted "pictures" SAF folder, no
+    existing test weakened); and independently re-ran `npx tsc --noEmit`
+    (clean) and the full suite (28/28 suites, 262/262 tests, confirming
+    the only console output is the same pre-existing benign
+    not-wrapped-in-act warning class already present in
+    `PuzzleScreen.test.tsx`, not a new regression). Approved with no
+    required changes (non-blocking nit: test coverage is already thorough,
+    nothing meaningfully missing).
+  - Commits: `<see git log — loop: add a Settings picker UI for the
+    optional profile picture>`, `<see git log — loop: show the profile
+    picture (or a fallback avatar) on HomeScreen>`.
+- Previous iteration's completed improvement (iteration 28, two commits): a two-part
   iteration per this iteration's own brief ordering.
   - **Part A (`a1af79a`) — coloring toolbar row screen-fit.** Read
     `ColoringScreen.tsx`'s toolbar row (Fill/Pen/conditional Undo/conditional
@@ -2093,61 +2218,31 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-**Iteration 29 priority**: iteration 28 closed the empty-state check for
-good (see Current Status/Technical Decisions — `displayImage = filledImage
-?? image` has no genuine gap distinct from iteration 11's already-fixed
-retry flow) and landed the profile-picture data-layer first slice
-(`pictureUri?: string` on `Profile` + `resolveProfilePictureUri()`, no UI
-yet). The concrete next step is the picker UI + HomeScreen display wiring:
-1. **No image-picker library is installed** (confirmed via `grep -i
-   "image-picker\|document-picker\|media-library" package.json` — nothing
-   found), and the hard limits forbid adding a new dependency or any camera
-   access. So the picker UI must NOT try to add `expo-image-picker` or
-   similar. Instead, reuse the exact pattern already established for
-   `ColoringGallery.tsx`/`PuzzleGallery.tsx`: both already list image files
-   out of the child's SAF-granted content folder (via
-   `folderAccess.ts`/`StorageAccessFramework.readDirectoryAsync`) and let
-   the child tap one to open it. A profile-picture picker can be a small
-   new screen (or a modal reusing `ColoringGallery`'s existing
-   grid-of-thumbnails rendering, parameterized with an `onSelect(uri)`
-   callback instead of navigating into a coloring session) that lists the
-   same already-granted folder's photos and, on tap, calls `saveProfile({
-   ...profile, pictureUri: uri })` then navigates back. This needs zero new
-   permissions (the SAF grant already exists post-onboarding) and zero new
-   dependencies.
-2. **Where to launch it from**: `SettingsScreen.tsx` is the natural entry
-   point (it already edits the rest of the profile — name/age/language/
-   folder) — add a new row/button ("Change picture" style, new EN+DE i18n
-   key) that opens the picker screen described above. `OnboardingScreen.tsx`
-   is explicitly OUT of scope for this — onboarding should stay focused on
-   the required fields (name/age/language/folder), not add an optional
-   extra step for a first-time flow.
-3. **HomeScreen display wiring**: `HomeScreen.tsx` doesn't currently render
-   anything profile-identifying at all (read it fresh before assuming a
-   specific spot — no avatar/greeting exists today per iteration 23's own
-   card-only description). A small avatar/greeting area (e.g. top-left,
-   away from the settings gear icon and the 4 feature cards) could call
-   `resolveProfilePictureUri(profile.pictureUri)` on mount/profile-change
-   and render an `<Image>` only if it resolves non-null — falling back to
-   the existing no-picture state (whatever HomeScreen currently shows, e.g.
-   nothing or an initial/emoji placeholder — decide based on what's least
-   jarring) when it resolves `null`, exactly matching this iteration's
-   graceful-fallback contract. Must not push the 4 feature cards into
-   requiring scroll (re-run the same "no scrolling on child-facing screens"
-   screen-fit check this codebase already applies elsewhere) and must have
-   an `accessibilityLabel` if it becomes a tappable shortcut to Settings
-   (it should not be tappable unless that's explicitly designed and tested
-   — a plain decorative avatar is the safer default for one iteration).
-4. Both new EN+DE strings (e.g. "Change picture"/appropriate German) needed
-   for step 2. No strings needed for step 3 if the avatar is decorative
-   only.
-5. If this turns out too large to safely land as one clean iteration, split
-   it: Settings picker screen + persistence as one commit/iteration,
-   HomeScreen display wiring as a following one — do not half-wire the
-   HomeScreen side without the picker being reachable, and vice versa,
-   without at minimum documenting the split clearly here (an unreachable
-   "Change picture" button with no picker behind it, or an avatar with no
-   way to ever set one, would both be confusing half-states).
+**Iteration 30 priority**: Phase 4 item 5 (optional child profile picture)
+is now fully closed out — both the Settings picker UI and the HomeScreen
+display wiring landed in iteration 29 (see Current Status for full detail).
+This should NOT be re-treaded without new evidence (e.g. a real device
+review surfacing an actual visual problem — see Visual Review Required
+below for what specifically needs eyes-on confirmation).
+
+With every Phase 4 fast-follow item now closed (item 1: home card press
+animations, iteration 24; item 3: palette completeness, iteration 25; item
+4: coloring usability confirm+undo, iterations 26-27; item 4's empty-state
+half, closed with no fix needed, iteration 28; item 5: profile picture,
+iteration 29), **iteration 30 should start a fresh pass looking for the
+next-highest-value gap**, the same way iteration 21 (home card polish) and
+iteration 23 (this profile-picture item) were originally discovered — reread
+the original spec/brief against the app's current real behavior (not
+assumptions) across screens not recently touched (Onboarding, Quiz, Video),
+looking specifically for: any remaining screen-fit risk on short/narrow
+landscape devices this codebase hasn't already ruled out with real math: any
+accessibility gap (missing accessibilityLabel/hitSlop) on a control added
+before iteration 12's labeling sweep; or any other genuinely real (not
+manufactured) usability/safety gap for a 2-8 year old. If nothing new turns
+up, Phase 4 can be considered complete and iteration 30 should say so
+explicitly and pick a maintenance-quality task (e.g. a direct-coverage test
+for a currently untested pure function, following the established pattern
+from iterations 8/10/18/19 etc.) rather than inventing unnecessary UI churn.
 
 Iteration 28 closed out both of its own brief's parts — see Current Status
 for full detail (Part A: `flexWrap` fix for the coloring toolbar row,
@@ -2390,6 +2485,54 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 29's optional profile picture (Settings picker + HomeScreen
+  avatar)** — a genuinely new two-screen feature, source-verified and unit-
+  tested but never seen rendered on a real device by this loop:
+  - **Screens**: Settings (new "Profile Picture" card: circular preview or
+    placeholder, "Choose a picture"/"Remove picture" buttons, `testID`s
+    `settings-picture-preview`/`settings-picture-placeholder`/
+    `settings-picture-choose`/`settings-picture-remove`) and its modal
+    (`ProfilePicturePicker`, opened by "Choose a picture", listing the
+    "pictures" folder's photos as 100x100 thumbnails); Home (small circular
+    avatar or fallback-initial placeholder next to the greeting badge,
+    `testID`s `home-avatar-image`/`home-avatar-placeholder`).
+  - **Expected behavior**: Settings starts with a plain placeholder circle
+    (no picture set). Tapping "Choose a picture" opens a modal listing
+    photos from the same folder the Photo Puzzle already uses; tapping one
+    closes the modal and shows it as the preview in Settings (NOT yet
+    saved — the title bar/Save button state shouldn't change based on this
+    alone). Pressing "Save changes" persists it; going to Home should then
+    show that same picture as a small circular avatar next to the child's
+    name. Pressing "Remove picture" in Settings + Save should revert Home
+    back to the initial-letter placeholder. Specifically check: (1) the
+    picker modal's thumbnails are a reasonable tap size and the Cancel
+    button visibly closes it without picking anything; (2) the Home avatar
+    is genuinely small/unobtrusive and does NOT visually crowd the
+    settings gear icon on the opposite side of the header; (3) the header
+    row's height doesn't visibly grow compared to before this iteration
+    (should be imperceptible — the avatar was sized specifically to stay
+    under the existing header budget, see Technical Decisions' `AVATAR_SIZE`
+    math) and the 4 feature cards below it still fit with zero scrolling
+    on the smallest available test device.
+  - **Why flagged**: this is the single largest UI surface added in one
+    iteration recently — two screens, a new modal, new touch targets — and
+    while every individual layout claim was hand-verified against real
+    style values (padding/border math) and covered by unit tests, none of
+    it has been seen actually rendered. The `AVATAR_SIZE`/`headerReserve`
+    screen-fit math specifically deserves a real-device check even though
+    it was independently re-verified by a code-review subagent, per this
+    loop's standing policy that layout math this codebase treats as
+    "confidently safe" still occasionally warrants a look when a header's
+    actual visual height changes for the first time in many iterations.
+  - **EN+DE check**: "Choose a picture"/"Bild auswählen", "Remove
+    picture"/"Bild entfernen", the modal's title "Choose a profile
+    picture"/"Profilbild auswählen", and the "Profile Picture"/"Profilbild"
+    card label — check none of these wrap awkwardly or get clipped in
+    German (typically the longer-text language in this app).
+  - **Ages affected**: this is a parent-facing setup feature (Settings) plus
+    a small always-on child-facing decorative element (Home avatar) — all
+    ages 2-8 see the Home avatar if a parent sets one; only a parent
+    interacts with the Settings picker itself.
 - **Iteration 28's coloring toolbar `flexWrap` fix** (layout change to the
   same toolbar row iteration 27's Undo button lives in — source-verified,
   math-checked, but never seen rendered on a real device by this loop):
