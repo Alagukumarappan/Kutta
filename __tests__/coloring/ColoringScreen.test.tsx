@@ -103,13 +103,16 @@ describe('ColoringScreen', () => {
       .mockRejectedValueOnce(new Error('SAF grant revoked'))
       .mockResolvedValueOnce(FAKE_BASE64);
 
-    const { findByTestId, findByText } = await render(
+    const { findByTestId, findByText, findByLabelText } = await render(
       <LanguageProvider initialLanguage="en">
         <ColoringScreen imageUri={IMAGE_URI} />
       </LanguageProvider>
     );
 
     await findByText('This picture could not be loaded for coloring.');
+    // Screen-reader users need an accessible name for the retry button, not
+    // just visible text — assert it's exposed as an accessibility label too.
+    await findByLabelText('Retry');
     await fireEvent.press(await findByTestId('coloring-retry'));
 
     await findByTestId('coloring-canvas-touch-area');

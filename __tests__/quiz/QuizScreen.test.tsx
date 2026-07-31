@@ -113,13 +113,16 @@ describe('QuizScreen', () => {
       .mockResolvedValueOnce(twoQuestions);
     jest.spyOn(Math, 'random').mockReturnValue(0.999999);
 
-    const { findByTestId, findByText } = await render(
+    const { findByTestId, findByText, findByLabelText } = await render(
       <LanguageProvider initialLanguage="en">
         <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
       </LanguageProvider>
     );
 
     await findByText('Something went wrong loading this content.');
+    // Screen-reader users need an accessible name for the retry button, not
+    // just visible text — assert it's exposed as an accessibility label too.
+    await findByLabelText('Retry');
     await fireEvent.press(await findByTestId('quiz-retry'));
 
     await findByText('2 + 2?');

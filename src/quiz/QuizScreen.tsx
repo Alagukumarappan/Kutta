@@ -56,7 +56,13 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     return (
       <View testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
         <Text style={styles.messageText}>{t('loadError')}</Text>
-        <Pressable testID="quiz-retry" onPress={() => setRetryToken((n) => n + 1)} style={styles.retryButton}>
+        <Pressable
+          testID="quiz-retry"
+          onPress={() => setRetryToken((n) => n + 1)}
+          style={styles.retryButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('retry')}
+        >
           <Text style={styles.retryButtonText}>{t('retry')}</Text>
         </Pressable>
       </View>

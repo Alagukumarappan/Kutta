@@ -284,6 +284,8 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             <Pressable
               testID="coloring-retry"
               onPress={() => setRetryToken((n) => n + 1)}
+              accessibilityRole="button"
+              accessibilityLabel={t('retry')}
               style={{
                 backgroundColor: colors.coral,
                 borderColor: colors.coralDark,
