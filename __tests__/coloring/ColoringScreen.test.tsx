@@ -144,6 +144,27 @@ describe('ColoringScreen', () => {
     expect((await findByLabelText('Red')).props.accessibilityState?.selected).toBe(false);
   });
 
+  it('gives each 44x44 palette swatch a hitSlop so its effective tap target meets the ~48x48 guideline', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+    const { findByTestId, findByLabelText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-canvas-touch-area');
+
+    const redSwatch = await findByLabelText('Red');
+    const { top, bottom, left, right } = redSwatch.props.hitSlop ?? {};
+    // Visual swatch is 44x44 (see ColoringScreen.tsx); at least 2px of
+    // hitSlop on every edge brings the effective tap target to >= 48x48.
+    expect(top).toBeGreaterThanOrEqual(2);
+    expect(bottom).toBeGreaterThanOrEqual(2);
+    expect(left).toBeGreaterThanOrEqual(2);
+    expect(right).toBeGreaterThanOrEqual(2);
+  });
+
   it('labels palette swatches in German with warm, child-friendly color names', async () => {
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
 

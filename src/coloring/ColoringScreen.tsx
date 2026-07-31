@@ -411,6 +411,13 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                   setSelectedColor(paletteColor.fill);
                   setSelectedDisplayColor(paletteColor.display);
                 }}
+                // The visual swatch is 44x44; this extends the tappable
+                // (not visible) area by 2px on every edge so the effective
+                // tap target meets the ~48x48 logical-pixel guideline.
+                // Swatches sit `spacing.sm` (8px) apart, so 2px of hitSlop
+                // on each side still leaves a 4px gap between neighboring
+                // hit zones — no overlap.
+                hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
                 style={{
                   backgroundColor: paletteColor.display,
                   width: 44,
