@@ -1,8 +1,67 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 12
-- Latest completed improvements (iteration 12, two commits):
+- Phase: 1 (baseline verification + inventory), Iteration: 13
+- Latest completed improvement (iteration 13, one commit): finished the
+  accessibility-label pass on the app's retry buttons (`Next` item 1 from
+  iteration 12). First re-grepped `testID="[a-z-]*retry"` under `src/` to
+  confirm iteration 12's named list of 4 remaining buttons was still
+  accurate (it was, byte-for-byte): `src/puzzle/PuzzleGallery.tsx`
+  (`puzzle-gallery-retry`), `src/video/VideoGallery.tsx`
+  (`video-gallery-retry`), `src/navigation/RootNavigator.tsx`'s
+  `FolderErrorScreen` (`folder-resolve-retry`), and
+  `src/video/VideoPlayerScreen.tsx` (`video-player-retry` — confirmed it
+  was added in iteration 12's own commit `a67d544` without a label, so it
+  still needed one). Added `accessibilityRole="button"` and
+  `accessibilityLabel={t('retry')}` to all four, reusing the existing
+  `retry` i18n key (`en`: "Retry", `de`: "Erneut versuchen") — every one of
+  these buttons already renders `t('retry')` as its visible `<Text>`, so the
+  key is the exactly-correct accessible name in all four cases (verified by
+  reading each button's JSX before editing, not assumed).
+  - TDD: for `PuzzleGallery`, `VideoGallery`, and `VideoPlayerScreen`,
+    swapped each screen's existing retry-flow test's press target from
+    `findByTestId('...-retry')` to `findByLabelText('Retry')` — confirmed
+    all three failed for the right reason (`Unable to find an element with
+    accessibility label: Retry`) before implementing. `RootNavigator.tsx`'s
+    `FolderErrorScreen` had **zero test coverage of any kind** before this
+    iteration (no existing test ever drove the app into the folder-error
+    branch), so a new test was added instead of extending one: mocks
+    `folderAccess.ensureContentStructure` to reject once (the first call
+    inside `resolveSubfolderUris`), asserts `folder-resolve-error` renders,
+    then asserts `findByLabelText('Retry')` finds the button. Confirmed this
+    fails first for the same reason, then passes after the fix.
+  - No new i18n strings needed — all four buttons reuse the pre-existing
+    `retry` key. No new dependency. No production logic changed — every
+    change is exactly two accessibility props added to an existing
+    `Pressable`, matching iteration 12's pattern for
+    `QuizScreen`/`ColoringGallery`/`ColoringScreen` byte-for-byte.
+  - Verified `npx tsc --noEmit` clean, full suite 24/24 suites and
+    166/166 tests passing (165 baseline + 1 new `RootNavigator` test; the
+    three `findByTestId`→`findByLabelText` swaps replaced assertions in
+    place rather than adding new `it` blocks).
+  - A code-review subagent independently reviewed the diff: confirmed the
+    `retry` key match is correct for all four buttons (visible text
+    unchanged, matches the label exactly), confirmed the
+    `findByLabelText('Retry')` swap doesn't accidentally match more than one
+    element in any of the three modified tests (each error state has
+    exactly one retry control), confirmed the new `RootNavigator` test is
+    deterministic and not order-dependent (traced `resolveSubfolderUris`'s
+    call order — `ensureContentStructure` fires before `findChildUri`, and
+    `jest.clearAllMocks()` runs per-test so the `mockRejectedValueOnce`
+    can't leak into other tests), confirmed no TypeScript/lifecycle/
+    navigation/scope-creep issues, and confirmed no existing test was
+    weakened, skipped, or renamed. Approved with no required or optional
+    changes.
+  - Decided NOT to take on the optional icon-only-controls fast-follow this
+    iteration (Phase 2 item 3 territory — auditing back/close/settings icon
+    buttons for missing `accessibilityLabel`) because the primary task
+    turned out to be exactly 4 buttons, at the upper edge of (not clearly
+    under) the "3 or fewer, quick pass" threshold given in this iteration's
+    brief for taking on a bonus scope item; left as the next documented
+    follow-up instead (see Next).
+  - Commit: `<see git log — loop: add accessibilityLabel to the remaining
+    retry buttons>`.
+- Previous iteration's completed improvements (iteration 12, two commits):
   1. `VideoPlayerScreen`'s error-state audit (this iteration's primary task,
      `Next` item 1 from iteration 11). Read `src/video/VideoPlayerScreen.tsx`
      in full against the same 5-point checklist iteration 11 used: no stuck
@@ -237,12 +296,12 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 24/24 suites passing, 165/165 tests passing (up from
-  23/23 suites, 161/161 tests — iteration 12 added a new
-  `__tests__/video/VideoPlayerScreen.test.tsx` suite with 4 tests, that
-  screen's first-ever test coverage; the accessibility follow-up added
-  assertions to 3 existing tests rather than new `it` blocks, so it didn't
-  change the count further).
+- Test status: 24/24 suites passing, 166/166 tests passing (up from
+  24/24 suites, 165/165 tests — iteration 13 added 1 new test, a
+  `RootNavigator` test exercising `FolderErrorScreen`'s retry button for the
+  first time ever; 3 other retry-flow tests had their press-target
+  assertion swapped from `findByTestId` to `findByLabelText` in place,
+  which doesn't add to the count).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -757,25 +816,25 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 13 priority: Phase 1 item 8 (error-state audit) is now done for
-every screen with an async content-loading path that was named across
-iterations 11-12 (`QuizScreen`, `PuzzleScreen`, `ColoringScreen`,
-`VideoPlayerScreen`, `RootNavigator`). Remaining options, in priority order:
-1. **Finish the accessibility-label pass on the remaining retry buttons.**
-   Iteration 12 added `accessibilityLabel`/`accessibilityRole="button"` to
-   only the 3 retry buttons iteration 11's note named
-   (`QuizScreen`/`ColoringGallery`/`ColoringScreen`). A full grep for
-   `testID="[a-z-]*retry"` under `src/` during iteration 12 turned up 4 more
-   that were deliberately left untouched to keep that pass minimal and
-   focused: `src/puzzle/PuzzleGallery.tsx` (`puzzle-gallery-retry`),
-   `src/video/VideoGallery.tsx` (`video-gallery-retry`),
-   `src/navigation/RootNavigator.tsx`'s `FolderErrorScreen`
-   (`folder-resolve-retry`), and this iteration's own new
-   `src/video/VideoPlayerScreen.tsx` (`video-player-retry`). Same one-line
-   fix each (`accessibilityRole="button"` + `accessibilityLabel={t('retry')}`,
-   reusing the existing `retry` i18n key — no new strings needed), same
-   `findByLabelText('Retry')` test-assertion pattern to extend each of their
-   existing retry tests with. Small, well-scoped, real screen-reader value.
+Iteration 14 priority: the accessibility-label pass on every retry button in
+the app is now complete (all 7: `QuizScreen`, `ColoringGallery`,
+`ColoringScreen` from iteration 12; `PuzzleGallery`, `VideoGallery`,
+`RootNavigator`'s `FolderErrorScreen`, and `VideoPlayerScreen` from iteration
+13). Remaining options, in priority order:
+1. **Icon-only-controls accessibility audit (Phase 2 item 3 territory,
+   deferred from iteration 13).** Iteration 13's retry-button pass came in at
+   exactly 4 remaining buttons — at the edge of, not clearly under, the "3 or
+   fewer" quick-pass threshold given in that iteration's brief — so this
+   fast-follow was deliberately deferred rather than bundled in. Audit
+   whether icon-only controls elsewhere in the app (e.g. the home screen's
+   `⚙️` settings icon — `home-settings-icon`, seen in
+   `RootNavigator.test.tsx` — plus any back/close icon buttons on gallery or
+   detail screens) have an `accessibilityLabel`. Grep for `Pressable`/
+   `TouchableOpacity` elements whose only child is an emoji or icon `<Text>`
+   (no adjacent visible text) under `src/`, cross-check each against
+   `accessibilityLabel` presence, add labels + tests using the same
+   `findByLabelText` pattern established across iterations 12-13. Likely a
+   similarly small, well-scoped, real screen-reader win.
 2. **Optional smaller follow-up (unchanged from iteration 10)**: the
    `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
    `HomeScreen.tsx` remain untyped against `RootStackParamList` because
@@ -790,9 +849,9 @@ iterations 11-12 (`QuizScreen`, `PuzzleScreen`, `ColoringScreen`,
    keep each diff minimal and focused.
 3. If the above turn out unfruitful or too large to safely scope in one
    iteration, move toward Phase 2 (accessibility/child-safety) more broadly:
-   the Phase 1 baseline, pure-logic inventory, TODO/lint-smell audit, and now
-   the error-state audit (all 5 async-loading screens) are all substantially
-   covered.
+   the Phase 1 baseline, pure-logic inventory, TODO/lint-smell audit, the
+   error-state audit (all 5 async-loading screens), and now the retry-button
+   accessibility-label pass are all substantially covered.
 (The pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning
 under BLOCKED below is a related but separate test-hygiene item, not itself
 part of the error-state audit.)
@@ -815,9 +874,14 @@ part of the error-state audit.)
   end-to-end, since `expo-video` itself isn't testable under this project's
   Jest setup), and (c) the layout still respects the screen's safe-area
   insets on a real notch/gesture-nav device.
-- No other UI changes this iteration (the accessibility-label addition is
-  invisible on-screen — `accessibilityLabel` only affects screen readers/
-  TalkBack, not visual layout).
+- No other UI changes iteration 12 introduced (the accessibility-label
+  addition is invisible on-screen — `accessibilityLabel` only affects screen
+  readers/TalkBack, not visual layout).
+- Iteration 13's accessibility-label additions to `PuzzleGallery`,
+  `VideoGallery`, `RootNavigator`'s `FolderErrorScreen`, and
+  `VideoPlayerScreen`'s retry buttons are likewise invisible on-screen — no
+  visual review needed for this iteration's changes specifically. No new
+  UI, no new screens.
 
 ## Documentation or Implementation Mismatches
 None found that affect correctness. Notes:
