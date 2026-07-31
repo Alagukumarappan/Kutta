@@ -1,8 +1,77 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 22
-- Latest completed improvement (iteration 22, four commits): a
+- Phase: 3 (delight/polish), Iteration: 23
+- Latest completed improvement (iteration 23, one commit): a fresh, honest
+  re-check of both options this iteration's brief suggested, per the brief's
+  instruction not to manufacture a fake gap:
+  1. **HomeScreen's four feature cards** — checked `src/home/HomeScreen.tsx`'s
+     `card`/`cardEmoji`/`cardLabel` styles directly: each card renders a 52px
+     emoji plus a bold `cardLabel` text, with `padding: spacing.md` and no
+     fixed/small height at all, laid out in a `space-between` row. Comfortably
+     far above the ~48x48 guideline — confirmed, no change made, matching the
+     brief's own prediction that this was the lower-priority, unlikely-to-need-
+     fixing check.
+  2. **Pure-Logic Module Inventory re-audit** — read the full table (below)
+     and, for each module, checked its *current* test file against the
+     listed "possible future edge cases" rather than trusting the table's own
+     stale wording:
+     - `quizSession.ts`, `folderMigration.ts`, `folderPathDisplay.ts`,
+       `puzzleGrid.ts`: table already says "well covered / no further gaps"
+       and this was re-confirmed true.
+     - `loadQuestions.ts`: the table still lists 4 "possible future edge
+       cases", but grepping `__tests__/quiz/loadQuestions.test.ts` showed 3
+       of the 4 are already covered (duplicate option IDs, `minAge >
+       maxAge`, neither `text` nor `image`) — the table itself was stale.
+       Only "option `text` present but missing one language key" remains
+       genuinely untested, a smaller/narrower gap than found elsewhere.
+     - `profileStore.ts`: the listed "corrupted/non-JSON stored value"
+       gap is real and untested, but the function's own `try { JSON.parse }
+       catch { return null }` is trivially, visibly correct from inspection
+       — lower marginal value than a gap with an actual undocumented sharp
+       edge.
+     - **`src/storage/folderAccess.ts`'s `leafNameOf`** — the genuinely
+       highest-value remaining gap. This pure, exported, one-line-body
+       function had **zero direct test coverage** before this iteration
+       (only indirect coverage via `ensureContentStructure`'s tests, all of
+       which use already-percent-encoded URIs with no trailing slash). Read
+       the implementation
+       (`decodeURIComponent(uri).substring(...lastIndexOf('/') + 1)`) and
+       hand-traced 4 cases the inventory table named:
+       already-decoded/unencoded URI, partially-encoded URI (percent-encoded
+       space), no slash at all, and a trailing slash. The trailing-slash
+       case is a genuinely interesting, previously-undocumented sharp edge:
+       it returns an **empty string**, not the folder name before the
+       slash — because `lastIndexOf('/')` finds the trailing slash itself.
+       Not a live bug (grepped every mocked `content://` URI in this file
+       and in `loadQuestions.test.ts` and confirmed none end in a slash), but
+       worth pinning down explicitly as documented, verified behavior rather
+       than an unverified assumption.
+  - Fix: added a new `describe('leafNameOf', ...)` block (4 tests) to
+    `__tests__/storage/folderAccess.test.ts`, importing `leafNameOf`
+    alongside the existing `ensureContentStructure` import. All 4 passed on
+    first run against the unmodified implementation — pure coverage
+    addition, no production code changed, no bug found (the trailing-slash
+    behavior is documented as-is, not "fixed", since it isn't observed to
+    cause any real failure).
+  - Verified `npx tsc --noEmit` clean, full suite **26/26 suites, 222/222
+    tests** (218 baseline + 4 new; no existing test modified, skipped, or
+    renamed — only the import line changed in the touched file).
+  - A code-review subagent independently reviewed the diff: hand-traced all
+    4 new assertions against the real `decodeURIComponent`/`lastIndexOf`/
+    `substring` logic and confirmed each expected value is correct (not a
+    typo), confirmed the tests are non-tautological (would fail if the `+1`
+    off-by-one were dropped, or if `decodeURIComponent` were skipped),
+    confirmed no existing test was modified/weakened/skipped/renamed
+    (`git diff --stat`: one file, 33 insertions/1 deletion, only an import
+    line touched besides the new block), confirmed no hard-limit violations
+    (no new deps, no `ts-ignore`/unsafe casts, no production/native file
+    touched), and independently re-verified the trailing-slash code
+    comment's claim by grepping both test files for any `content://` literal
+    ending in a slash (found none). Approved with no required or optional
+    changes.
+  - Commit: `<see git log — loop: add direct leafNameOf edge-case coverage>`.
+- Previous iteration's completed improvement (iteration 22, four commits): a
   touch-target-sizing sweep across the screens iteration 21's `Next` note
   flagged as unswept (coloring/puzzle/video/settings galleries) plus the
   still-open, deferred `AgePicker.tsx` check from iteration 16.
@@ -698,7 +767,12 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 25/25 suites passing, 178/178 tests passing (up from
+- Test status: **26/26 suites passing, 222/222 tests passing** (up from
+  26/26 suites, 218/218 tests — iteration 23 added 4 new tests, all in a new
+  `describe('leafNameOf', ...)` block in
+  `__tests__/storage/folderAccess.test.ts`; no existing test
+  modified/removed/skipped).
+- Previous test status: 25/25 suites passing, 178/178 tests passing (up from
   24/24 suites, 169/169 tests — iteration 16 added 1 new suite,
   `__tests__/coloring/palette.test.ts` with 8 tests, plus 1 new test to
   `ColoringScreen.test.tsx` covering palette-swatch `hitSlop`).
@@ -1488,10 +1562,10 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/coloring/palette.ts` | Static color palette data (`display`/`fill`/`nameKey` per entry) | indirectly covered via `__tests__/coloring/ColoringScreen.test.tsx`'s palette-label tests (iteration 15) | could still add a smoke test asserting no duplicate `fill` values, valid RGBA ranges, and that every `nameKey` resolves to a non-empty string in both languages |
 | `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (34 tests as of iteration 6) — now also covers `groupPiecesIntoRows`'s ragged-final-row and shorter-than-`cols` cases | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. No further known gaps in this module as of iteration 6. |
 | `src/quiz/filterQuestions.ts` | Age-range filter | `__tests__/quiz/filterQuestions.test.ts` | already well covered (in-range, boundary-inclusive, empty-result) |
-| `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | duplicate option IDs (partially covered per `isValidQuestion`'s Set-size check — verify test exists); `minAge > maxAge` rejection; question with neither `text` nor `image`; option `text` present but missing one language key |
+| `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | re-audited iteration 23: duplicate option IDs, `minAge > maxAge` rejection, and neither-`text`-nor-`image` are all now actually covered (this row was stale) — only "option `text` present but missing one language key" remains genuinely untested |
 | `src/quiz/quizSession.ts` | Session building (shuffle + slice to 20), score/finish state machine | `__tests__/quiz/quizSession.test.ts` (10 tests as of iteration 3) — now covers fewer-than-20-eligible, 0-eligible, already-finished no-op, and normal score/advance paths | well covered now; no further gaps identified in this module |
 | `src/quiz/shuffle.ts` | Fisher-Yates shuffle | `__tests__/quiz/shuffle.test.ts` | empty array, single-element array, custom deterministic `rng` producing a known permutation |
-| `src/storage/folderAccess.ts` | SAF folder helpers: `leafNameOf`, `findChildUri`, `ensureContentStructure` | `__tests__/storage/folderAccess.test.ts` | `leafNameOf` with unencoded/partially-encoded URI, trailing slash, no slash at all |
+| `src/storage/folderAccess.ts` | SAF folder helpers: `leafNameOf`, `findChildUri`, `ensureContentStructure` | `__tests__/storage/folderAccess.test.ts` (10 tests as of iteration 23) — now includes a dedicated `describe('leafNameOf', ...)` block covering unencoded/partially-encoded URIs, no-slash input, and the trailing-slash case (documented: returns `''`, not the segment before it) | well covered now; no further gaps identified in this module |
 | `src/storage/folderMigration.ts` | Copy+verify+delete folder migration, `isSameOrNestedWithin` same/nested detection | `__tests__/storage/folderMigration.test.ts` (10 tests as of iteration 4) — covers same-folder, real nesting both directions, the `primary:` volume-root boundary, and (as of iteration 4) the sibling-prefix-name non-nested case | well covered now; no further gaps identified in this module |
 | `src/storage/folderPathDisplay.ts` | SAF URI → human-readable path | `__tests__/storage/folderPathDisplay.test.ts` (7 tests, added iteration 2) — covers primary/non-primary volumes, malformed encoding, missing `/tree/` marker, empty path after volume, fully empty input, doubled-slash collapsing | well covered now; could add a Windows-style/UNC-ish edge case if one is ever reported, but not a known real-world SAF shape |
 | `src/storage/profileStore.ts` | AsyncStorage get/save profile with JSON parse guard | `__tests__/storage/profileStore.test.ts` | corrupted/non-JSON stored value (should return `null`, not throw) — verify covered |
@@ -1528,26 +1602,54 @@ language-pill/folder-button styles separately from `SettingsScreen.tsx`,
 NOT a shared style object — worth remembering for any future screen-parity
 assumption) and fixed to match.
 
-Iteration 23 priority: **no single obvious unclaimed Phase 2/3 touch-target
-gap remains queued** after iteration 22's sweep. Suggested approach:
-- The code-review subagent's still-outstanding real-device verification
-  items (the quiz completion screen's button-row height on a Galaxy S22,
-  see Visual Review Required) remain the most concrete lead, but are
-  verification tasks this loop cannot perform (no real device access) —
-  do not attempt to "fix" them speculatively without new evidence of an
-  actual problem.
-- Continue the Pure-Logic Module Inventory's remaining edge-case gaps (see
-  that table above) if no further UI-polish gap turns up on inspection —
-  this is likely the best-value next area now that the touch-target sweep
-  is complete.
-- If a fresh UI-polish sweep is still wanted, `HomeScreen.tsx`'s four
-  feature cards were not explicitly checked this iteration — worth a quick
-  size check (though they already render `t(card.labelKey)` as visible
-  text, so they're less likely to be as undersized as the icon/text-only
-  controls found this iteration).
-- Before starting, grep `QuizScreen.tsx`/`QuestionRenderer.tsx` and this
-  file's Technical Decisions once more to confirm no Phase 3/4 item was
-  missed.
+Iteration 23 closed out both items its own brief suggested checking:
+`HomeScreen.tsx`'s four feature cards are confirmed comfortably oversized
+(52px emoji + bold label + padding, no fix needed), and the Pure-Logic
+Module Inventory was re-audited fresh against each module's *current* test
+file rather than the table's own (partly stale) wording — closing
+`leafNameOf`'s zero-direct-coverage gap and correcting the table's
+`loadQuestions.ts` row, which had claimed 3 gaps that were already closed in
+earlier iterations. It should not be re-treaded without new evidence.
+
+**Iteration 23's honest finding for iteration 24 to act on**: the Pure-Logic
+Module Inventory is now, for the first time, essentially fully closed except
+for two small, genuinely low-value remaining items (do not force either into
+a full iteration on their own without checking for something better first):
+- `src/quiz/loadQuestions.ts`: "option `text` present but missing one
+  language key" (e.g. `{ en: 'Cat' }` with no `de`) is still untested,
+  though `isBilingualText`'s existing logic already correctly rejects it
+  (the whole option — and therefore the whole question — is dropped by
+  `isValidOption`/`isValidQuestion`, verified by inspection, just not by a
+  dedicated test).
+- `src/storage/profileStore.ts`: "corrupted/non-JSON stored value" is still
+  untested, though the function's own `try { JSON.parse } catch { return
+  null }` is trivially correct by inspection.
+
+Given both remaining pure-logic gaps are now small and low-marginal-value,
+iteration 24 should **switch focus to the ORIGINAL SPEC's Phase 4 items**
+per this iteration's brief's fallback ordering:
+1. **Phase 4 item 1 (home card press animations)** is the best-scoped next
+   pick — a brief `Animated`/`Pressable` press-state scale/opacity pulse on
+   `HomeScreen.tsx`'s 4 cards (`src/home/HomeScreen.tsx`, the `Pressable`
+   wrapping each `card` style, ~testIDs `home-card-*`). No new dependency
+   needed (RN's built-in `Animated` API, already used for the quiz
+   correct-answer celebration since iteration 17 — follow that same
+   pattern: `useRef(new Animated.Value(...)).current`,
+   `Animated.spring`/`timing` on `onPressIn`/`onPressOut`, cleanup via
+   `.stop()` in a `useEffect`/unmount cleanup if a `useEffect`-driven timing
+   is used, must not block/delay `onPress`'s navigation). Keep it purely
+   visual/instant-feeling (scale down slightly on press-in, back on
+   press-out) — do NOT gate navigation on animation completion.
+2. **Phase 4 item 3/4 (color palette exhaustiveness)** — verify the
+   current 12-color `PALETTE` in `src/coloring/palette.ts` against the
+   spec's exhaustive category list (basic/light/dark/warm/cool/
+   skin-tone-friendly/neutral) rather than assuming 12 is enough; only
+   add colors if a category is genuinely missing (remember any new color
+   needs both an EN+DE `nameKey` per iteration 15's established pattern).
+3. **Phase 4 item 5 (optional child profile picture)** — bigger feature;
+   only start if a safe first slice can be fully scoped AND completed in
+   one iteration, otherwise just write a scoped plan into this Next section
+   for a future iteration rather than half-building it.
 
 Still-open, deliberately deferred real-device check (unchanged from
 iteration 19, still cannot be verified by this loop — see Visual Review
