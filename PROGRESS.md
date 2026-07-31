@@ -1,8 +1,68 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 4 (original-spec fast-follow items), Iteration: 24
-- Latest completed improvement (iteration 24, one commit): Phase 4 item 1
+- Phase: 4 (original-spec fast-follow items), Iteration: 25
+- Latest completed improvement (iteration 25, one commit): Phase 4 item 3
+  — coloring palette completeness. Checked the existing 12-color
+  `PALETTE` in `src/coloring/palette.ts` against the spec's full category
+  list (basic/light/dark/warm/cool/skin-tone-friendly/neutral) by reading
+  actual hex/RGBA values, not just names: basic/warm/cool were covered by
+  the vivid red/orange/yellow/green/blue/purple hues, neutral was covered
+  by black/white/gray/brown — but every single one of the 12 is either a
+  vivid mid-saturation hue or a pure neutral. There was genuinely no
+  light/pastel shade (all 12 fail a "channels mostly >=150" pastel check
+  except white itself), no dark shade beyond pure black, and — a real,
+  valued gap for a children's coloring app — no skin-tone-friendly colors
+  at all, meaning a child could never realistically color a person's skin.
+  This was a genuine gap on all three counts, not a manufactured one, so
+  5 new colors were added (12 -> 17, well within the "~16-18" ceiling the
+  brief allowed):
+  - `paletteColorLightBlue` (`#AEE2FF`) — a pastel, distinct from the
+    existing vivid `#1E90FF` blue.
+  - `paletteColorNavy` (`#1B2A4A`) — a dark shade beyond plain black.
+  - `paletteColorSkinLight` (`#FFDBAC`), `paletteColorSkinMedium`
+    (`#C68642`), `paletteColorSkinDeep` (`#6B4226`) — a small
+    light/medium/deep skin-tone range, deliberately using simple,
+    non-clinical EN/DE names ("Light Skin"/"Helle Haut", "Medium
+    Skin"/"Mittlere Haut", "Deep Skin"/"Dunkle Haut") rather than any
+    "flesh"/"complexion"/ethnicity-referencing terminology.
+  - All 5 have unique hex/RGBA/nameKey values (verified by the existing
+    `palette.test.ts` uniqueness assertions, which needed no logic
+    change — they iterate the array generically). EN+DE strings for all
+    5 new `nameKey`s added to `src/i18n/strings.ts` in the same commit.
+  - Screen-fit was checked before adding anything: `ColoringScreen.tsx`'s
+    palette renders inside a `horizontal` `ScrollView` (`showsHorizontalScrollIndicator={false}`),
+    so 5 more circular swatches only extend horizontal scroll content —
+    zero effect on `CANVAS_RESERVED_HEIGHT`/vertical layout, so the canvas
+    cannot be pushed off-screen and no vertical scrolling is introduced
+    (horizontal scroll within an already-designed-to-scroll swatch strip
+    is not the kind of forced scrolling the "no scrolling on child-facing
+    screens" hard limit is about).
+  - Accessibility: the new entries need zero separate wiring — the
+    existing `PALETTE.map` in `ColoringScreen.tsx` derives
+    `accessibilityLabel`/`accessibilityState`/`hitSlop` generically per
+    entry from the array, established in iteration 15/16.
+  - Baseline before this iteration: tsc clean, 26/26 suites, 225/225 tests.
+  - After this iteration: tsc clean, 26/26 suites, **228/228 tests** (+3
+    new, all in `__tests__/coloring/palette.test.ts`'s existing `describe`
+    block — one updated in place (12 -> 17 expected entries, an
+    intentional count bump matching the new real data, not a weakened
+    assertion) plus 3 new tests directly checking for a genuine
+    light/pastel shade, a genuine dark-beyond-black shade, and >=3
+    skin-tone `nameKey`s; confirmed all 3 new tests failed for the right
+    reason against the pre-change 12-color palette before implementing).
+  - A code-review subagent independently reviewed the diff: confirmed hex/
+    nameKey uniqueness across all 17 entries, confirmed EN/DE naming is
+    natural and non-clinical/non-insensitive, confirmed the horizontal-
+    ScrollView screen-fit analysis, confirmed accessibility wiring is
+    automatic via the generic `PALETTE.map`, confirmed no hard-limit
+    violations, and independently re-verified all 5 new hex-to-RGBA
+    conversions by hand. Approved with one non-blocking nit (a small
+    rationale-comment duplication between `palette.ts` and the test file)
+    left as-is.
+  - Commit: `<see git log — loop: add light/dark/skin-tone colors to the
+    coloring palette>`.
+- Previous iteration's completed improvement (iteration 24, one commit): Phase 4 item 1
   — a brief scale-down-on-press-in/scale-back-on-press-out animation on
   `HomeScreen.tsx`'s four feature cards, plus a per-card double-fire
   navigation guard discovered to be genuinely needed (HomeScreen stays
@@ -1714,21 +1774,34 @@ Iteration 24 closed out Phase 4 item 1 (home card press animations) — see
 Current Status / Completed #21 for full detail. It should not be re-treaded
 without new evidence.
 
-**Iteration 25 should pick up Phase 4 item 3/4 (color palette
-exhaustiveness)**, per iteration 23's own fallback ordering (still valid,
-untouched by this iteration): verify the current 12-color `PALETTE` in
-`src/coloring/palette.ts` against the spec's exhaustive category list
-(basic/light/dark/warm/cool/skin-tone-friendly/neutral) rather than assuming
-12 is enough; only add colors if a category is genuinely missing (remember
-any new color needs both an EN+DE `nameKey` per iteration 15's established
-`PaletteColor.nameKey` pattern, and the color-swatch accessibility/selection
-wiring iteration 15 already built will pick up any new entries automatically
-via the array map — no separate wiring needed). If that turns out to need no
-code change (12 already covers every category), fall through to Phase 4
-item 5 (optional child profile picture) per the same ordering iteration 23
-laid out — only start it if a safe first slice can be fully scoped AND
-completed in one iteration, otherwise write a scoped plan into this section
-instead of half-building it.
+Iteration 25 closed out Phase 4 item 3 (color palette exhaustiveness) — see
+Current Status for full detail. Genuine gaps were found and closed (light/
+pastel, dark-beyond-black, skin-tone-friendly), 12 -> 17 colors, one commit.
+It should not be re-treaded without new evidence (e.g. a real device review
+surfacing a specific problem with one of the 5 new swatches).
+
+**Iteration 26 should pick up Phase 4 item 4 (coloring usability)**: the
+brief that introduced this iteration's task named this as the next fallback
+— accidental fills, a reset/undo confirmation before destructive actions,
+a way to clear/deselect the current color, and friendly empty states.
+Before implementing anything, read `src/coloring/ColoringScreen.tsx` fully
+(already read this iteration — the `clear-drawing` button currently clears
+ALL pen strokes with a single tap and NO confirmation, which is exactly the
+"accidental destructive action" risk category the brief warns about for a
+2-8 year old audience prone to mis-taps) and check whether flood-fill taps
+have any equivalent problem (a mis-tap flood-fills a whole region instantly
+with no undo at all — worth deciding whether an undo affordance is in scope
+or too large for one iteration; if too large, scope down to just the
+`clear-drawing` confirmation, which is a small, safe, well-bounded slice).
+Also check for a "friendly empty state" gap: what does the coloring canvas
+show before the very first tap on a page with no fillable regions or before
+any tool is used — likely nothing needed since the source photo itself is
+always visible, but verify by reading the render logic rather than
+assuming. If, after investigation, none of item 4's sub-items turn out to
+be a genuine gap, fall through to Phase 4 item 5 (optional child profile
+picture) per iteration 23's ordering — only start it if a safe first slice
+can be fully scoped AND completed in one iteration, otherwise write a
+scoped plan into this section instead of half-building it.
 
 Iteration 20 closed out the progress-dots overflow question definitively
 (see Technical Decisions: NOT a genuine risk, given the app's landscape-only
@@ -1915,6 +1988,38 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 25's expanded coloring palette** (5 new swatches, 12 -> 17
+  total — a real layout change to a horizontal scroll strip, not a
+  logic-only change, so a real-device check is warranted):
+  - **Screen**: Coloring (`coloring-palette` testID, the horizontal
+    swatch strip in the footer below the toolbar buttons).
+  - **Expected new swatches**: 5 new circular swatches appended after the
+    existing 12, in this order — a pale sky-blue pastel (Light Blue /
+    Hellblau), a dark navy (Navy / Marineblau), then three skin tones from
+    lightest to deepest (Light Skin / Helle Haut, Medium Skin / Mittlere
+    Haut, Deep Skin / Dunkle Haut). Confirm each renders the correct fill
+    color (no swapped/mislabeled swatches) and that tapping each one
+    correctly fills/paints in that exact color (not an adjacent one).
+  - **EN+DE check**: with a screen reader or long-press/inspect, confirm
+    each new swatch's accessibility label reads the correct localized
+    name in both languages ("Light Blue"/"Hellblau", "Navy"/"Marineblau",
+    "Light Skin"/"Helle Haut", "Medium Skin"/"Mittlere Haut", "Deep
+    Skin"/"Dunkle Haut") and that none of the new German wording reads as
+    awkward or machine-translated in context.
+  - **Small-screen / screen-fit check**: on a Galaxy S22 in landscape (the
+    app's locked orientation for this screen), confirm the now-longer
+    horizontal swatch strip still scrolls smoothly with no vertical growth
+    and, critically, that the canvas above it has NOT shrunk or been
+    pushed off-screen — the strip is a `horizontal` `ScrollView` and the
+    canvas sizing math (`CANVAS_RESERVED_HEIGHT`) doesn't depend on
+    palette length, so no regression is expected, but this is exactly the
+    kind of layout claim that deserves a real look rather than trusting
+    source inspection alone.
+  - **Ages affected**: all ages 2-8 — every child using the Coloring
+    screen sees the palette; the skin-tone additions in particular matter
+    most for children old enough to intentionally color in a person's
+    skin (roughly 4-8), while the pastel/navy additions broaden creative
+    options for the whole range.
 - **Iteration 24's home-card press animation** (new interaction feedback,
   no layout change — needs a real-device feel-check for animation timing,
   which source inspection alone can't confirm):

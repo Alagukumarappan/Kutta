@@ -27,4 +27,18 @@ export const PALETTE: PaletteColor[] = [
   { display: '#FFFFFF', fill: [255, 255, 255, 255], nameKey: 'paletteColorWhite' }, // white
   { display: '#009688', fill: [0, 150, 136, 255], nameKey: 'paletteColorTeal' }, // teal
   { display: '#808080', fill: [128, 128, 128, 255], nameKey: 'paletteColorGray' }, // gray
+
+  // --- Added iteration 25: closing genuine gaps against the spec's
+  // exhaustive category list (basic/light/dark/warm/cool/skin-tone-
+  // friendly/neutral). Basic/warm/cool/neutral were already covered by the
+  // 12 colors above; light, dark, and skin-tone-friendly were not — every
+  // one of the original 12 is either a vivid mid-saturation hue or a pure
+  // black/white/gray neutral, with no pastel, no dark-beyond-black, and no
+  // skin tone at all. Kept deliberately small (5 new colors, not a full
+  // light/dark ramp of every hue) to avoid an unwieldy swatch row.
+  { display: '#AEE2FF', fill: [174, 226, 255, 255], nameKey: 'paletteColorLightBlue' }, // light blue (pastel)
+  { display: '#1B2A4A', fill: [27, 42, 74, 255], nameKey: 'paletteColorNavy' }, // navy (dark)
+  { display: '#FFDBAC', fill: [255, 219, 172, 255], nameKey: 'paletteColorSkinLight' }, // light skin tone
+  { display: '#C68642', fill: [198, 134, 66, 255], nameKey: 'paletteColorSkinMedium' }, // medium skin tone
+  { display: '#6B4226', fill: [107, 66, 38, 255], nameKey: 'paletteColorSkinDeep' }, // deep skin tone
 ];
