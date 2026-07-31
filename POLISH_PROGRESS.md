@@ -450,6 +450,27 @@ before committing.
 call), then using fake timers to confirm the guard re-arms after 800ms for
 a later legitimate start (534 total tests passing, up from 533).
 
+### Iteration 21 — Style the app's one bare/unstyled error screen
+**Screen:** Global (FolderErrorScreen, in RootNavigator.tsx).
+**Problem:** Fresh-eyes visual-consistency audit. `FolderErrorScreen` —
+shown whenever the SAF content folders can't be resolved (a revoked
+permission, a deleted folder, an unmounted SD card; a real, reachable path,
+not a hypothetical edge case) — had NO styling at all: a bare `<Text>` and
+an unstyled `<Pressable>`, no design-system tokens, no `StyleSheet`. Every
+other error state in the app (VideoPlayerScreen, ColoringGallery,
+PuzzleGallery, VideoGallery) had already converged on the same
+`RaisedCard`+`RaisedPrimaryButton` shape — this was the one screen left
+behind, and likely the single most visually "un-premium" moment reachable
+in the app (raw black-on-white default RN text, no minimum touch target).
+**Fix:** Restyled to match the established error-card pattern, using the
+calmer `colors.parent.*` palette (the same one SettingsScreen uses) since
+this is a parent-facing global recovery screen, not tied to any single
+child activity, plus `useSafeAreaInsets()` padding matching other screens'
+convention.
+**Tests:** New regression test confirming the screen now has a real
+background color instead of the old bare, unstyled container (535 total
+tests passing, up from 534).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -514,8 +535,17 @@ a later legitimate start (534 total tests passing, up from 533).
 - Coloring (tool-mode buttons now expose accessibilityState)
 - Onboarding (Save button double-tap protection)
 - Tic-Tac-Toe setup (Start button double-tap protection)
+- Global FolderErrorScreen (restyled from bare/unstyled to match every
+  other error state's design-system pattern)
 
 ## Remaining polish opportunities (not yet done)
+- `QuizScreen.tsx`'s loading/error/empty states still use the OLD
+  `theme/tokens.ts` palette with a plain `Pressable`+text retry button —
+  self-documented in the file's own header comment as an intentional-but-
+  deferred gap, unlike Coloring/Video/Puzzle galleries and
+  VideoPlayerScreen, which all converged on `RaisedCard`+
+  `RaisedPrimaryButton`/`RaisedSecondaryButton`. Worth scoping to just the
+  error state (not also the empty state) to keep it single-purpose.
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
   imported anywhere in the app. Its i18n key `puzzlePickPieces` is likewise
   unused. Not a fix candidate (nothing to improve on unreachable code); a

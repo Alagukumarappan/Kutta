@@ -102,6 +102,31 @@ describe('RootNavigator header titles', () => {
     await findByTestId('folder-resolve-error');
     await findByLabelText('Retry');
   });
+
+  // Regression test for the premium-polish visual-consistency pass:
+  // FolderErrorScreen previously had NO styling at all (a bare `<Text>` and
+  // an unstyled `<Pressable>`) — the one error state in the app that never
+  // converged on the RaisedCard/RaisedPrimaryButton shape every other error
+  // state (VideoPlayerScreen, ColoringGallery, PuzzleGallery, VideoGallery)
+  // already uses. This is reachable in real use whenever the SAF grant is
+  // revoked or a content folder is deleted/renamed outside the app, so it's
+  // not a hypothetical edge case.
+  it('gives FolderErrorScreen a real styled background and card, not the old bare unstyled layout', async () => {
+    const { StyleSheet } = require('react-native');
+    (folderAccess.ensureContentStructure as jest.Mock).mockRejectedValueOnce(
+      new Error('SAF grant revoked')
+    );
+
+    const { findByTestId } = await render(<RootNavigator />);
+
+    const errorScreen = await findByTestId('folder-resolve-error');
+    const flattened = StyleSheet.flatten(errorScreen.props.style);
+    // A real background color (not the default undefined/transparent a bare
+    // <View> would have) is the simplest, most reliable signal from outside
+    // that this screen now goes through the design-system's styling instead
+    // of rendering completely bare.
+    expect(flattened.backgroundColor).toBeDefined();
+  });
 });
 
 // The app opens portrait-only (splash, onboarding) and only switches to

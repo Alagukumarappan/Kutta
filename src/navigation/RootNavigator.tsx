@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,6 +9,7 @@ import { findChildUri, ensureContentStructure } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 import type { StringKey } from '../i18n/strings';
+import { colors, spacing, typography, RaisedCard, RaisedPrimaryButton } from '../design-system';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsScreen } from '../settings/SettingsScreen';
@@ -113,22 +115,66 @@ async function resolveSubfolderUris(rootUri: string): Promise<SubfolderUris> {
   return { pictures, videos, coloring, quiz };
 }
 
+// This is the app's one truly global error screen — reached whenever the
+// SAF content folders can't be resolved (a revoked permission, a deleted
+// folder, an unmounted SD card), not tied to any single activity. Styled to
+// match every other error state already converged on this exact shape
+// (RaisedCard + RaisedPrimaryButton — see VideoPlayerScreen/ColoringGallery/
+// PuzzleGallery/VideoGallery's own error cards), using the calmer
+// `colors.parent` palette (the same one SettingsScreen uses) since this is a
+// parent-facing recovery moment, not a child-facing activity.
 function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   return (
-    <View testID="folder-resolve-error">
-      <Text>{t('folderResolveError')}</Text>
-      <Pressable
-        testID="folder-resolve-retry"
-        onPress={onRetry}
-        accessibilityRole="button"
-        accessibilityLabel={t('retry')}
-      >
-        <Text>{t('retry')}</Text>
-      </Pressable>
+    <View
+      testID="folder-resolve-error"
+      style={[
+        styles.centered,
+        { paddingLeft: spacing.md + insets.left, paddingRight: spacing.md + insets.right, paddingTop: spacing.md + insets.top, paddingBottom: spacing.md + insets.bottom },
+      ]}
+    >
+      <RaisedCard color={colors.parent.surface} borderColor={colors.parent.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
+        <View style={styles.errorCardInner}>
+          <Text style={styles.errorTitle}>{t('folderResolveError')}</Text>
+          <RaisedPrimaryButton
+            testID="folder-resolve-retry"
+            label={t('retry')}
+            onPress={onRetry}
+            color={colors.parent.accent}
+            textColor={colors.white}
+            accessibilityLabel={t('retry')}
+          />
+        </View>
+      </RaisedCard>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.parent.background,
+  },
+  errorCardOuter: {
+    width: '100%',
+    maxWidth: 420,
+  },
+  errorCardInner: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: colors.parent.ink,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+});
 
 function AppStack({
   profile,
