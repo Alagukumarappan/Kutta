@@ -117,18 +117,11 @@ describe('PuzzleScreen', () => {
     expect(after[3]).toBe(before[3]);
   });
 
-  it('shows the completion indicator once the pieces are restored to the correct order', async () => {
-    const utils = await renderPuzzleScreen();
-    await startFourPiecePuzzle(utils);
-    const { getByTestId, queryByTestId } = utils;
-
-    // Sanity: shufflePieceOrder guarantees a non-identity order for >1 piece, so the
-    // puzzle must not already read as complete.
-    expect(queryByTestId('puzzle-complete')).toBeNull();
-
-    // Selection-sort the current order back to identity (0,1,2,3) by tapping pairs of
-    // slots — this exercises the real swap logic and the real completion check, with no
-    // dependency on the shuffle's random outcome.
+  // Selection-sorts the currently rendered order back to identity (0,1,2,3)
+  // by tapping pairs of slots — exercises the real swap logic and the real
+  // completion check, with no dependency on the shuffle's random outcome.
+  async function solveFourPiecePuzzle(utils: Awaited<ReturnType<typeof renderPuzzleScreen>>) {
+    const { getByTestId } = utils;
     for (let target = 0; target < 4; target++) {
       const order = readOrder(getByTestId);
       const currentIndex = order.indexOf(target);
@@ -137,9 +130,111 @@ describe('PuzzleScreen', () => {
         await fireEvent.press(getByTestId(`puzzle-slot-${currentIndex}`));
       }
     }
+  }
+
+  it('shows a completion Modal overlay (message + Retry + Next) once the pieces are restored to the correct order', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+    const { getByTestId, queryByTestId, findByTestId, getByText } = utils;
+
+    // Sanity: shufflePieceOrder guarantees a non-identity order for >1 piece, so the
+    // puzzle must not already read as complete.
+    expect(queryByTestId('puzzle-complete')).toBeNull();
+    expect(queryByTestId('puzzle-retry')).toBeNull();
+    expect(queryByTestId('puzzle-next')).toBeNull();
+
+    await solveFourPiecePuzzle(utils);
 
     expect(readOrder(getByTestId)).toEqual([0, 1, 2, 3]);
     expect(getByTestId('puzzle-complete')).toBeTruthy();
+    expect(getByText('Great job!')).toBeTruthy();
+    expect(await findByTestId('puzzle-retry')).toBeTruthy();
+    expect(await findByTestId('puzzle-next')).toBeTruthy();
+  });
+
+  describe('completion Modal Retry/Next', () => {
+    it('Retry re-shuffles the current puzzle (a genuinely fresh, non-identity order) and closes the modal', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId, queryByTestId } = utils;
+
+      await solveFourPiecePuzzle(utils);
+      expect(readOrder(getByTestId)).toEqual([0, 1, 2, 3]);
+      expect(getByTestId('puzzle-complete')).toBeTruthy();
+
+      await fireEvent.press(getByTestId('puzzle-retry'));
+
+      // shufflePieceOrder guarantees a non-identity permutation for >1 piece,
+      // so a genuine fresh reshuffle can never leave the board still solved —
+      // this is the same "prove it's really fresh, not just re-rendered"
+      // technique the quiz's Play Again test uses, applied here via the
+      // guaranteed-non-identity property instead of a controlled RNG.
+      expect(readOrder(getByTestId)).not.toEqual([0, 1, 2, 3]);
+      expect(queryByTestId('puzzle-complete')).toBeNull();
+      expect(queryByTestId('puzzle-retry')).toBeNull();
+    });
+
+    it('guards Retry against a rapid double-press, only reshuffling once', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      await solveFourPiecePuzzle(utils);
+
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      const retryButton = getByTestId('puzzle-retry');
+
+      // Press the SAME captured element twice without re-querying — the
+      // "stale double-tap" shape this codebase's other double-fire guards
+      // (e.g. QuizScreen's Play Again) are tested with. shufflePieceOrder(4)
+      // consumes exactly 3 Math.random() calls per shuffle (Fisher-Yates over
+      // 4 items) — a second, unguarded shuffle would consume 3 more.
+      await fireEvent.press(retryButton);
+      await fireEvent.press(retryButton);
+
+      expect(randomSpy.mock.calls.length).toBe(3);
+      randomSpy.mockRestore();
+    });
+
+    it('Next calls the provided onNext callback', async () => {
+      const onNext = jest.fn();
+      const utils = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleScreen imageUri={IMAGE_URI} onNext={onNext} />
+        </LanguageProvider>
+      );
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      await fireEvent.press(utils.getByTestId('puzzle-next'));
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('guards Next against a rapid double-press, only calling onNext once', async () => {
+      const onNext = jest.fn();
+      const utils = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleScreen imageUri={IMAGE_URI} onNext={onNext} />
+        </LanguageProvider>
+      );
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      const nextButton = utils.getByTestId('puzzle-next');
+      await fireEvent.press(nextButton);
+      await fireEvent.press(nextButton);
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not crash when Next is pressed without an onNext prop (defensive no-op default)', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      expect(() => fireEvent.press(utils.getByTestId('puzzle-next'))).not.toThrow();
+    });
   });
 
   describe('piece-snap celebratory pop', () => {

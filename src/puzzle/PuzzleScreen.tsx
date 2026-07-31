@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Animated,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -88,15 +89,32 @@ function PuzzlePiece({
   );
 }
 
-// Pop-in entrance for the puzzle-COMPLETE banner — the exact recipe already
-// established for the quiz's feedback card (QuestionRenderer.tsx's
-// cardScaleAnim/cardOpacityAnim): starts slightly shrunk/invisible (0.85/0)
-// and springs to rest (1/1), speed 20 / bounciness 6 for the scale, a 220ms
-// timing for the opacity. This component only exists in the tree while
-// `isSolved` is true (see the `{isSolved && <CompletionBanner ... />}` call
-// site below), so a plain mount-effect is enough to replay the pop-in every
-// time the banner (re)appears — no separate show/hide toggle needed.
-function CompletionBanner({ text }: { text: string }) {
+// Completion overlay — mirrors the quiz's feedback Modal (QuestionRenderer's
+// `hasAnswered && <Modal visible transparent animationType="fade">...`
+// backdrop + centered feedbackCard pattern) instead of the old inline
+// completion banner: a dark, non-interactive backdrop behind a centered
+// white card carrying the message and a Retry/Next button row. Conditionally
+// MOUNTING the Modal only while `isSolved` is true (see the
+// `{isSolved && <CompletionModal ... />}` call site below) is what keeps it
+// out of the query tree entirely before the puzzle is solved — same
+// convention as the quiz's `hasAnswered &&` guard.
+//
+// The card keeps the exact pop-in recipe the old CompletionBanner already
+// had (and the quiz's own feedback card uses): starts slightly
+// shrunk/invisible (0.85/0) and springs to rest (1/1), speed 20/bounciness 6
+// for the scale, a 220ms timing for the opacity. This component only exists
+// in the tree while solved, so a plain mount-effect is enough to replay the
+// pop-in every time it (re)appears — no separate show/hide toggle needed.
+function CompletionModal({
+  text,
+  onRetry,
+  onNext,
+}: {
+  text: string;
+  onRetry: () => void;
+  onNext: () => void;
+}) {
+  const { t } = useLanguage();
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -110,18 +128,59 @@ function CompletionBanner({ text }: { text: string }) {
   }, [scaleAnim, opacityAnim]);
 
   return (
-    <Animated.View
-      testID="puzzle-complete"
-      style={[styles.completeBanner, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
-    >
-      <Text style={styles.completeEmoji}>🎉</Text>
-      <Text style={styles.completeText}>{text}</Text>
-      <Text style={styles.completeEmoji}>🎉</Text>
-    </Animated.View>
+    <Modal visible transparent animationType="fade">
+      <View style={styles.completeBackdrop}>
+        <Animated.View
+          testID="puzzle-complete"
+          style={[styles.completeCard, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
+        >
+          <View style={styles.completeMessageRow}>
+            <Text style={styles.completeEmoji}>🎉</Text>
+            <Text style={styles.completeText}>{text}</Text>
+            <Text style={styles.completeEmoji}>🎉</Text>
+          </View>
+
+          {/* Retry (reshuffles this same puzzle) + Next (goes back to the
+              gallery to pick a different picture) side by side — mirrors the
+              quiz's feedbackButtonGroup/tryAgainButton/nextButtonSmall split. */}
+          <View style={styles.completeButtonGroup}>
+            <Pressable
+              testID="puzzle-retry"
+              onPress={onRetry}
+              style={styles.tryAgainButton}
+              accessibilityRole="button"
+              accessibilityLabel={t('retry')}
+            >
+              <Text style={styles.tryAgainButtonText}>{t('retry')}</Text>
+            </Pressable>
+            <Pressable
+              testID="puzzle-next"
+              onPress={onNext}
+              style={styles.nextButtonSmall}
+              accessibilityRole="button"
+              accessibilityLabel={t('quizNext')}
+            >
+              <Text style={styles.nextButtonText}>{t('quizNext')}</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
-export function PuzzleScreen({ imageUri }: { imageUri: string }) {
+export function PuzzleScreen({
+  imageUri,
+  onNext = () => {},
+}: {
+  imageUri: string;
+  // Optional so existing call sites/tests that don't need to go back to the
+  // gallery (e.g. ones that never reach the solved state) don't have to pass
+  // one. RootNavigator always wires a real `() => navigation.goBack()` in
+  // the running app (see AppStack's puzzle-detail Stack.Screen). Defaults to
+  // a no-op so a stray Next press can never crash instead of navigating.
+  onNext?: () => void;
+}) {
   const { t } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -164,6 +223,30 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   // false -> true transition (a piece actually snapping into place) should
   // trigger the celebratory pop, never the shuffle's own starting layout.
   const prevCorrectRef = useRef<boolean[] | null>(null);
+
+  // The puzzle reads as solved the moment `order` is the identity
+  // permutation — computed here (rather than down near the render return,
+  // where it used to live) so the double-fire guard reset effect right below
+  // can depend on it without breaking the rule that every hook in this
+  // component runs unconditionally on every render, ahead of the early
+  // (piece-count-picker / loading) returns further down.
+  const isSolved = order.length > 0 && order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
+
+  // Double-fire guards for the completion modal's two buttons — same idiom
+  // as QuizScreen's playAgainFiredRef/hasNavigatedHomeRef: a ref survives
+  // across renders and is shared by every closure of this component
+  // instance, so even a second press captured from a stale (pre-close)
+  // render can't slip past it. Both re-arm whenever the puzzle is freshly
+  // (re)solved, so Retry/Next still work the next time the modal appears.
+  const retryFiredRef = useRef(false);
+  const nextFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (isSolved) {
+      retryFiredRef.current = false;
+      nextFiredRef.current = false;
+    }
+  }, [isSolved]);
 
   useEffect(() => {
     if (order.length === 0) {
@@ -243,6 +326,23 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
     setSelectedSlot(null);
   }
 
+  function handleRetryPuzzle() {
+    if (retryFiredRef.current) return;
+    retryFiredRef.current = true;
+    // Reshuffles the SAME puzzle (same pieceCount) using the exact
+    // startPuzzle path that set up the board in the first place — not a new
+    // shuffling approach — which also clears selectedSlot and the
+    // correctness baseline, so the completion modal closes immediately since
+    // shufflePieceOrder guarantees a non-identity (unsolved) order.
+    if (pieceCount) startPuzzle(pieceCount);
+  }
+
+  function handleNextPuzzle() {
+    if (nextFiredRef.current) return;
+    nextFiredRef.current = true;
+    onNext();
+  }
+
   if (!pieceCount) {
     return (
       <ScrollView
@@ -286,7 +386,6 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
 
   const { rows, cols } = computeGridDimensions(pieceCount, isPortrait);
   const rects = computePieceRects(board.width, board.height, rows, cols);
-  const isSolved = order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
 
   return (
     <ScrollView
@@ -346,7 +445,9 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
         </View>
       </View>
 
-      {isSolved && <CompletionBanner text={t('puzzleComplete')} />}
+      {isSolved && (
+        <CompletionModal text={t('puzzleComplete')} onRetry={handleRetryPuzzle} onNext={handleNextPuzzle} />
+      )}
     </ScrollView>
   );
 }
@@ -411,24 +512,39 @@ const styles = StyleSheet.create({
     ...shadow,
     elevation: 6,
   },
-  completeBanner: {
-    // Kept deliberately compact (modest marginTop/paddingVertical, smaller
-    // emoji than a first pass had) so this one-time celebration banner is
-    // less likely to push the board past the available vertical space and
-    // trigger a short scroll right at the moment the child solves it.
-    marginTop: spacing.md,
-    flexDirection: 'row',
+  // Dark, non-interactive backdrop (no onPress — a child must use Retry or
+  // Next, not a tap-outside dismiss) behind the centered completion card —
+  // mirrors QuestionRenderer's feedbackBackdrop exactly.
+  completeBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  // Kept the same sun-toned card the old inline banner used (rather than
+  // switching to the quiz's white/mint-or-coral card) since there's no
+  // correct/incorrect result to color-code here — just one warm "you did
+  // it" card. Still mirrors the quiz's feedbackCard shape: rounded, bordered,
+  // shadowed, capped width so it doesn't stretch edge-to-edge in landscape.
+  completeCard: {
     backgroundColor: colors.sun,
     borderRadius: radii.xl,
     borderWidth: 4,
     borderColor: colors.sunDark,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    maxWidth: 420,
+    width: '100%',
+    padding: spacing.lg,
+    alignItems: 'center',
     ...shadow,
-    elevation: 5,
+    elevation: 8,
+  },
+  completeMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   completeEmoji: {
     fontSize: 28,
@@ -437,5 +553,44 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.ink,
+  },
+  // Retry + Next side by side — mirrors the quiz's feedbackButtonGroup.
+  completeButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.sm,
+  },
+  // Reuses the quiz's exact tryAgainButton/nextButtonSmall/nextButtonText
+  // visual recipe (this codebase duplicates small style objects per screen
+  // rather than sharing a UI-kit module).
+  tryAgainButton: {
+    backgroundColor: colors.white,
+    borderColor: colors.sunDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    ...shadow,
+    elevation: 4,
+  },
+  tryAgainButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.ink,
+  },
+  nextButtonSmall: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coralDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    ...shadow,
+    elevation: 4,
+  },
+  nextButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.white,
   },
 });

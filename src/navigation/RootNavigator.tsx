@@ -181,7 +181,9 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="puzzle-detail" options={{ title: titleFor('puzzleDetailTitle') }}>
-        {({ route }) => <PuzzleScreen imageUri={route.params.imageUri} />}
+        {({ navigation, route }) => (
+          <PuzzleScreen imageUri={route.params.imageUri} onNext={() => navigation.goBack()} />
+        )}
       </Stack.Screen>
       <Stack.Screen name="video" options={{ title: titleFor('homeVideo') }}>
         {({ navigation }) => (
