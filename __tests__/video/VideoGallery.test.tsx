@@ -67,7 +67,14 @@ describe('VideoGallery', () => {
     await findByTestId('video-item-content://tree/videos/party.mp4');
   });
 
-  it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
+  it('gives the retry button a tap target that meets the ~44x44 guideline', async () => {
+    // Previously this was a bare Text-only Pressable that relied on a
+    // hitSlop to reach the guideline (see ColoringGallery's retry button for
+    // that pattern). The redesign replaced it with the shared design-system
+    // RaisedPrimaryButton, whose own `contentStyle` guarantees a real
+    // (non-hitSlop) minHeight of at least `touchTarget.minimum` (48) — so
+    // this asserts that guarantee is still met, wherever in the button's
+    // subtree it now lives, rather than a hitSlop that no longer exists.
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
       new Error('SAF grant revoked')
     );
@@ -79,13 +86,23 @@ describe('VideoGallery', () => {
     );
 
     const retryButton = await findByTestId('video-gallery-retry');
-    // Same unstyled-Text-only, no-adjacent-sibling situation as
-    // ColoringGallery's retry button (see that test for the full rationale).
-    const { top, bottom, left, right } = retryButton.props.hitSlop ?? {};
-    expect(top).toBeGreaterThanOrEqual(12);
-    expect(bottom).toBeGreaterThanOrEqual(12);
-    expect(left).toBeGreaterThanOrEqual(12);
-    expect(right).toBeGreaterThanOrEqual(12);
+
+    const collectMinHeights = (node: any): number[] => {
+      if (!node || typeof node !== 'object') return [];
+      const styles = Array.isArray(node.props?.style)
+        ? node.props.style.flat(Infinity)
+        : node.props?.style
+        ? [node.props.style]
+        : [];
+      const own = styles
+        .filter((s: any) => s && typeof s.minHeight === 'number')
+        .map((s: any) => s.minHeight as number);
+      const children: any[] = Array.isArray(node.children) ? node.children : [];
+      return [...own, ...children.flatMap(collectMinHeights)];
+    };
+
+    const minHeights = collectMinHeights(retryButton.toJSON());
+    expect(minHeights.some((h) => h >= 44)).toBe(true);
   });
 
   it('gives each video row a real minHeight so its tap target meets the ~44px guideline', async () => {
