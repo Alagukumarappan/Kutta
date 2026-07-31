@@ -15,7 +15,7 @@ import {
 import { floodFill } from './floodFill';
 import { base64ToUint8Array } from './base64';
 import { computeResponsiveSquareSize } from '../theme/tokens';
-import { colors, spacing, radii } from '../theme/tokens';
+import { colors, spacing, radii, shadow } from '../theme/tokens';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -63,6 +63,11 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // had.
   const [image, setImage] = useState<SkImage | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  // Bumped on Retry to force a fresh load attempt even when `imageUri`
+  // hasn't changed (e.g. a transient failure) — same pattern used by
+  // QuizScreen and ColoringGallery for this identical class of SAF failure
+  // (grant revoked, folder/file deleted externally, SD card unmounted).
+  const [retryToken, setRetryToken] = useState(0);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's on-screen
@@ -142,7 +147,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     return () => {
       cancelled = true;
     };
-  }, [imageUri]);
+  }, [imageUri, retryToken]);
 
   // Read the raw RGBA pixel buffer out of the decoded image so floodFill has
   // something to operate on. Runs once per loaded image.
@@ -264,8 +269,34 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         {imageLoadFailed ? (
-          <View testID="coloring-image-load-error">
-            <Text style={{ color: colors.ink }}>{t('coloringImageLoadError')}</Text>
+          <View testID="coloring-image-load-error" style={{ alignItems: 'center' }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: 'bold',
+                color: colors.ink,
+                textAlign: 'center',
+                marginBottom: spacing.md,
+              }}
+            >
+              {t('coloringImageLoadError')}
+            </Text>
+            <Pressable
+              testID="coloring-retry"
+              onPress={() => setRetryToken((n) => n + 1)}
+              style={{
+                backgroundColor: colors.coral,
+                borderColor: colors.coralDark,
+                borderWidth: 2,
+                borderRadius: radii.xl,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.xl,
+                ...shadow,
+                elevation: 4,
+              }}
+            >
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.white }}>{t('retry')}</Text>
+            </Pressable>
           </View>
         ) : (
         <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>

@@ -1,8 +1,81 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 10
-- Latest completed improvement (iteration 10, one commit):
+- Phase: 1 (baseline verification + inventory), Iteration: 11
+- Latest completed improvement (iteration 11, one commit):
+  Phase 1 item 8 (error-state audit). Audited all three candidate screens'
+  async content-loading paths (`QuizScreen`, `ColoringScreen`, `PuzzleScreen`)
+  against the 5-point checklist (stuck spinner, unhandled rejection,
+  setState-after-unmount, raw technical error shown to child, racy/double-
+  firing retry). `QuizScreen.tsx` and `PuzzleScreen.tsx` both already had
+  dedicated test files with full error-path coverage (including retry, for
+  `QuizScreen`) and were confirmed clean on inspection (both use a correct
+  `cancelled`-flag guard in their loading effects). `ColoringScreen.tsx` had
+  **zero test coverage of any kind** before this iteration — the real gap.
+  On inspection its photo-load effect already had a correct `cancelled`
+  guard and a correct try/catch showing a friendly localized message
+  (`t('coloringImageLoadError')`, never a raw error) — no stuck spinner, no
+  unhandled rejection, no setState-after-unmount bug. But unlike `QuizScreen`
+  and `ColoringGallery`, which both handle the *identical* failure category
+  (SAF grant revoked / file deleted externally / SD card unmounted) with a
+  `retryToken` state bumped by a Retry button, `ColoringScreen`'s error state
+  was a dead end: no retry button at all, so the child/parent had no way to
+  recover from a transient failure without navigating away and back via the
+  header. This is a genuine, real inconsistency/gap (not a manufactured one)
+  — the exact same recoverable failure mode is handled inconsistently across
+  three near-identical screens in this codebase.
+  - Fix (TDD): wrote `__tests__/coloring/ColoringScreen.test.tsx` (new file,
+    5 tests) first — happy-path load, friendly-error-on-rejection (asserts
+    the raw `Error` message text, e.g. an `ENOENT:` string, never appears in
+    the rendered output), friendly-error-on-null-decode (Skia decode returns
+    null with no exception — a distinct branch from the throw path), a
+    retry-recovers-from-transient-failure test, and a setState-after-unmount
+    regression test (controlled promise resolved after `unmount()`, asserts
+    no "unmounted component" `console.error`). Confirmed the retry test
+    failed for the right reason first (no `coloring-retry` testID existed).
+    Since no Skia mock infrastructure existed anywhere in this repo's test
+    suite before, added a minimal inline `jest.mock('@shopify/react-native-skia')`
+    scoped to exactly what `ColoringScreen`'s load/decode path touches
+    (`Canvas`/`Image`/`Path` as no-op components, `Skia.Data.fromBytes`,
+    `Skia.Image.MakeImageFromEncoded`/`MakeImage`, `ColorType`/`AlphaType`) —
+    it doesn't fake the `cancelled`/retry logic under test, so it can't hide
+    a real regression there.
+  - Then implemented the fix in `src/coloring/ColoringScreen.tsx`: added a
+    `retryToken` state (byte-for-byte the same pattern as `QuizScreen.tsx`
+    and `ColoringGallery.tsx` — same comment style, added to the load
+    effect's dependency array), and a `<Pressable testID="coloring-retry">`
+    button in the `imageLoadFailed` branch styled identically to
+    `QuizScreen`'s retry button (`colors.coral`/`coralDark`, `radii.xl`,
+    `...shadow`, `elevation: 4`). No new dependency, no new i18n strings
+    (`coloringImageLoadError` and `retry` both already existed in
+    `src/i18n/strings.ts` with en/de).
+  - Verified rapid-repeated-retry-tap safety: each effect run captures its
+    own `cancelled` closure; React runs the previous effect's cleanup
+    (setting the old closure's `cancelled = true`) before the next effect
+    starts, so no race or double-fire is possible even if the Retry button
+    is tapped multiple times quickly — same guarantee already relied on by
+    `QuizScreen`/`ColoringGallery`.
+  - Verified: `npx tsc --noEmit` clean, full suite 23/23 suites and
+    161/161 tests passing (156 baseline + 5 new `ColoringScreen` tests). No
+    existing test touched, skipped, or renamed.
+  - A code-review subagent independently reviewed the diff: confirmed the
+    `retryToken` pattern is genuinely consistent with `QuizScreen.tsx` (not
+    subtly different), confirmed the Skia mock doesn't hide bugs in the
+    guard logic under test, confirmed the unmount-regression test targets
+    the specific "unmounted component" warning substring (not vacuously
+    asserting zero `console.error` calls, which would silently pass even if
+    unrelated pre-existing act() noise were present), confirmed
+    localization is correct with no hardcoded strings, confirmed no
+    `any`/`as any`/`ts-ignore` in production code (one `: any` exists only
+    on a mock prop type inside the new test file's `jest.mock` factory —
+    standard RN mock boilerplate, not production code), and noted (as an
+    optional, not-required, pre-existing gap) that none of the three retry
+    buttons in the app have an `accessibilityLabel`/`role` — consistent
+    with existing convention, not a regression introduced here. Approved
+    with no required changes.
+  - Commit: see `git log` on `overnight-improvements` branch, message
+    `loop: add a retry action to ColoringScreen's photo-load error state`.
+- Previous iteration's completed improvement (iteration 10, one commit):
   Finished the `RootNavigator.tsx` `RootStackParamList` typing fix that
   iteration 9 deferred. Defined a 9-route `RootStackParamList` (params shape
   for every screen, `undefined` for the 6 param-less ones and `{ imageUri:
@@ -53,10 +126,10 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 22/22 suites passing, 156/156 tests passing (unchanged from
-  iteration 9 — iteration 10 was a pure type-safety refactor, test-count-
-  neutral, no new tests since the change is fully covered by `tsc` type-
-  checking plus the existing `RootNavigator.test.tsx` behavioral suite).
+- Test status: 23/23 suites passing, 161/161 tests passing (up from
+  22/22 suites, 156/156 tests — iteration 11 added a new
+  `__tests__/coloring/ColoringScreen.test.tsx` suite with 5 tests, the
+  screen's first-ever test coverage).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -503,6 +576,27 @@
     - Commit: see `git log` on `overnight-improvements` branch, message
       `loop: type RootNavigator's routes with a RootStackParamList`.
 
+14. **loop: add a retry action to ColoringScreen's photo-load error state**
+    (iteration 11, Phase 1 item 8 — error-state audit)
+    - Files: `src/coloring/ColoringScreen.tsx` (production code) and
+      `__tests__/coloring/ColoringScreen.test.tsx` (new file, 5 tests)
+    - See the full write-up under Current Status above (Latest completed
+      improvement) for the finding, TDD trace, and code-review outcome —
+      not duplicated here to avoid drift between the two sections.
+    - Summary: `ColoringScreen.tsx` had zero test coverage before this
+      iteration. Its async photo-load effect was already correct (cancelled
+      guard, try/catch, friendly localized error message) but, unlike
+      `QuizScreen`/`ColoringGallery` which handle the identical SAF-failure
+      category with a `retryToken`-driven Retry button, offered no recovery
+      path at all. Added the same `retryToken` pattern plus a Retry button,
+      and 5 new tests covering happy-path load, friendly-error-on-rejection,
+      friendly-error-on-null-decode, retry-recovers, and
+      setState-after-unmount (regression guard for the pre-existing
+      `cancelled` flag). `tsc` clean, 23/23 suites, 161/161 tests. A
+      code-review subagent approved with no required changes.
+    - Commit: see `git log` on `overnight-improvements` branch, message
+      `loop: add a retry action to ColoringScreen's photo-load error state`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -533,18 +627,21 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 11 priority: the `RootNavigator.tsx` `as any` fix (former option 1)
-is now done — see Completed #13. The floodFill/puzzleGrid pure-logic
-micro-edge-case mining is exhausted and the TODO/lint-smell audit found
-nothing else safely-fixable. Two concrete options remain, in priority order:
-1. **Phase 1 item 8 (error-state audit) on a not-yet-checked screen**:
-   review `QuizScreen`, `ColoringScreen`, or `PuzzleScreen` (pick one) for
-   loading/empty/error/success state handling, uncaught async errors, and
-   setState-after-unmount risk. `RootNavigator.tsx` itself was already
-   audited on this front (iterations 9 and 10) and looks solid (its async
-   `useEffect`s use a `cancelled` flag guard and a `.catch()` that falls
-   through to a safe UI state). This is the current top recommendation.
-2. **Optional smaller follow-up noticed this iteration**: the
+Iteration 12 priority: Phase 1 item 8 (error-state audit) is now done for all
+three candidate screens — `QuizScreen`/`PuzzleScreen` were confirmed clean,
+and `ColoringScreen`'s missing-retry gap was fixed with tests this iteration
+(see Completed #14). `RootNavigator.tsx` was already audited (iterations 9
+and 10). Remaining options, in priority order:
+1. **`VideoPlayerScreen`'s error-state audit** (not yet covered by the Phase 1
+   item 8 sweep — this iteration's audit only covered
+   Quiz/Coloring/Puzzle/RootNavigator per the task's named candidate list).
+   Check `src/video/VideoPlayerScreen.tsx` for the same 5-point
+   checklist: stuck spinner, unhandled rejection, setState-after-unmount,
+   raw technical error surfaced to the child, and racy/double-firing retry.
+   The i18n dictionary already has a `videoLoadError` string, suggesting an
+   error-state exists there too and is worth the same scrutiny/test-coverage
+   check the other screens just got.
+2. **Optional smaller follow-up (unchanged from iteration 10)**: the
    `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
    `HomeScreen.tsx` remain untyped against `RootStackParamList` because
    React Navigation's `RouteConfigComponent` type declares that render-prop's
@@ -553,13 +650,19 @@ nothing else safely-fixable. Two concrete options remain, in priority order:
    wrapper around each render prop's `navigation` argument (e.g. casting
    `navigation as NativeStackNavigationProp<RootStackParamList, RouteName>`
    once per screen, or a small typed-navigate helper) — judged a separate,
-   smaller-value piece of work from the `route.params` fix just completed,
-   not bundled into iteration 10 to keep that diff minimal and focused. Only
-   pursue if item 1 above turns out unfruitful for this iteration.
-3. If both of the above turn out unfruitful or too large to safely scope in
-   one iteration, move toward Phase 2 (accessibility/child-safety): the
-   Phase 1 baseline, pure-logic inventory, and TODO/lint-smell audit are now
-   all substantially covered.
+   smaller-value piece of work, not bundled into any iteration so far to
+   keep each diff minimal and focused.
+3. **Optional accessibility follow-up noticed this iteration**: none of the
+   three retry buttons in the app (`QuizScreen`, `ColoringGallery`, and now
+   `ColoringScreen`) have an `accessibilityLabel`/`accessibilityRole` —
+   flagged by this iteration's code-review subagent as a pre-existing,
+   consistent (not newly introduced) gap. A future iteration could add
+   `accessibilityRole="button"` and a localized `accessibilityLabel` to all
+   three at once for screen-reader support.
+4. If the above turn out unfruitful or too large to safely scope in one
+   iteration, move toward Phase 2 (accessibility/child-safety): the Phase 1
+   baseline, pure-logic inventory, TODO/lint-smell audit, and now the
+   error-state audit are all substantially covered.
 (The pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning
 under BLOCKED below is a related but separate test-hygiene item, not itself
 part of the error-state audit.)
@@ -697,6 +800,39 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
+- What changed (iteration 11, one commit): a small production-code fix in
+  `src/coloring/ColoringScreen.tsx` (added a `retryToken` state and a Retry
+  button to the photo-load error state) plus a new test file,
+  `__tests__/coloring/ColoringScreen.test.tsx` (5 tests — the screen's first
+  ever test coverage). This closes Phase 1 item 8 (error-state audit) for
+  the last of the three named candidate screens.
+- What's valuable: before this fix, if a coloring photo failed to load (SAF
+  grant revoked, file deleted externally, SD card unmounted — all plausible
+  real-world events, not hypothetical), the only way for a child/parent to
+  recover was to navigate away and back in via the header. Every other
+  screen in the app that handles this exact failure category
+  (`QuizScreen`, `ColoringGallery`) already offered an in-place Retry
+  button; `ColoringScreen` was the one inconsistent dead end. Also valuable:
+  the screen had zero test coverage before this iteration (nothing verified
+  its already-correct `cancelled`-flag/try-catch/friendly-message behavior),
+  so this iteration both fixed a real gap and locked in the previously
+  correct-but-unverified behavior with tests.
+- What needs visual testing: the new Retry button's appearance/tap target
+  on the actual coloring-photo-load-error screen (styled to match
+  `QuizScreen`'s existing retry button, but never rendered on a real device
+  by this iteration — no emulator available in this environment).
+- Risks: none identified. `tsc` clean, 23/23 suites and 161/161 tests
+  passing (156 baseline + 5 new), no existing test touched/skipped/renamed,
+  and a code-review subagent independently verified the retryToken pattern
+  is consistent with `QuizScreen`'s and that rapid repeated retry taps
+  can't race (each effect run's `cancelled` closure is set by React's
+  cleanup before the next run starts).
+- Open questions for the developer: none blocking. A code-review subagent
+  flagged (optional, not required) that none of the app's three retry
+  buttons have an `accessibilityLabel`/`accessibilityRole` — a pre-existing,
+  consistent gap, not introduced by this change. Worth a dedicated
+  accessibility pass across all three if you want screen-reader support
+  there; see `Next` above.
 - What changed (iteration 10, one commit): one small production-code commit
   to `src/navigation/RootNavigator.tsx` — added a `RootStackParamList` type
   covering all 9 routes, passed it to `createNativeStackNavigator<...>()`
