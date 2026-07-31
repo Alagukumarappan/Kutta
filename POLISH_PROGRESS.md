@@ -323,6 +323,27 @@ well before `visible` ever flips true.
 mocked reduce-motion setting) plus all 5 pre-existing CelebrationOverlay
 tests still pass unmodified (525 total tests passing, up from 523).
 
+### Iteration 15 — Consistency: guard VideoPlayerScreen's Retry against a double-tap
+**Screen:** Video player.
+**Problem:** Consistency audit following up on an earlier bug-hunt note.
+`handleRetry` (shared by the error-state Retry button and the completion
+celebration's "Watch Again" action) was the one Retry/Next/Play-Again-style
+action left in the app with no double-fire guard ref — every sibling
+already has one (PuzzleScreen's `retryFiredRef`, QuizScreen's
+`playAgainFiredRef`/`nextFiredRef`, Settings' `saveInFlightRef`). Not
+destructive on its own (`player.replace`/`player.play` are idempotent), but
+a real inconsistency: a rapid double-tap here behaved differently from
+identical-looking buttons elsewhere in the app.
+**Fix:** Added a `retryFiredRef`, set at the top of `handleRetry` (return
+early if already fired), re-armed via a `useEffect` keyed on `[error,
+finished]` that resets it whenever either legitimately becomes true again
+(i.e., whenever the button reappears).
+**Verified as a real (if low-severity) bug, not a hypothetical:** confirmed
+the new regression test genuinely fails (`replace` called twice) without
+the fix before committing.
+**Tests:** New regression test double-tapping Retry, asserting the video
+source is only replaced once (526 total tests passing, up from 525).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -375,6 +396,7 @@ tests still pass unmodified (525 total tests passing, up from 523).
 - Puzzle gallery (difficulty modal accessibility semantics added)
 - CelebrationOverlay / Quiz + Puzzle + Tic-Tac-Toe + Video completion
   moments (reduce-motion support added)
+- Video player (Retry double-tap guard added, for consistency)
 
 ## Remaining polish opportunities (not yet done)
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
@@ -396,16 +418,13 @@ tests still pass unmodified (525 total tests passing, up from 523).
   real design thought (e.g. a manual "I'm done!" button) rather than a
   cheap reuse of existing infrastructure — out of scope for a quick single
   iteration.
-- Rapid-tap audit (iteration 6) also found two harmless-but-inconsistent
-  spots, not real bugs (every underlying operation is idempotent, so a
-  double-fire causes no corruption or visible glitch) — low priority, but
-  noted for a future consistency pass: `VideoPlayerScreen.tsx`'s Retry
-  button has no guard ref (unlike every other Retry-style action in the
-  app), and the destructive confirm button inside `Alert.alert` for both
-  Settings' "Reset everything" and every gallery's "Remove selected" isn't
-  guarded against a double-tap on the Alert itself (RN never disables
-  Alert buttons) — currently safe only because the underlying delete calls
-  are all idempotent.
+- Rapid-tap audit (iteration 6) found one remaining harmless-but-
+  inconsistent spot (`VideoPlayerScreen.tsx`'s Retry, fixed in iteration
+  15) plus one still open, not a real bug (the underlying delete call is
+  idempotent, so a double-fire causes no corruption): the destructive
+  confirm button inside `Alert.alert` for both Settings' "Reset everything"
+  and every gallery's "Remove selected" isn't guarded against a double-tap
+  on the Alert itself (RN never disables Alert buttons) — low priority.
 - OnboardingScreen's "saving" overlay is a full-screen dark scrim + spinner
   + text — visually distinct from the new lighter gallery `LoadingPanel`;
   worth a future pass to decide if that's intentional (blocking modal

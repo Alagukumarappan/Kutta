@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -37,6 +37,21 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const player = useVideoPlayer(videoUri, (p) => {
     p.play();
   });
+  // Same double-fire guard idiom as every other Retry/Next-style action in
+  // this app (e.g. PuzzleScreen's retryFiredRef, QuizScreen's
+  // playAgainFiredRef): handleRetry backs BOTH the error-state Retry button
+  // and the celebration's "Watch Again" action, so without this a rapid
+  // double-tap could fire it twice in the same render before `error`/
+  // `finished` flip back to false. Both underlying calls (player.replace +
+  // player.play) are idempotent, so a double-fire was never destructive
+  // here — this is purely a consistency fix, matching the guarded shape
+  // every other Retry-style button in the app already has. Re-armed
+  // whenever a fresh error or a fresh finish makes the button reappear.
+  const retryFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (error || finished) retryFiredRef.current = false;
+  }, [error, finished]);
 
   useEffect(() => {
     const subscription = player.addListener('statusChange', ({ status }) => {
@@ -62,6 +77,8 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   // source (e.g. after a transient SAF/file failure), and clearing `error`
   // lets a subsequent `statusChange` (success or failure) drive the UI again.
   const handleRetry = useCallback(() => {
+    if (retryFiredRef.current) return;
+    retryFiredRef.current = true;
     setError(false);
     setFinished(false);
     player.replace(videoUri);

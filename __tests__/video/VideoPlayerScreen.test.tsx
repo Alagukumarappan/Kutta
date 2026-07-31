@@ -117,6 +117,40 @@ describe('VideoPlayerScreen', () => {
     expect(queryByTestId('video-player-error')).toBeNull();
   });
 
+  // Regression test for the premium-polish consistency pass: handleRetry
+  // (shared by the error-state Retry button and the celebration's "Watch
+  // Again") was the one Retry-style action in the app with no double-fire
+  // guard ref, unlike PuzzleScreen's retryFiredRef/QuizScreen's
+  // playAgainFiredRef. Not destructive on its own (player.replace/play are
+  // idempotent), but inconsistent — this locks in the same one-call-per-tap
+  // guarantee every other Retry action already has.
+  it('guards Retry against a rapid double-tap, only replacing the video source once', async () => {
+    const { findByText, findByLabelText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await act(async () => {
+      __mockPlayer.emit('statusChange', { status: 'error' });
+    });
+    await findByText('This video could not be played.');
+
+    const retryButton = await findByLabelText('Retry');
+    await act(async () => {
+      fireEvent.press(retryButton);
+      fireEvent.press(retryButton);
+    });
+
+    // `replace` is only ever called from inside handleRetry (never from
+    // useVideoPlayer's own mount-time setup, unlike `play` — which this
+    // mock, being a trivial non-memoized function unlike the real hook,
+    // also re-invokes on every re-render, making its raw call count an
+    // unreliable signal here), so this is the precise assertion for "did
+    // handleRetry's guarded body run more than once".
+    expect(__mockPlayer.replace).toHaveBeenCalledTimes(1);
+  });
+
   // Regression tests for the premium-polish child-delight pass: previously
   // this screen gave a child NO feedback at all when a video finished — it
   // just sat on its last frame with native controls, unlike every other
