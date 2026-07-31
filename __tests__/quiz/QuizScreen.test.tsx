@@ -72,7 +72,46 @@ describe('QuizScreen', () => {
     await waitFor(() => expect(getByText('Quiz done! Your score: 2 / 2')).toBeTruthy());
   });
 
-  it('shows "Try again!" for a wrong answer but still advances and does not award a point', async () => {
+  it('shows age-appropriate encouragement for a wrong answer but still advances and does not award a point', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+    jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    // childAge=5 is in the older (5-8) tier, so this exercises that wording.
+    const { findByText, getByText, getByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText('2 + 2?');
+    await fireEvent.press(getByText('3')); // wrong answer
+    await findByText('Nice try! Take another look.');
+    await fireEvent.press(getByTestId('quiz-next'));
+
+    await findByText('1 + 1?');
+    await fireEvent.press(getByText('2'));
+    await findByText('Correct!');
+    await fireEvent.press(getByTestId('quiz-next'));
+
+    await waitFor(() => expect(getByText('Quiz done! Your score: 1 / 2')).toBeTruthy());
+  });
+
+  it('shows the younger-child (2-4) wrong-answer wording when the profile age is 2-4', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+    jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    const { findByText, getByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={3} />
+      </LanguageProvider>
+    );
+
+    await findByText('2 + 2?');
+    await fireEvent.press(getByText('3')); // wrong answer
+    await findByText("Good try! Let's try again.");
+  });
+
+  it('"Try Again" re-enables answer selection and only scores the final pick once (no double-scoring)', async () => {
     (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
     jest.spyOn(Math, 'random').mockReturnValue(0.999999);
 
@@ -83,8 +122,20 @@ describe('QuizScreen', () => {
     );
 
     await findByText('2 + 2?');
-    await fireEvent.press(getByText('3')); // wrong answer
-    await findByText('Try again!');
+    await fireEvent.press(getByText('3')); // wrong answer first
+    await findByText('Nice try! Take another look.');
+
+    // Retry: options re-enable, the wrong answer's feedback disappears, and
+    // — critically — the correct answer must NOT have been revealed by the
+    // retry wording/flow itself (it can still be visible via the pre-existing
+    // on-option checkmark, which is a separate, already-established
+    // mechanism this iteration doesn't touch).
+    await fireEvent.press(getByTestId('quiz-retry-answer'));
+    expect(() => getByText('Nice try! Take another look.')).toThrow();
+
+    // Pick the correct answer on the retry and advance.
+    await fireEvent.press(getByText('4'));
+    await findByText('Correct!');
     await fireEvent.press(getByTestId('quiz-next'));
 
     await findByText('1 + 1?');
@@ -92,7 +143,9 @@ describe('QuizScreen', () => {
     await findByText('Correct!');
     await fireEvent.press(getByTestId('quiz-next'));
 
-    await waitFor(() => expect(getByText('Quiz done! Your score: 1 / 2')).toBeTruthy());
+    // Only ONE point for question 1 (the retried correct pick), not zero
+    // (the original wrong pick) and not two (double-scored) — 2/2 total.
+    await waitFor(() => expect(getByText('Quiz done! Your score: 2 / 2')).toBeTruthy());
   });
 
   it('shows the empty state when there are no eligible questions', async () => {

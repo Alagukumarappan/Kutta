@@ -44,7 +44,13 @@ export const UI_STRINGS = {
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   quizCorrect: { en: 'Correct!', de: 'Richtig!' },
-  quizIncorrect: { en: 'Try again!', de: 'Versuch es nochmal!' },
+  // Age-tiered wrong-answer feedback (replaces the old single `quizIncorrect`
+  // wording — see QuestionRenderer). Never harsh/shaming; younger children
+  // (2-4) get the gentlest, simplest phrasing, older children (5-8) get a
+  // slightly more capable-sounding nudge. Wording is warm/natural in each
+  // language, not a literal translation of the other.
+  quizIncorrectYoung: { en: "Good try! Let's try again.", de: "Gut versucht! Versuchen wir's noch mal." },
+  quizIncorrectOlder: { en: 'Nice try! Take another look.', de: 'Netter Versuch! Schau noch mal genau hin.' },
   // Shown in a brief, auto-fading celebration pop (see QuestionRenderer)
   // alongside quizCorrect — kept intentionally short (a few characters) so
   // it can never cause the child-facing quiz screen to need scrolling.

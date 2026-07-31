@@ -114,6 +114,17 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     setSelectedOptionId(null);
   }
 
+  // "Try Again" after a wrong answer: only clears the local selection so the
+  // options re-enable for a fresh pick on the SAME question. This never
+  // calls answerCurrentQuestion itself — scoring only ever happens inside
+  // handleNext above — so retrying (even rapidly, any number of times)
+  // can't award or deduct a point on its own; whatever is selected when Next
+  // is eventually pressed is the one and only thing that gets scored for
+  // this question.
+  function handleRetry() {
+    setSelectedOptionId(null);
+  }
+
   return (
     <QuestionRenderer
       question={currentQuestion}
@@ -121,8 +132,10 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
       selectedOptionId={selectedOptionId}
       onSelect={handleSelect}
       onNext={handleNext}
+      onRetry={handleRetry}
       currentIndex={state.currentIndex}
       totalQuestions={state.session.length}
+      childAge={childAge}
     />
   );
 }

@@ -73,22 +73,39 @@ export function QuestionRenderer({
   selectedOptionId,
   onSelect,
   onNext,
+  onRetry,
   currentIndex,
   totalQuestions,
+  childAge,
 }: {
   question: Question;
   language: Language;
   selectedOptionId: string | null;
   onSelect: (optionId: string) => void;
   onNext: () => void;
+  // Called when the child taps "Try Again" after a wrong answer. Expected to
+  // clear the parent's selectedOptionId (see QuizScreen.handleRetry) so the
+  // options re-enable and the child can pick again on the SAME question —
+  // this never itself scores anything; only onNext ever does that, so a
+  // retry can never cause a duplicate/extra score for one question.
+  onRetry?: () => void;
   // Optional: when provided, a row of progress dots is shown above the
   // question so a pre-reader can see how far through the session they are
   // without needing to parse numbers/text. currentIndex is 0-based.
   currentIndex?: number;
   totalQuestions?: number;
+  // The active child's profile age (2-8), used only to pick the
+  // age-appropriate wrong-answer wording tier below. Optional and defaults
+  // to the older (5-8) tier so existing/other call sites that don't pass it
+  // still get sensible, non-crashing wording.
+  childAge?: number;
 }) {
   const hasAnswered = selectedOptionId !== null;
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
+  // Ages 2-4 get the gentlest, simplest phrasing; 5-8 gets a slightly more
+  // capable-sounding nudge. See quizIncorrectYoung/quizIncorrectOlder in
+  // src/i18n/strings.ts for the actual wording in both languages.
+  const incorrectTextKey = typeof childAge === 'number' && childAge <= 4 ? 'quizIncorrectYoung' : 'quizIncorrectOlder';
 
   // Brief, non-blocking "correct answer" celebration: a pop-in/fade-out
   // bubble that plays alongside (never in front of, and never gating) the
@@ -263,12 +280,44 @@ export function QuestionRenderer({
             {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
             <Text
               style={[styles.feedbackText, isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText]}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
             >
-              {isCorrect ? t('quizCorrect', language) : t('quizIncorrect', language)}
+              {isCorrect ? t('quizCorrect', language) : t(incorrectTextKey, language)}
             </Text>
-            <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
-              <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
-            </Pressable>
+            {isCorrect ? (
+              <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
+                <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
+              </Pressable>
+            ) : (
+              // Two actions on a wrong answer: a gentle "Try Again" (re-picks
+              // the SAME question — see onRetry above) alongside the
+              // pre-existing "Next" (the app already lets a child move on
+              // after a wrong answer without retrying — see QuizScreen's
+              // "still advances and does not award a point" test — so Next
+              // is kept rather than replaced, per this iteration's brief:
+              // "show only a Retry-equivalent action unless existing quiz
+              // behavior clearly requires something else").
+              <View style={styles.feedbackButtonGroup}>
+                <Pressable
+                  testID="quiz-retry-answer"
+                  onPress={onRetry}
+                  style={styles.tryAgainButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('retry', language)}
+                >
+                  <Text style={styles.tryAgainButtonText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {t('retry', language)}
+                  </Text>
+                </Pressable>
+                <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButtonSmall}>
+                  <Text style={styles.nextButtonText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {t('quizNext', language)}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         )}
 
@@ -490,6 +539,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.white,
+  },
+  // Wrong-answer footer shows two compact buttons side by side (Try Again +
+  // Next) instead of one, so both get smaller padding than the single
+  // full-size nextButton above to keep the footer's height unchanged and
+  // avoid pushing content off-screen on a short/landscape device.
+  feedbackButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.xs,
+  },
+  tryAgainButton: {
+    backgroundColor: colors.sun,
+    borderColor: colors.sunDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    ...shadow,
+    elevation: 4,
+  },
+  tryAgainButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.ink,
+  },
+  nextButtonSmall: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coralDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    ...shadow,
+    elevation: 4,
   },
   // Absolutely positioned (not part of the flex flow) so this transient,
   // auto-fading celebration can never disturb the carefully tuned

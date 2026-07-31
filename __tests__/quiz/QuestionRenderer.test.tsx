@@ -98,7 +98,7 @@ describe('QuestionRenderer', () => {
     expect(onNext).toHaveBeenCalled();
   });
 
-  it('shows "Try again!" feedback when the selected option is wrong', async () => {
+  it('shows the older-child (5-8) encouraging wrong-answer wording by default when no childAge is given', async () => {
     const { getByText } = await render(
       <QuestionRenderer
         question={imageQuestion}
@@ -109,7 +109,150 @@ describe('QuestionRenderer', () => {
       />
     );
 
-    expect(getByText('Try again!')).toBeTruthy();
+    expect(getByText('Nice try! Take another look.')).toBeTruthy();
+  });
+
+  describe('age-tiered wrong-answer feedback', () => {
+    it('shows the younger-child (2-4) wording when childAge is 2-4', async () => {
+      const { getByText, queryByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          childAge={3}
+        />
+      );
+
+      expect(getByText("Good try! Let's try again.")).toBeTruthy();
+      expect(queryByText('Nice try! Take another look.')).toBeNull();
+    });
+
+    it('shows the older-child (5-8) wording when childAge is 5-8', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          childAge={7}
+        />
+      );
+
+      expect(getByText('Nice try! Take another look.')).toBeTruthy();
+    });
+
+    it('shows the younger-child German wording when childAge is 2-4 and language is de', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="de"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          childAge={2}
+        />
+      );
+
+      expect(getByText("Gut versucht! Versuchen wir's noch mal.")).toBeTruthy();
+    });
+
+    it('shows the older-child German wording when childAge is 5-8 and language is de', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="de"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          childAge={8}
+        />
+      );
+
+      expect(getByText('Netter Versuch! Schau noch mal genau hin.')).toBeTruthy();
+    });
+
+    it('never reveals the correct answer through the wrong-answer wording itself (no answer text leakage)', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          childAge={3}
+        />
+      );
+
+      // The correct option's own text ("4") must not appear inside the
+      // feedback wording — only as the pre-existing on-option checkmark,
+      // which is a separate, already-established piece of UI (see the
+      // "marks the correct option" test above) that this iteration does not
+      // change.
+      expect(getByText("Good try! Let's try again.").props.children).not.toContain('4');
+    });
+  });
+
+  describe('wrong-answer retry action', () => {
+    it('shows a distinct "Try Again" retry action (in addition to Next) when the answer is wrong', async () => {
+      const { getByTestId, getByLabelText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          onRetry={jest.fn()}
+        />
+      );
+
+      expect(getByTestId('quiz-retry-answer')).toBeTruthy();
+      expect(getByLabelText('Retry')).toBeTruthy();
+      // Next must still exist too — the app already lets a child move on
+      // after a wrong answer (see QuizScreen's existing scoring test), so
+      // this iteration adds the retry option alongside it rather than
+      // replacing it.
+      expect(getByTestId('quiz-next')).toBeTruthy();
+    });
+
+    it('calls onRetry (and not onSelect/onNext) when "Try Again" is pressed', async () => {
+      const onRetry = jest.fn();
+      const onSelect = jest.fn();
+      const onNext = jest.fn();
+
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={onSelect}
+          onNext={onNext}
+          onRetry={onRetry}
+        />
+      );
+
+      await fireEvent.press(getByTestId('quiz-retry-answer'));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(onNext).not.toHaveBeenCalled();
+    });
+
+    it('does NOT show a retry action once the answer is correct', async () => {
+      const { queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          onRetry={jest.fn()}
+        />
+      );
+
+      expect(queryByTestId('quiz-retry-answer')).toBeNull();
+    });
   });
 
   it('does not call onSelect again once an option has already been answered', async () => {

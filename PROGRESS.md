@@ -1,8 +1,22 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 17
-- Latest completed improvement (iteration 17, one commit): a brief,
+- Phase: 3 (delight/polish), Iteration: 18
+- Latest completed improvement (iteration 18, one commit): age-appropriate,
+  encouraging wrong-answer feedback in the quiz flow (Phase 3 item 2) — see
+  Completed entry below for full detail.
+  - Baseline before this iteration: tsc clean, 25/25 suites, 186/186 tests.
+  - After this iteration: tsc clean, 25/25 suites, **196/196 tests** (+10 new
+    tests across `__tests__/quiz/QuestionRenderer.test.tsx` and
+    `__tests__/quiz/QuizScreen.test.tsx`; one pre-existing QuizScreen test and
+    one pre-existing QuestionRenderer test had ONLY their expected wrong-
+    answer wording string updated in place — from the old generic "Try
+    again!"/"Versuch es nochmal!" to the new age-tiered wording — to match
+    the intentional copy change; no assertion was weakened, removed, or
+    skipped, and both tests still exercise exactly what they did before).
+  - Commit: `<see git log — loop: add age-tiered encouraging wrong-answer
+    feedback and a Try Again action to the quiz>`.
+- Previous iteration's completed improvement (iteration 17, one commit): a brief,
   non-blocking animated correct-answer celebration in the quiz flow — see
   Completed entry below for full detail.
   - Baseline before this iteration: tsc clean, 25/25 suites, 178/178 tests.
@@ -1103,6 +1117,112 @@
     - tsc: clean. Tests: 25/25 suites, 186/186 tests (up from 178/178
       baseline; +8 new, 0 modified/removed/skipped).
     - Commit: `5cdcd6e`.
+20. **loop: add age-tiered encouraging wrong-answer feedback and a Try Again
+    action to the quiz** (iteration 18, Phase 3 item 2 from the original
+    spec)
+    - Files: `src/quiz/QuestionRenderer.tsx`, `src/quiz/QuizScreen.tsx`,
+      `src/i18n/strings.ts` (production, 2 new keys x 2 languages, 1 old key
+      removed); `__tests__/quiz/QuestionRenderer.test.tsx` (9 new tests, 1
+      pre-existing test's expected wording string updated in place),
+      `__tests__/quiz/QuizScreen.test.tsx` (2 new tests, 1 pre-existing
+      test's expected wording string updated in place).
+    - Read first (per protocol): `QuestionRenderer.tsx`, `QuizScreen.tsx`,
+      `Profile`/`RootNavigator.tsx` (age flow), both test files, and
+      README.md's quiz-feedback claim ("Shows correct/incorrect feedback on
+      each answer, then a final score" — no explicit reveal requirement).
+      Two existing-behavior facts, found by reading rather than assumed,
+      shaped the whole design:
+      1. An existing, unmodified test
+         (`marks the correct option with a checkmark and the wrong tapped
+         option with an X once answered`) already locks in that the correct
+         option's checkmark IS revealed immediately on a wrong pick. Per
+         this iteration's own instructions ("Do NOT reveal the correct
+         answer immediately, unless... existing quiz behavior clearly
+         requires something else"), this pre-existing reveal was left
+         completely untouched rather than "fixed" — changing it would have
+         broken a passing test for a behavior the brief explicitly permits
+         keeping.
+      2. An existing, unmodified-in-spirit test (now with only its expected
+         string updated) already required "Next" to work standalone after a
+         wrong answer: press wrong → press `quiz-next` → advance, score 0.
+         So "Try Again" was added ALONGSIDE Next, not as a replacement —
+         again per the brief's own "unless existing behavior clearly
+         requires something else" carve-out.
+    - Age tier: a new optional `childAge?: number` prop on
+      `QuestionRenderer` (`childAge <= 4` → young, else → older; defaults to
+      older if omitted). Wired from the real per-profile age already
+      threaded end-to-end in this app — `RootNavigator.tsx` passes
+      `profile.age` into `QuizScreen`'s existing `childAge` prop (previously
+      only used for `buildSession`'s age filtering), which now also forwards
+      it to `QuestionRenderer`. Not hardcoded to one age group.
+    - i18n: removed the single old `quizIncorrect` key (`en`: "Try again!",
+      `de`: "Versuch es nochmal!" — grepped first to confirm it was used
+      nowhere else) and added two new keys, both en+de, in the same commit:
+      `quizIncorrectYoung` (en: "Good try! Let's try again.", de: "Gut
+      versucht! Versuchen wir's noch mal.") and `quizIncorrectOlder` (en:
+      "Nice try! Take another look.", de: "Netter Versuch! Schau noch mal
+      genau hin.") — warm, natural phrasing in each language (not mirror
+      translations of each other), never harsh/shaming, automatically
+      validated for non-empty en/de by the existing generic completeness
+      test in `__tests__/i18n/strings.test.ts`.
+    - New "Try Again" action: a `quiz-retry-answer` `Pressable` (styled
+      distinctly — yellow `colors.sun`/`sunDark` vs Next's coral — with
+      `accessibilityRole="button"`/`accessibilityLabel={t('retry',
+      language)}`, reusing the existing `retry` i18n key rather than adding
+      a new one) appears next to Next only when the answer is wrong. Pressing
+      it calls a new `onRetry` prop, wired in `QuizScreen` to
+      `handleRetry = () => setSelectedOptionId(null)` — this ONLY clears the
+      local UI selection (re-enabling the option grid so the child can pick
+      again on the same question); it never calls `answerCurrentQuestion`.
+    - Duplicate-scoring guard for the retry path (this iteration's specific
+      ask): scoring happens in exactly one place, `QuizScreen.handleNext`,
+      gated by `if (selectedOptionId === null) return`, and is only ever
+      invoked by pressing Next. Since `handleRetry` never touches scoring
+      and only ever resets `selectedOptionId` to `null`, no number of
+      retries (including rapid repeated taps on Retry or on a wrong option)
+      can cause a question to be scored more than once, and whichever
+      selection is current at the moment Next is actually pressed is the
+      only thing that counts — verified by a new test that retries once,
+      picks correctly on the second attempt, and confirms the final score is
+      exactly 1 point for that question (not 0, not 2).
+    - Screen-fit: the wrong-answer footer now shows two buttons
+      (`feedbackButtonGroup`, `flexDirection: 'row'`) instead of one, sized
+      with smaller padding (`spacing.xs`/`md` vs the correct-path button's
+      `spacing.sm`/`xl`) specifically so the footer's total height doesn't
+      grow. `numberOfLines`/`adjustsFontSizeToFit` was added to the feedback
+      text and both button labels so the longer new wording shrinks rather
+      than wraps/clips. This section is outside the flexed
+      question/grid column (auto-sized, unchanged flex ratios), so it can't
+      alter the screen's carefully-tuned no-scroll layout math — real-device
+      confirmation still flagged under Visual Review Required.
+    - TDD: wrote all new tests first (age-tier wording in en/de, retry shows
+      alongside Next but not on a correct answer, retry calls `onRetry` and
+      not `onSelect`/`onNext`, no answer-text leakage through the new
+      wording, and the QuizScreen-level double-scoring test) and confirmed
+      them failing for the right reason (the `quizIncorrect` key no longer
+      existed, so every render crashed with `Cannot read properties of
+      undefined` until the component was updated) before implementing.
+    - Two pre-existing tests had ONLY their expected wrong-answer wording
+      string updated in place (from the old generic text to the new
+      age-tiered text matching their given `childAge`) — this is an
+      intentional, documented copy change, not a weakening: no assertion was
+      removed, loosened, or skipped, and both tests still exercise exactly
+      the same behavior (wrong-answer feedback text + Next still advances
+      and scores correctly) they did before.
+    - Code review: a code-review subagent independently re-ran `tsc`/jest,
+      re-verified the age-flow wiring end-to-end from `RootNavigator.tsx`,
+      re-confirmed the untouched-checkmark-reveal test still passes and no
+      new code path leaks the answer, confirmed no double/lost-scoring path
+      including rapid taps, confirmed accessibility labeling and
+      screen-fit-conscious sizing, and approved with one cosmetic nit
+      (curly vs straight apostrophes in the new strings, inconsistent with
+      the rest of `strings.ts`) — fixed before committing.
+    - tsc: clean. Tests: 25/25 suites, 196/196 tests (up from 186/186
+      baseline; +11 new net across both files, 2 pre-existing wording
+      assertions updated in place, 0 removed/skipped).
+    - Commit: see `git log` on `overnight-improvements`, message `loop: add
+      age-tiered encouraging wrong-answer feedback and a Try Again action to
+      the quiz`.
 
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
@@ -1134,10 +1254,21 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 18 priority: **visual polish follow-ups for iteration 17's quiz
-celebration, deferred deliberately to keep that diff focused on
-correctness/safety first (per the iteration brief's guidance to prioritize
-correctness over visual complexity):**
+Iteration 19 priority: **real-device visual verification of iteration 18's
+age-tiered wrong-answer feedback + Try Again action** (see the Visual Review
+Required entry above) — specifically confirm on a Galaxy S22 that the new
+two-button wrong-answer footer (`quiz-retry-answer` + `quiz-next`) doesn't
+feel cramped next to the longer new wording in either language/age tier, and
+that nothing scrolls at any point in that flow. If a genuine layout issue is
+found, fix it directly (e.g. adjust `feedbackButtonGroup`/button padding or
+font sizes); if it looks fine, this can be closed with a note and the next
+item below picked up instead.
+
+Secondary/fallback candidates (if the above turns out to need no code
+change): visual polish follow-ups for iteration 17's quiz celebration,
+deferred deliberately to keep that diff focused on correctness/safety first
+(per the iteration brief's guidance to prioritize correctness over visual
+complexity):
 - The current celebration is a single static 🎉 + short text bubble that
   pops/fades. Possible small, still-Animated-API-only enhancements if this
   is picked up: a couple of small animated "sparkle" glyphs (e.g. ✨) drifting
@@ -1252,6 +1383,61 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 18's age-tiered wrong-answer feedback + "Try Again" action**
+  (new visible UI, same screen as iteration 17's celebration above):
+  - **Screen**: `QuizScreen` while a question is showing, rendered via
+    `QuestionRenderer.tsx` — the feedback row below the answer grid, only
+    when the tapped answer is WRONG (the correct-answer path is unchanged
+    from iteration 17).
+  - **Expected behavior, ages 2-4**: after tapping a wrong option, the
+    feedback row shows "Good try! Let's try again." (English) /
+    "Gut versucht! Versuchen wir's noch mal." (German) plus TWO small
+    buttons side by side: a yellow "Retry"/"Erneut versuchen" button
+    (`quiz-retry-answer`) and the pre-existing coral "Next"/"Weiter" button
+    (`quiz-next`), both slightly smaller/more compact than the single
+    full-size Next button shown on a correct answer.
+  - **Expected behavior, ages 5-8**: identical layout/actions, but the
+    wording is "Nice try! Take another look." (English) / "Netter Versuch!
+    Schau noch mal genau hin." (German) — a touch less babyish than the
+    2-4 wording.
+  - **Which tier a real device shows depends on the child's profile age**
+    (set during onboarding, `Profile.age`, 2-8) — to check both tiers on
+    one device, change the profile's age via Settings (if editable) or
+    re-run onboarding with a different age, then redo the wrong-answer flow.
+  - **Interaction steps**: open Quiz → tap a WRONG answer → confirm the new
+    wording (age-appropriate) and both buttons appear → tap "Retry"
+    (`quiz-retry-answer`) → confirm the feedback row disappears, the wrong
+    highlight/X-mark clears, and the answer grid is tappable again (the
+    correct option's green checkmark, if still visible, is unchanged
+    pre-existing behavior, not new) → pick the CORRECT option this time →
+    confirm the normal "Correct!" + celebration + single Next button
+    appears, exactly as before → tap Next → confirm the quiz advances
+    normally and the end-of-quiz score reflects only ONE point for that
+    question (not zero, not two).
+  - **Potential visual concerns to check specifically**:
+    1. Do the two side-by-side buttons (Retry + Next) fit comfortably in the
+       feedback row's existing height without wrapping awkwardly or looking
+       cramped, especially with the longer 5-8 wording next to them on a
+       narrower device?
+    2. Does the feedback text (`numberOfLines={2}`, `adjustsFontSizeToFit`)
+       shrink gracefully rather than clipping if the row is tight?
+    3. Is the "Retry" button visually distinct enough from "Next" (yellow vs
+       coral) that a young child can tell they do different things, without
+       needing to read the words?
+    4. Confirm nothing scrolls on this screen at any point in this flow on a
+       real Galaxy S22 (landscape) — the whole screen was already built to
+       avoid scrolling, and this iteration only changed auto-sized footer
+       content, not the flexed layout above it, but this is unverified on a
+       real device.
+  - **EN + DE check**: confirm both English and German wordings above render
+    without wrapping past 2 lines or getting clipped, and that "Retry"
+    (`retry` i18n key, reused — already used elsewhere in the app) reads
+    naturally as a button label in this new context in both languages.
+  - **Small-screen check**: Galaxy S22, landscape (this app's target device)
+    — this is the primary device to verify against per the standing brief.
+  - **Ages affected**: all ages 2-8 (every child sees a wrong-answer
+    feedback row eventually); the wording specifically differs at the
+    4/5 age boundary.
 - **Iteration 17's quiz correct-answer celebration** (new visible UI —
   needs real-device confirmation, unlike most recent iterations' invisible
   accessibility-only changes):
