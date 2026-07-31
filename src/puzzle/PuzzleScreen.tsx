@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import {
   colors,
@@ -124,7 +125,7 @@ export function PuzzleScreen({
   // a no-op so a stray Next press can never crash instead of navigating.
   onNext?: () => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // This screen is shown with headerShown:true (see RootNavigator), so the
@@ -361,6 +362,17 @@ export function PuzzleScreen({
                       key={slotIndex}
                       testID={`puzzle-slot-${slotIndex}`}
                       onPress={() => handleTapSlot(slotIndex)}
+                      // Each slot is a pure cropped-image fragment with no
+                      // text of its own — without an explicit label, a
+                      // screen-reader user gets an unlabeled, unroled
+                      // element for every one of the puzzle's pieces (the
+                      // entire game). accessibilityState communicates
+                      // whether this slot is the one currently "picked up"
+                      // awaiting a swap, mirroring the sighted selected-
+                      // border cue below.
+                      accessibilityRole="button"
+                      accessibilityLabel={tFormat('puzzlePieceSlotLabel', language, { position: slotIndex + 1 })}
+                      accessibilityState={{ selected: selectedSlot === slotIndex }}
                     >
                       <PuzzlePiece
                         imageUri={imageUri}

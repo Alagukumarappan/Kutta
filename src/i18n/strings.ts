@@ -104,6 +104,7 @@ export const UI_STRINGS = {
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleDifficultyLabel: { en: 'Difficulty: {count}', de: 'Schwierigkeit: {count}' },
   puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },
+  puzzlePieceSlotLabel: { en: 'Puzzle piece, position {position}', de: 'Puzzleteil, Position {position}' },
   puzzleComplete: { en: 'Great job!', de: 'Super gemacht!' },
   tictactoeSetupTitle: { en: 'Tic-Tac-Toe', de: 'Tic-Tac-Toe' },
   tictactoeChooseOpponent: { en: 'Who do you want to play?', de: 'Gegen wen möchtest du spielen?' },

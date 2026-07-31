@@ -239,6 +239,34 @@ describe('PuzzleScreen', () => {
     expect(flatStyle.borderWidth).toBeGreaterThanOrEqual(4);
   });
 
+  // Regression test for the premium-polish accessibility pass: each slot is
+  // a pure cropped-image fragment with no text of its own, so it previously
+  // had no accessibilityRole/Label at all — a screen-reader dead end for
+  // the puzzle's entire core interaction.
+  describe('piece slot accessibility', () => {
+    it('gives every slot an accessible role and a distinct positional label', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+
+      for (let i = 0; i < 4; i++) {
+        const slot = utils.getByTestId(`puzzle-slot-${i}`);
+        expect(slot.props.accessibilityRole).toBe('button');
+        expect(slot.props.accessibilityLabel).toBe(`Puzzle piece, position ${i + 1}`);
+      }
+    });
+
+    it('marks the currently-picked-up slot as selected via accessibilityState, and only that one', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      await fireEvent.press(getByTestId('puzzle-slot-0'));
+
+      expect(getByTestId('puzzle-slot-0').props.accessibilityState).toEqual({ selected: true });
+      expect(getByTestId('puzzle-slot-1').props.accessibilityState).toEqual({ selected: false });
+    });
+  });
+
   describe('piece-snap celebratory pop', () => {
     // Same "spy on Animated.spring's call args instead of the settled style"
     // technique established in ColoringScreen.test.tsx (jest's Animated mock
