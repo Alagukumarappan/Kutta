@@ -60,16 +60,18 @@ dependency was added anywhere in this redesign.
 | Onboarding | `src/onboarding/OnboardingScreen.tsx`, `src/components/AgePicker.tsx` (additive `variant` prop) | `27d8dee` |
 | Coloring (screen + gallery) | `src/coloring/ColoringScreen.tsx`, `src/coloring/ColoringGallery.tsx` | `40bbb04` |
 | Settings | `src/settings/SettingsScreen.tsx`, `src/settings/ProfilePicturePicker.tsx` | `e5cd30d` |
-| Quiz | `src/quiz/QuestionRenderer.tsx` (QuizScreen.tsx intentionally left untouched — see note below) | `f4b70d9` |
+| Quiz (question/answer/feedback) | `src/quiz/QuestionRenderer.tsx` | `f4b70d9` |
+| Quiz (completion screen) | `src/quiz/QuizScreen.tsx` | `4d0970b` |
 
-All 9 commits are local-only on `complete-animated-redesign`, nothing pushed.
-**Final combined verification: `npx tsc --noEmit` clean, 41/41 suites, 411/411 tests passing.**
+All 10 commits are local-only on `complete-animated-redesign`, nothing pushed.
+**Final combined verification: `npx tsc --noEmit` clean, 41/41 suites, 412/412 tests passing.**
 
-**Note on QuizScreen.tsx**: the quiz redesign deliberately scoped to
-`QuestionRenderer.tsx` (the question/answer/feedback view) only.
-`QuizScreen.tsx`'s own completion screen (Play Again/Home buttons) was left
-on the old plain-Pressable styling to avoid risk — it's a reasonable
-candidate for a future iteration if more time is available.
+**Update**: `QuizScreen.tsx`'s completion screen (score card + Play
+Again/Home) was redesigned in a follow-up iteration, commit `4d0970b` — now
+uses `RaisedCard`/`RaisedPrimaryButton`/`RaisedSecondaryButton` matching
+`QuestionRenderer.tsx`'s violet quiz accent, with a spring pop-in entrance
+and a score-tier emoji badge (🏆/🌟/🎉, always warm, never neutral/negative).
+Reshuffle/double-fire-guard/navigation logic confirmed unchanged.
 
 ## Shared Components
 
@@ -107,8 +109,9 @@ All new, under `src/design-system/` (barrel-exported via `index.ts`):
 - **Puzzle piece pop / progress dots / mark badges / palette swatch pop / toolbar press**: all pre-existing from an earlier session, preserved with identical logic, only recolored onto the new palette where applicable.
 
 ## Remaining Screens
-- `QuizScreen.tsx`'s completion screen (Play Again/Home) — old styling, not yet migrated.
-- Any modal/dialog not explicitly covered above (e.g. native `Alert.alert` usages for confirmations — these remain OS-native by design per the original brief's "no default platform-alert appearance when a custom in-app modal is practical," which was judged not worth the risk for Settings' migration-confirmation flow given its criticality).
+All 7 user-facing screens plus the quiz completion screen are redesigned. What's left is polish, not missing coverage:
+- Native `Alert.alert` usages for destructive confirmations (Settings' folder-migration confirm, Coloring's clear-drawing confirm) remain OS-native by design — judged not worth the risk of a custom in-app modal for a critical confirmation path, but a future iteration could revisit this if a consistent custom dialog is wanted.
+- No app-wide screen-transition animation was added (React Navigation's default stack transition is unchanged) — could be a future consistency iteration.
 
 ## Visual Review Required
 
@@ -142,8 +145,9 @@ view), Coloring (screen + gallery), Puzzle (screen + gallery), Video
 (gallery + player), Settings — all 7 user-facing screens plus the shared
 foundation.
 
-**Screens not yet completed**: `QuizScreen.tsx`'s own completion
-(Play Again/Home) screen still has the old styling.
+**Screens not yet completed**: none — all 7 screens plus the quiz completion
+screen are redesigned. Remaining work is polish-tier (see Remaining Screens
+above), not missing coverage.
 
 **Commands to run locally**:
 ```
