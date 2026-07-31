@@ -146,11 +146,13 @@ export function QuestionRenderer({
   return (
     <ScrollView
       style={styles.scrollView}
-      // flexGrow:1 on the content container (rather than a fixed height) is
-      // the safety net, not the primary layout strategy: the flex column
-      // below is sized to fit a real landscape screen without scrolling, but
-      // an unusually large image or an unusually small screen should degrade
-      // to scrolling rather than clipping content off-screen unreachably.
+      // The flex column below is sized to fit a real landscape screen without
+      // scrolling in the normal case. This ScrollView is the safety net for
+      // when it can't: questionCard/grid carry a minHeight (70/140), so on an
+      // unusually short screen they stop shrinking and the content container
+      // genuinely grows past the viewport instead of merely compressing
+      // toward zero — at which point this actually scrolls, rather than
+      // clipping content off-screen unreachably.
       contentContainerStyle={styles.scrollContent}
     >
       <View style={styles.column}>
@@ -248,8 +250,13 @@ const styles = StyleSheet.create({
   },
   // The question gets a smaller share of the flexed space than the answer
   // grid (2 vs 3) since it's a single card, while the grid has to fit 4.
+  // minHeight (rather than flexBasis:0's implicit 0) is what actually makes
+  // the ScrollView above a real safety net: without it, a flex:2 sibling can
+  // shrink toward zero on a very short screen instead of ever exceeding the
+  // viewport and triggering a scroll.
   questionCard: {
     flex: 2,
+    minHeight: 70,
     flexDirection: 'row',
     backgroundColor: colors.white,
     borderRadius: radii.xl,
@@ -277,6 +284,7 @@ const styles = StyleSheet.create({
   },
   grid: {
     flex: 3,
+    minHeight: 140,
     rowGap: spacing.xs,
   },
   gridRow: {
@@ -286,6 +294,7 @@ const styles = StyleSheet.create({
   },
   optionCard: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     borderRadius: radii.lg,
     borderWidth: 3,
