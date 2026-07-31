@@ -209,8 +209,11 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 
     // Tap coordinates arrive in the Canvas's displayed (possibly scaled)
     // coordinate space; map them back into the pixel buffer's native space.
-    const pixelX = Math.floor((x / canvasSizeRef.current) * width);
-    const pixelY = Math.floor((y / canvasSizeRef.current) * height);
+    // Width and height are scaled independently (the canvas is rectangular,
+    // not square — see computeResponsiveRectSize), so each axis uses its
+    // own ratio rather than a single shared one.
+    const pixelX = Math.floor((x / canvasWidthRef.current) * width);
+    const pixelY = Math.floor((y / canvasHeightRef.current) * height);
     if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height) return;
 
     const updated = floodFill(pixels, width, height, pixelX, pixelY, selectedColorRef.current);
@@ -276,8 +279,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         if (toolModeRef.current !== 'pen') return;
         const { locationX, locationY } = evt.nativeEvent;
         // Pen strokes are drawn as an overlay directly on the Canvas, which
-        // is already sized to canvasSize - the same coordinate space these
-        // locationX/locationY touch coordinates arrive in, so no further
+        // is already sized to canvasWidth/canvasHeight - the same
+        // coordinate space these locationX/locationY touch coordinates
+        // arrive in, so no further
         // scaling is needed here (unlike the fill-mode pixel-buffer lookup,
         // which maps this same raw coordinate into the image's native pixel
         // space instead).
@@ -354,9 +358,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           </View>
         ) : (
         <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
-          <Canvas style={{ width: canvasSize, height: canvasSize }} testID="coloring-canvas">
+          <Canvas style={{ width: canvasWidth, height: canvasHeight }} testID="coloring-canvas">
             {displayImage && (
-              <SkiaImage image={displayImage} x={0} y={0} width={canvasSize} height={canvasSize} />
+              <SkiaImage image={displayImage} x={0} y={0} width={canvasWidth} height={canvasHeight} />
             )}
             {strokes.map((stroke, i) => stroke.path && (
               <SkiaPath
