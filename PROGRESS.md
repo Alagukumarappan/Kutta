@@ -1,8 +1,59 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 20
-- Latest completed improvement (iteration 20, one commit): investigated
+- Phase: 3 (delight/polish), Iteration: 21
+- Latest completed improvement (iteration 21, one commit): gave the quiz
+  completion screen (`QuizScreen.tsx`'s `isFinished` branch) real actions —
+  a "Play Again" button that starts a genuinely fresh session (a brand-new
+  `buildSession()` call against the already-loaded question pool, reshuffled
+  via `shuffle()`'s per-call `Math.random`, with score/currentIndex/selection
+  all reset via `initialSessionState()`) and a "Home" button that navigates
+  back via a new optional `onGoHome` prop, wired in `RootNavigator.tsx` to
+  `navigation.navigate('Home')` — the exact same render-prop pattern already
+  used for `HomeScreen`'s `onNavigate`. Both buttons are guarded against
+  rapid double-presses with a per-instance `useRef` flag (shared across all
+  closures of the component, so even a stale captured button reference can't
+  slip past it — same idiom as `SettingsScreen`'s `migrating` in-flight
+  guard); `playAgainFiredRef` is re-armed via a `useEffect` keyed on
+  `state?.isFinished` so a later play-through's Play Again still works,
+  while `hasNavigatedHomeRef` never needs to re-arm since navigating home
+  permanently leaves this screen instance. New EN+DE strings `quizPlayAgain`
+  ("Play Again"/"Nochmal spielen") and `quizGoHome` ("Home"/"Start") added to
+  `src/i18n/strings.ts`. Both buttons are sized `minHeight`/`minWidth: 48`.
+  Investigated the existing completion wording (`quizScore` + the
+  already-floors-at-1-star `starCount` calc) and found it already
+  encouraging with no shame/ranking/failure language at any score,
+  including 0/total — left unchanged, confirmed by a new test asserting
+  no "fail"/"bad"/"wrong"/"try harder" wording appears at a 0/2 finish.
+  - Baseline before this iteration: tsc clean, 25/25 suites, 204/204 tests.
+  - After this iteration: tsc clean, 25/25 suites, **210/210 tests** (+6 new
+    tests, all in a new `describe('completion screen actions', ...)` block
+    in `__tests__/quiz/QuizScreen.test.tsx`; no existing test
+    modified/removed/skipped).
+  - A code-review subagent independently reviewed the diff: confirmed
+    session-reset correctness (fresh `buildSession` call, not a replay),
+    confirmed the navigation pattern matches the established
+    `onNavigate`/render-prop convention and that `onGoHome` being optional
+    keeps existing call sites safe, confirmed both ref-guards are correct
+    (including the re-arming logic), confirmed encouraging tone at 0 score
+    in both languages, confirmed EN+DE completeness and natural (non-literal)
+    German wording, confirmed no hard-limit violations (no new deps, no
+    `any`/casts, no native config touched, no test weakened), and confirmed
+    the new tests are non-tautological — specifically praising the
+    "genuinely fresh session" test's technique of changing `Math.random`'s
+    mocked return value between the initial load and the Play Again press to
+    prove a real reshuffle occurred (per `shuffle.ts`'s algorithm), and the
+    double-press test's exact `Math.random`-call-count assertion as a real
+    (not just mock-was-called) guard check. One nit raised — the new
+    completion-actions row adds real height on top of the existing scoreCard
+    and, while plausible to fit a 360dp-tall landscape screen from the
+    source alone, is "tight enough to warrant an actual device/simulator
+    check" — carried forward as a Visual Review Required item below (real
+    S22 confirmation still pending, consistent with every other
+    device-fit item in this log).
+  - Commit: `<see git log — loop: add Play Again and Home actions to the
+    quiz completion screen>`.
+- Previous iteration's completed improvement (iteration 20, one commit): investigated
   the quiz progress-dots row's large-session-count overflow risk flagged
   after iteration 19 — concluded it is NOT a genuine risk (see Technical
   Decisions for the full investigation) and added one test pinning down
@@ -1353,39 +1404,27 @@ Iteration 20 closed out the progress-dots overflow question definitively
 lock — no code change needed, one documenting test added). It should not be
 re-investigated without new evidence.
 
-Iteration 21 priority: **give the quiz completion screen (`QuizScreen.tsx`,
-`state.isFinished` branch, ~line 82-102) actual actions.** Confirmed this
-iteration (see Technical Decisions) that it currently renders a static star
-rating + score text with **zero buttons** — no "play again"/retry-quiz
-action at all, and "return home" only works via React Navigation's native
-header back arrow (not an explicit, friendly, child-facing button). This is
-Phase 3/4's "positive completion screen" item and is a real, unclaimed gap,
-not a re-tread of anything already done. Suggested approach:
-- Add two clearly-labeled `Pressable`s to the `isFinished` branch: a
-  "Play Again" action that rebuilds a fresh session (likely calling the
-  same session-construction path `QuizScreen` already uses on mount —
-  check how `state` is first initialized, probably re-invoking
-  `buildSession`/`initialSessionState` with a new shuffle) and a
-  "Home" action that navigates back (this screen doesn't currently receive
-  `navigation`/`onNavigate` — see how `HomeScreen`/`ColoringGallery` receive
-  theirs in `RootNavigator.tsx` and wire the same pattern in for `quiz`).
-- New i18n strings needed in both `en`/`de` in `src/i18n/strings.ts` for
-  both button labels (e.g. `quizPlayAgain`/`quizReturnHome` or similar —
-  check existing naming conventions like `quizNext`/`quizScore` first).
-- Keep the existing encouraging tone: the star-rating logic already
-  guarantees a minimum of 1 star regardless of score (see `starCount`
-  calc) so no wording needs to apologize for a low score — reuse that
-  existing "always encouraging" design intent for the new buttons' copy
-  too (no "try harder" framing).
-- Child-facing constraint: this screen must not require scrolling — verify
-  two new buttons fit within `centeredScreen`'s existing layout without
-  pushing content off-screen on a short landscape height (same screen-fit
-  discipline as `QuestionRenderer.tsx`'s documented ScrollView safety net).
-- TDD: `QuizScreen.test.tsx` likely already has a test reaching the
-  finished state (check first) — extend it or add a new one asserting both
-  buttons render, "Play Again" produces a fresh in-progress state (score
-  reset, currentIndex 0), and "Home" calls whatever navigation hook is
-  wired in.
+Iteration 21 closed out the quiz completion screen's missing-actions gap
+(Phase 3/4's "positive completion screen" item) — see Current Status for
+full detail. It should not be re-treaded without new evidence.
+
+Iteration 22 priority: **no single obvious unclaimed Phase 3 gap remains
+queued** — the code-review subagent's one nit from this iteration (real
+height check on the quiz completion screen's new button row, see Visual
+Review Required below) is the most concrete lead, but it's a verification
+task, not a code-change task, and this loop cannot drive a real device.
+Suggested approach for iteration 22:
+- Re-run the touch-target/motion-safety/screen-fit sweep pattern used in
+  iterations 15-16 against any screens not yet covered by that sweep, OR
+- Pick up the still-open, small `AgePicker.tsx` touch-target check noted
+  since iteration 16 ("likely fine but unmeasured"), OR
+- Continue the Pure-Logic Module Inventory's remaining edge-case gaps (see
+  that table above) if no UI-polish gap is found on inspection.
+- Before starting, grep `QuizScreen.tsx`/`QuestionRenderer.tsx` and this
+  file's Technical Decisions once more to confirm no Phase 3/4 item was
+  missed, since the last several iterations have been quiz-focused and it's
+  worth deliberately checking other screens (coloring/puzzle/video/settings)
+  haven't accumulated their own equivalent gaps.
 
 Still-open, deliberately deferred real-device check (unchanged from
 iteration 19, still cannot be verified by this loop — see Visual Review
@@ -1511,6 +1550,54 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 21's quiz completion screen "Play Again" / "Home" buttons**
+  (new visible UI, real layout risk — needs a genuine device/simulator
+  check, not just source inspection):
+  - **Screen**: `QuizScreen`'s completion ("isFinished") screen — the
+    `🎉` emoji + star row + score-text card that already appears when a
+    quiz session ends, now followed by a row of two new buttons.
+  - **Expected behavior**: below the existing score card, a horizontal row
+    with a green/mint "Play Again" button and a blue "Home" button, each with
+    a bold white label, rounded corners, and a drop shadow matching the
+    app's existing button style (same visual family as the Retry buttons
+    elsewhere). Both buttons should look easily tappable (not cramped
+    against each other or the card above) and the WHOLE screen — card plus
+    both buttons — must fit without any scrolling or clipping, even in
+    landscape on a short screen.
+  - **Interaction steps**: play a quiz to completion (any score, including
+    intentionally answering everything wrong to check the 0-score case).
+    Tap "Play Again" — confirm the screen immediately shows a new first
+    question (not the same one necessarily, since the session reshuffles),
+    with the score/progress visibly reset. Play to completion a second time
+    and tap "Play Again" again to confirm it still works after a repeat.
+    Separately, from a fresh completion screen, tap "Home" — confirm it
+    returns to the app's home screen (the four feature cards), not just a
+    "back" pop to the wrong place. Try rapidly double-tapping each button
+    (as fast as possible) — confirm nothing double-fires: "Play Again"
+    shouldn't visibly flicker/skip a question, and "Home" shouldn't attempt
+    to navigate twice or throw a navigation warning.
+  - **EN+DE check**: switch the app language to German in Settings, replay
+    a quiz to completion, and confirm the buttons read "Nochmal spielen" and
+    "Start" — both should look natural and fit within the button without
+    wrapping awkwardly or being truncated.
+  - **Small-screen check (the real open question)**: on a Galaxy S22 (or
+    equivalent short-landscape device/emulator), confirm the completion
+    screen's card + button row together still fit entirely within the
+    visible area with no scrolling, clipping, or overlap with the native
+    header — this could not be measured precisely from source alone (a
+    code-review subagent flagged it as "plausible but tight enough to
+    warrant an actual check," see Current Status). If it doesn't fit,
+    the fix is most likely reducing `spacing.lg` margin between the card and
+    button row, or reducing `scoreCard`'s padding, not removing either
+    button.
+  - **Ages affected**: all ages 2-8 — this is the end of every quiz session
+    for every child using the app, so it's a high-traffic screen; the
+    tap-target sizing (`minHeight`/`minWidth: 48`) particularly matters for
+    the youngest (2-4) end of the range with less precise motor control.
+  - **Needs real-device confirmation**: yes, both the screen-fit question
+    above and the general "does this feel good to tap for a small child"
+    question — this loop can run automated tests but cannot see or touch a
+    real screen.
 - **Iteration 19's quiz progress-dots accessibility label** (no new visible
   UI — included here for completeness/audit trail, not because a sighted
   visual check is expected to find anything):

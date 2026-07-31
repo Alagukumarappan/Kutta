@@ -152,7 +152,13 @@ function AppStack({
         {() => <SettingsScreen onProfileChanged={onProfileChanged} />}
       </Stack.Screen>
       <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
-        {() => <QuizScreen quizFolderUri={folderUris.quiz} childAge={profile.age} />}
+        {({ navigation }) => (
+          <QuizScreen
+            quizFolderUri={folderUris.quiz}
+            childAge={profile.age}
+            onGoHome={() => navigation.navigate('Home')}
+          />
+        )}
       </Stack.Screen>
       <Stack.Screen name="coloring" options={{ title: titleFor('homeColoring') }}>
         {({ navigation }) => (

@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QuizScreen } from '../../src/quiz/QuizScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -234,6 +235,184 @@ describe('QuizScreen', () => {
       expect(queryByTestId('quiz-progress')).toBeNull();
       expect(queryByLabelText('Question 2 of 2')).toBeNull();
       expect(queryByLabelText(/Question \d+ of \d+/)).toBeNull();
+    });
+  });
+
+  describe('completion screen actions', () => {
+    async function finishQuizWithZeroScore() {
+      const rendered = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+      const { findByText, getByText, getByTestId } = rendered;
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('3')); // wrong
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('3')); // wrong
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await rendered.findByText('Quiz done! Your score: 0 / 2');
+      return rendered;
+    }
+
+    it('shows an encouraging message and at least one star even at a 0/2 score, with no shaming wording', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { getByText, queryByText } = await finishQuizWithZeroScore();
+
+      // At least one filled star even at the lowest possible score — the
+      // existing starCount calc floors at 1, never 0.
+      expect(getByText(/⭐/)).toBeTruthy();
+      // No shaming/failure/ranking language at any score.
+      expect(queryByText(/fail/i)).toBeNull();
+      expect(queryByText(/bad/i)).toBeNull();
+      expect(queryByText(/wrong/i)).toBeNull();
+      expect(queryByText(/try harder/i)).toBeNull();
+    });
+
+    it('"Play Again" starts a genuinely fresh session — new shuffle, score and progress reset to zero', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { findByText, getByText, getByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      // Change the shuffle outcome for the NEXT buildSession call (rng=0
+      // swaps the two-item array — see src/quiz/shuffle.ts) so a genuinely
+      // fresh buildSession() call is observable, not just a state reset
+      // reusing the previous session array/order.
+      randomSpy.mockReturnValue(0);
+
+      await fireEvent.press(await findByLabelText('Play Again'));
+
+      // The session order flipped (q2 now first) — proof a real new
+      // buildSession() call happened, not a cached/replayed session — and
+      // score/progress are back to zero.
+      await findByText('1 + 1?');
+      await findByLabelText('Question 1 of 2');
+      expect(() => getByText('Quiz done!', { exact: false })).toThrow();
+    });
+
+    it('guards "Play Again" against a rapid double-press only resetting the session once', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { findByText, getByText, getByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      const callsBeforePlayAgain = randomSpy.mock.calls.length;
+      const playAgainButton = await findByLabelText('Play Again');
+
+      // Press the SAME captured element twice without re-querying, exactly
+      // the "stale double-tap" shape used elsewhere in this codebase's
+      // double-fire guards — without a guard this would shuffle twice.
+      await fireEvent.press(playAgainButton);
+      await fireEvent.press(playAgainButton);
+
+      await findByText('2 + 2?');
+      expect(randomSpy.mock.calls.length).toBe(callsBeforePlayAgain + 1);
+    });
+
+    it('"Home" navigates home via the provided callback, guarded against a rapid double-press', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+      const onGoHome = jest.fn();
+
+      const { findByText, getByText, getByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} onGoHome={onGoHome} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      const homeButton = await findByLabelText('Home');
+      await fireEvent.press(homeButton);
+      await fireEvent.press(homeButton);
+
+      expect(onGoHome).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows both actions with an accessible role and label in German too', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { findByText, getByText, getByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="de">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz fertig! Dein Ergebnis: 2 / 2');
+
+      const playAgain = await findByLabelText('Nochmal spielen');
+      const home = await findByLabelText('Start');
+      expect(playAgain.props.accessibilityRole).toBe('button');
+      expect(home.props.accessibilityRole).toBe('button');
+    });
+
+    it('gives both completion buttons a real ~48x48 minimum touch target', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { findByText, getByText, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      const playAgainStyle = StyleSheet.flatten(getByTestId('quiz-play-again').props.style);
+      const homeStyle = StyleSheet.flatten(getByTestId('quiz-home').props.style);
+      expect(playAgainStyle.minHeight).toBeGreaterThanOrEqual(48);
+      expect(homeStyle.minHeight).toBeGreaterThanOrEqual(48);
     });
   });
 });

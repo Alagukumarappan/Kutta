@@ -1,14 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { loadQuestions } from './loadQuestions';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
+import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 
-export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string; childAge: number }) {
+export function QuizScreen({
+  quizFolderUri,
+  childAge,
+  onGoHome,
+}: {
+  quizFolderUri: string;
+  childAge: number;
+  // Optional so existing call sites/tests that don't need the Home button
+  // (e.g. ones that never reach the finished screen) don't have to pass one.
+  // RootNavigator always wires a real one in the running app.
+  onGoHome?: () => void;
+}) {
   const { t, language } = useLanguage();
   // This screen is shown with headerShown:true (see RootNavigator), so the
   // native header already covers the top inset — only left/right/bottom are
@@ -21,6 +33,26 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
   // Bumped on Retry to force a fresh load attempt even when quizFolderUri and
   // childAge haven't changed (e.g. a transient failure).
   const [retryToken, setRetryToken] = useState(0);
+  // The full loaded (unfiltered/unshuffled) question pool, kept around so
+  // "Play Again" can call buildSession() again — a real fresh shuffle/reselect
+  // — without re-reading the quiz folder from disk.
+  const allQuestionsRef = useRef<Question[]>([]);
+
+  // Double-fire guards for the two completion-screen buttons (same idiom as
+  // this codebase's other in-flight-action guards, e.g. SettingsScreen's
+  // `migrating` check): a ref survives across renders and is shared by every
+  // closure of this component instance, so even a second press captured from
+  // a stale (pre-reset) render can't slip past it. playAgainFiredRef is
+  // re-armed whenever a finished screen is freshly entered, so a later
+  // "Play Again" (after finishing a subsequent session) still works;
+  // hasNavigatedHomeRef never needs to re-arm since navigating home
+  // permanently leaves this screen instance.
+  const playAgainFiredRef = useRef(false);
+  const hasNavigatedHomeRef = useRef(false);
+
+  useEffect(() => {
+    if (state?.isFinished) playAgainFiredRef.current = false;
+  }, [state?.isFinished]);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +62,7 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     loadQuestions(quizFolderUri)
       .then((all) => {
         if (cancelled) return;
+        allQuestionsRef.current = all;
         const session = buildSession(all, childAge);
         setState(initialSessionState(session));
       })
@@ -87,6 +120,23 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
     const ratio = total > 0 ? state.score / total : 0;
     const starCount = ratio >= 0.9 ? 3 : ratio >= 0.5 ? 2 : 1;
 
+    function handlePlayAgain() {
+      if (playAgainFiredRef.current) return;
+      playAgainFiredRef.current = true;
+      setSelectedOptionId(null);
+      // A genuinely fresh session: a brand-new buildSession() call reshuffles
+      // and reselects from the same loaded pool (see quizSession.ts's
+      // shuffle-then-slice), not a re-render of the just-finished one.
+      const freshSession = buildSession(allQuestionsRef.current, childAge);
+      setState(initialSessionState(freshSession));
+    }
+
+    function handleGoHome() {
+      if (hasNavigatedHomeRef.current) return;
+      hasNavigatedHomeRef.current = true;
+      onGoHome?.();
+    }
+
     return (
       <View style={[styles.centeredScreen, insetStyle]}>
         <View style={styles.scoreCard}>
@@ -97,6 +147,26 @@ export function QuizScreen({ quizFolderUri, childAge }: { quizFolderUri: string;
           <Text style={styles.scoreText}>
             {tFormat('quizScore', language, { score: state.score, total })}
           </Text>
+        </View>
+        <View style={styles.completionActionsRow}>
+          <Pressable
+            testID="quiz-play-again"
+            onPress={handlePlayAgain}
+            style={styles.playAgainButton}
+            accessibilityRole="button"
+            accessibilityLabel={t('quizPlayAgain')}
+          >
+            <Text style={styles.playAgainButtonText}>{t('quizPlayAgain')}</Text>
+          </Pressable>
+          <Pressable
+            testID="quiz-home"
+            onPress={handleGoHome}
+            style={styles.homeButton}
+            accessibilityRole="button"
+            accessibilityLabel={t('quizGoHome')}
+          >
+            <Text style={styles.homeButtonText}>{t('quizGoHome')}</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -196,5 +266,50 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
+  },
+  // A row (not a stack) so the two new buttons cost minimal extra vertical
+  // space — this screen must never scroll, and landscape width is plentiful.
+  completionActionsRow: {
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    gap: spacing.md,
+  },
+  playAgainButton: {
+    minHeight: 48,
+    minWidth: 48,
+    backgroundColor: colors.mint,
+    borderColor: colors.mintDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow,
+    elevation: 4,
+  },
+  playAgainButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
+  homeButton: {
+    minHeight: 48,
+    minWidth: 48,
+    backgroundColor: colors.sky,
+    borderColor: colors.skyDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow,
+    elevation: 4,
+  },
+  homeButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.white,
   },
 });

@@ -62,6 +62,10 @@ export const UI_STRINGS = {
   // it can never cause the child-facing quiz screen to need scrolling.
   quizCelebration: { en: 'Yay! ⭐', de: 'Juhu! ⭐' },
   quizNext: { en: 'Next', de: 'Weiter' },
+  // Completion-screen actions (see QuizScreen's isFinished branch) — shown
+  // regardless of score, so neither label references performance at all.
+  quizPlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
+  quizGoHome: { en: 'Home', de: 'Start' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },
   puzzleComplete: { en: 'Great job!', de: 'Super gemacht!' },
