@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, Image, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Image, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
-import { colors, spacing, radii, getActivityPalette, RaisedCard, EmptyStatePanel } from '../design-system';
+import { colors, spacing, radii, elevation, getActivityPalette, RaisedCard, EmptyStatePanel } from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
@@ -78,18 +78,27 @@ export function PuzzleGallery({
   }, [picturesFolderUri, retryToken]);
 
   if (error) {
+    // Matches ColoringGallery/VideoGallery's own error-state treatment (a
+    // raised, activity-accented retry control with a real >=48dp box)
+    // rather than a bare hitSlop-padded text link — this gallery's error
+    // state had drifted from its siblings despite all three consuming the
+    // same design system.
     return (
-      <View testID="puzzle-gallery-error" style={[styles.screen, insetStyle]}>
+      <View testID="puzzle-gallery-error" style={[styles.centeredMessage, insetStyle]}>
         <Text style={styles.errorText}>{t('loadError')}</Text>
-        <Pressable
+        <RaisedCard
           testID="puzzle-gallery-retry"
           onPress={() => setRetryToken((n) => n + 1)}
-          accessibilityRole="button"
+          color={PUZZLE_PALETTE.accent}
+          borderColor={PUZZLE_PALETTE.accentDark}
+          tilt="compact"
           accessibilityLabel={t('retry')}
-          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          style={styles.retryCard}
         >
-          <Text style={styles.retryText}>{t('retry')}</Text>
-        </Pressable>
+          <View testID="puzzle-gallery-retry-target" style={styles.retryCardInner}>
+            <Text style={styles.retryText}>{t('retry')}</Text>
+          </View>
+        </RaisedCard>
       </View>
     );
   }
@@ -170,12 +179,34 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  centeredMessage: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
   errorText: {
+    fontSize: 17,
+    fontWeight: '700',
     color: colors.ink,
-    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  retryCard: {
+    alignSelf: 'center',
+    ...elevation.level2,
+  },
+  retryCardInner: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    minHeight: 48,
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   retryText: {
-    color: PUZZLE_PALETTE.accentDark,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.white,
   },
 });

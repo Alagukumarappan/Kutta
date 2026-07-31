@@ -12,6 +12,7 @@ import {
   elevation,
   touchTarget,
   clamp,
+  withAlpha,
   getActivityPalette,
   type ActivityId,
   RaisedCard,
@@ -401,7 +402,11 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    // Same white-over-color translucent badge trick as CardBackground's own
+    // wash, expressed via the shared `withAlpha` helper (design-system/
+    // tokens.ts) instead of a hand-typed rgba() literal so this stays a
+    // single, documented color-math implementation across the app.
+    backgroundColor: withAlpha(colors.white, 0.35),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
@@ -431,7 +436,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxs,
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: 'rgba(255,255,255,0.85)',
+    color: withAlpha(colors.white, 0.85),
     textAlign: 'center',
   },
 });

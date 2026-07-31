@@ -89,10 +89,11 @@ describe('PuzzleGallery', () => {
     expect(flatStyle.height).toBeGreaterThanOrEqual(48);
   });
 
-  it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
+  it('gives the retry button a real >=48dp tap target (a raised design-system card, not a bare text label)', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
       new Error('SAF grant revoked')
     );
+    const { StyleSheet } = require('react-native');
 
     const { findByTestId } = await render(
       <LanguageProvider initialLanguage="en">
@@ -100,14 +101,16 @@ describe('PuzzleGallery', () => {
       </LanguageProvider>
     );
 
-    const retryButton = await findByTestId('puzzle-gallery-retry');
-    // Same unstyled-Text-only, no-adjacent-sibling situation as
-    // ColoringGallery's retry button (see that test for the full rationale).
-    const { top, bottom, left, right } = retryButton.props.hitSlop ?? {};
-    expect(top).toBeGreaterThanOrEqual(12);
-    expect(bottom).toBeGreaterThanOrEqual(12);
-    expect(left).toBeGreaterThanOrEqual(12);
-    expect(right).toBeGreaterThanOrEqual(12);
+    // Consistency pass: redesigned onto the shared design-system's
+    // RaisedCard, matching ColoringGallery/VideoGallery's own error-state
+    // treatment, rather than a bare unstyled "Retry" Text needing hitSlop to
+    // reach the ~44x44 guideline (this test's previous form) — the button
+    // now carries a real minHeight/minWidth box of its own; assert that
+    // directly.
+    const target = await findByTestId('puzzle-gallery-retry-target');
+    const flattened = StyleSheet.flatten(target.props.style);
+    expect(flattened.minHeight).toBeGreaterThanOrEqual(48);
+    expect(flattened.minWidth).toBeGreaterThanOrEqual(48);
   });
 
   describe('individually-added pictures', () => {

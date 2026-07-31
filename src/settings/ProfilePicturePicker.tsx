@@ -3,7 +3,7 @@ import { View, Text, FlatList, Pressable, Image, Modal, StyleSheet, Alert } from
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLanguage } from '../i18n/LanguageContext';
-import { colors, radii, spacing, elevation } from '../design-system';
+import { colors, radii, spacing, elevation, withAlpha } from '../design-system';
 
 // Grid layout for the thumbnail list — 3 columns reads as a proper "picture
 // grid" (per this redesign's brief) instead of the previous single-column
@@ -220,7 +220,11 @@ export function ProfilePicturePicker({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(49, 66, 75, 0.5)',
+    // This is exactly `colors.parent.ink` at 50% alpha (the parent-register
+    // equivalent of `colors.overlayScrim`'s plum-tinted child-facing
+    // backdrop) — expressed via the shared `withAlpha` helper instead of a
+    // hand-typed rgba() literal that happened to already match it.
+    backgroundColor: withAlpha(colors.parent.ink, 0.5),
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,

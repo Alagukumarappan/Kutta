@@ -11,6 +11,7 @@ import {
   typography,
   touchTarget,
   surfaceWash,
+  motion,
   getActivityPalette,
   AnimatedPressable,
   SurfaceWash,
@@ -205,16 +206,21 @@ export function QuestionRenderer({
     scaleAnim.setValue(0);
     opacityAnim.setValue(0);
 
-    // Bounded, non-flashing sequence: pop in (~200ms), hold briefly
-    // (900ms), then fade out (300ms) — well under a couple of seconds
-    // total, so it always auto-resolves on its own.
+    // Bounded, non-flashing sequence: pop in (~160ms), hold briefly
+    // (900ms), then fade out (320ms) — well under a couple of seconds
+    // total, so it always auto-resolves on its own. Uses the shared
+    // `motion` tokens (the same celebrate spring + fast/celebration/slow
+    // durations `CelebrationOverlay`'s own tone="success" bubble uses for
+    // this identical effect) rather than separately hand-tuned literals —
+    // this is also the exact "900ms hold, 320ms fade-out" pairing
+    // REDESIGN_PROGRESS.md's Animation Inventory documents for this bubble.
     const animation = Animated.sequence([
       Animated.parallel([
-        Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
-        Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.celebrate }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: motion.duration.fast, useNativeDriver: true }),
       ]),
-      Animated.delay(900),
-      Animated.timing(opacityAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.delay(motion.duration.celebration),
+      Animated.timing(opacityAnim, { toValue: 0, duration: motion.duration.slow, useNativeDriver: true }),
     ]);
 
     animation.start(({ finished }) => {
