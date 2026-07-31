@@ -23,6 +23,7 @@ import {
   RaisedCard,
   CelebrationOverlay,
   LoadingPanel,
+  useReducedMotion,
 } from '../design-system';
 import {
   computeGridDimensions,
@@ -65,6 +66,7 @@ function PuzzlePiece({
   containerHeight,
   selected,
   scale,
+  testID,
 }: {
   imageUri: string;
   rect: PieceRect;
@@ -72,6 +74,11 @@ function PuzzlePiece({
   containerHeight: number;
   selected: boolean;
   scale: Animated.Value;
+  // Exposes the animated scale wrapper itself (distinct from the outer
+  // Pressable's own testID) so tests can read its settled transform value
+  // directly — same "give the inner Animated.View its own testID"
+  // convention ColoringScreen's swatch/toolbar faces already use.
+  testID?: string;
 }) {
   // rects are computed over a containerWidth x containerHeight image (see computePieceRects
   // call below, which is now passed the board's real, aspect-ratio-correct width/height
@@ -82,6 +89,7 @@ function PuzzlePiece({
   // the moment it snaps into its correct slot, without affecting layout/siblings.
   return (
     <Animated.View
+      testID={testID}
       style={[
         styles.pieceSlot,
         {
@@ -190,6 +198,8 @@ export function PuzzleScreen({
     }
   }, [isSolved]);
 
+  const reducedMotion = useReducedMotion();
+
   useEffect(() => {
     if (order.length === 0) {
       prevCorrectRef.current = null;
@@ -201,6 +211,15 @@ export function PuzzleScreen({
       currentCorrect.forEach((correct, slotIndex) => {
         if (correct && !prev[slotIndex]) {
           const scale = getPieceScale(slotIndex);
+          // Same reduce-motion treatment as this app's other bouncy pop-ins
+          // (Coloring's palette swatch/toolbar buttons, Quiz's progress
+          // dots): land directly on the resting scale instead of playing
+          // the overshoot sequence. The piece's own position-snap already
+          // conveys that a correct placement just happened, on its own.
+          if (reducedMotion) {
+            scale.setValue(1);
+            return;
+          }
           // Brief celebratory pop — scale 1 -> 1.15 -> 1 — instead of the
           // instant snap that just happened to the piece's position.
           Animated.sequence([
@@ -211,7 +230,7 @@ export function PuzzleScreen({
       });
     }
     prevCorrectRef.current = currentCorrect;
-  }, [order]);
+  }, [order, reducedMotion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -375,6 +394,7 @@ export function PuzzleScreen({
                       accessibilityState={{ selected: selectedSlot === slotIndex }}
                     >
                       <PuzzlePiece
+                        testID={`puzzle-piece-scale-${slotIndex}`}
                         imageUri={imageUri}
                         rect={rects[pieceIndex]}
                         containerWidth={board.width}
