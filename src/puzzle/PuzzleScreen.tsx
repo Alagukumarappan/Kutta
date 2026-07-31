@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -42,20 +43,24 @@ function PuzzlePiece({
   containerWidth,
   containerHeight,
   selected,
+  scale,
 }: {
   imageUri: string;
   rect: PieceRect;
   containerWidth: number;
   containerHeight: number;
   selected: boolean;
+  scale: Animated.Value;
 }) {
   // rects are computed over a containerWidth x containerHeight image (see computePieceRects
   // call below, which is now passed the board's real, aspect-ratio-correct width/height
   // instead of assuming a square source photo), so the piece is a crop of the *full-size*
   // image — no extra scaling is needed. The slot View is sized to the piece's rect and clips
   // (overflow: hidden) the full image, shifted so the correct region lands inside the window.
+  // The outer View is Animated so a piece can pop briefly (scale only — never width/height)
+  // the moment it snaps into its correct slot, without affecting layout/siblings.
   return (
-    <View
+    <Animated.View
       style={[
         {
           width: rect.width,
@@ -64,6 +69,7 @@ function PuzzlePiece({
           borderWidth: SLOT_BORDER,
           borderColor: selected ? colors.sunDark : colors.mintDark,
           backgroundColor: colors.white,
+          transform: [{ scale }],
         },
         selected && styles.pieceSelected,
       ]}
@@ -78,7 +84,40 @@ function PuzzlePiece({
           marginTop: -rect.y,
         }}
       />
-    </View>
+    </Animated.View>
+  );
+}
+
+// Pop-in entrance for the puzzle-COMPLETE banner — the exact recipe already
+// established for the quiz's feedback card (QuestionRenderer.tsx's
+// cardScaleAnim/cardOpacityAnim): starts slightly shrunk/invisible (0.85/0)
+// and springs to rest (1/1), speed 20 / bounciness 6 for the scale, a 220ms
+// timing for the opacity. This component only exists in the tree while
+// `isSolved` is true (see the `{isSolved && <CompletionBanner ... />}` call
+// site below), so a plain mount-effect is enough to replay the pop-in every
+// time the banner (re)appears — no separate show/hide toggle needed.
+function CompletionBanner({ text }: { text: string }) {
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [scaleAnim, opacityAnim]);
+
+  return (
+    <Animated.View
+      testID="puzzle-complete"
+      style={[styles.completeBanner, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
+    >
+      <Text style={styles.completeEmoji}>🎉</Text>
+      <Text style={styles.completeText}>{text}</Text>
+      <Text style={styles.completeEmoji}>🎉</Text>
+    </Animated.View>
   );
 }
 
@@ -102,6 +141,52 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   // not a square one) - imageSize is null until Image.getSize resolves.
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [imageSizeFailed, setImageSizeFailed] = useState(false);
+
+  // One lazily-created, cached Animated.Value per SLOT (not per piece id) —
+  // the piece currently sitting in a given slot is what visually pops, and a
+  // slot's occupant only ever changes via handleTapSlot's swap, so keying by
+  // slot position (rather than piece index) is what stays stable across a
+  // swap and lets the SAME Animated.Value keep animating for that slot.
+  const pieceScalesRef = useRef<Map<number, Animated.Value>>(new Map());
+  function getPieceScale(slotIndex: number): Animated.Value {
+    let value = pieceScalesRef.current.get(slotIndex);
+    if (!value) {
+      value = new Animated.Value(1);
+      pieceScalesRef.current.set(slotIndex, value);
+    }
+    return value;
+  }
+
+  // Tracks, per slot, whether it held its correctly-placed piece as of the
+  // last render — null means "no baseline yet" (fresh mount, or a puzzle
+  // just (re)started via startPuzzle), which deliberately suppresses
+  // animating any slot that happens to already be correct: only a real
+  // false -> true transition (a piece actually snapping into place) should
+  // trigger the celebratory pop, never the shuffle's own starting layout.
+  const prevCorrectRef = useRef<boolean[] | null>(null);
+
+  useEffect(() => {
+    if (order.length === 0) {
+      prevCorrectRef.current = null;
+      return;
+    }
+    const currentCorrect = order.map((pieceIndex, slotIndex) => pieceIndex === slotIndex);
+    const prev = prevCorrectRef.current;
+    if (prev) {
+      currentCorrect.forEach((correct, slotIndex) => {
+        if (correct && !prev[slotIndex]) {
+          const scale = getPieceScale(slotIndex);
+          // Brief celebratory pop — scale 1 -> 1.15 -> 1 — instead of the
+          // instant snap that just happened to the piece's position.
+          Animated.sequence([
+            Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, speed: 30, bounciness: 8 }),
+            Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+          ]).start();
+        }
+      });
+    }
+    prevCorrectRef.current = currentCorrect;
+  }, [order]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +221,11 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
     setPieceCount(count);
     setOrder(shufflePieceOrder(count));
     setSelectedSlot(null);
+    // Fresh puzzle: clear the correctness baseline so the new shuffle's
+    // starting layout (even if a slot happens to land correctly by chance)
+    // never triggers the piece-snap pop — only real swaps made from here on
+    // should be able to.
+    prevCorrectRef.current = null;
   }
 
   function handleTapSlot(slotIndex: number) {
@@ -245,6 +335,7 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
                         containerWidth={board.width}
                         containerHeight={board.height}
                         selected={selectedSlot === slotIndex}
+                        scale={getPieceScale(slotIndex)}
                       />
                     </Pressable>
                   );
@@ -255,13 +346,7 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
         </View>
       </View>
 
-      {isSolved && (
-        <View testID="puzzle-complete" style={styles.completeBanner}>
-          <Text style={styles.completeEmoji}>🎉</Text>
-          <Text style={styles.completeText}>{t('puzzleComplete')}</Text>
-          <Text style={styles.completeEmoji}>🎉</Text>
-        </View>
-      )}
+      {isSolved && <CompletionBanner text={t('puzzleComplete')} />}
     </ScrollView>
   );
 }

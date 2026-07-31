@@ -142,6 +142,60 @@ describe('PuzzleScreen', () => {
     expect(getByTestId('puzzle-complete')).toBeTruthy();
   });
 
+  describe('piece-snap celebratory pop', () => {
+    // Same "spy on Animated.spring's call args instead of the settled style"
+    // technique established in ColoringScreen.test.tsx (jest's Animated mock
+    // never advances a spring past its starting value without an explicit
+    // fake-timer tick, so reading the flattened scale right after a press
+    // would still show the pre-press resting value) — this instead confirms
+    // the real placement-detection logic (order[slotIndex] === slotIndex,
+    // read via the existing `order`/`readOrder` helpers, completely untouched
+    // here) really does request a pop spring toward 1.15 for a slot the
+    // instant it becomes correct, driven by a single awaited fireEvent.press
+    // pair rather than any pressIn/pressOut or rapid rerender sequence.
+    it('requests a pop spring (scale 1.15) for a slot the moment its piece is swapped into the correct position', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      const { Animated: RNAnimated } = require('react-native');
+      const springSpy = jest.spyOn(RNAnimated, 'spring');
+
+      // Pick any slot that isn't already correct (shufflePieceOrder guarantees
+      // at least one exists for a non-identity permutation) and swap in its
+      // correct piece — mirrors the selection-sort step used by the
+      // completion test above, applied to just one target.
+      const before = readOrder(getByTestId);
+      const target = before.findIndex((pieceIndex, slotIndex) => pieceIndex !== slotIndex);
+      expect(target).toBeGreaterThanOrEqual(0);
+      const currentIndex = before.indexOf(target);
+
+      await fireEvent.press(getByTestId(`puzzle-slot-${target}`));
+      await fireEvent.press(getByTestId(`puzzle-slot-${currentIndex}`));
+
+      // Sanity: the swap really did place the target piece correctly.
+      expect(readOrder(getByTestId)[target]).toBe(target);
+
+      const toValues = springSpy.mock.calls.map(([, config]) => (config as { toValue: number }).toValue);
+      expect(toValues).toContain(1.15);
+
+      springSpy.mockRestore();
+    });
+
+    it('does not request any pop spring on initial mount, even though the shuffle may coincidentally place a piece correctly', async () => {
+      const { Animated: RNAnimated } = require('react-native');
+      const springSpy = jest.spyOn(RNAnimated, 'spring');
+
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+
+      const toValues = springSpy.mock.calls.map(([, config]) => (config as { toValue: number }).toValue);
+      expect(toValues).not.toContain(1.15);
+
+      springSpy.mockRestore();
+    });
+  });
+
   it('shows a loading indicator while the real photo size is still loading, then renders the board', async () => {
     let resolveGetSize!: (w: number, h: number) => void;
     getSizeSpy.mockRestore();
