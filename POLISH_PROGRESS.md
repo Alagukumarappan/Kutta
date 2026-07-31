@@ -186,12 +186,60 @@ total tests passing, up from 511).
 - Tic-Tac-Toe celebrated a computer win against the child with the same
   confetti/success styling as a real win — fixed in iteration 8.
 
+### Iteration 9 — getItemLayout for the Puzzle gallery's fixed-tile grid
+**Screen:** Puzzle gallery.
+**Problem:** Performance audit across all three galleries' FlatLists (none
+had `getItemLayout`). Puzzle's is the clean candidate: every tile is a
+fixed 128px square (`TILE_SIZE`) in a fixed 4-column grid (`GRID_COLUMNS`)
+— both compile-time constants, never dependent on async-loaded content —
+so FlatList had no reason to fall back to measuring each row's real layout
+as it renders/scrolls. That measurement cost is a real, well-known RN
+FlatList tax, and it scales directly with folder size (the project brief's
+own "1000 images" bug-hunt scenario).
+**Fix:** Added `getItemLayout` with a precomputed `ROW_HEIGHT = TILE_SIZE +
+spacing.sm` (140px). **Caught and fixed a self-introduced bug during
+review**: the first pass wrote `offset: ROW_HEIGHT * Math.floor(index /
+GRID_COLUMNS)`, which double-divides — React Native, once `numColumns > 1`,
+already treats FlatList's internal item count as the ROW count and calls
+`getItemLayout` with that same row-scale index directly, not the flat
+index into the image array (verified against the installed
+`react-native`/`@react-native/virtualized-lists` source, not just
+assumed). The extra division would have collapsed every row to offset 0,
+breaking `scrollToIndex`/`initialScrollIndex`. Fixed to `offset:
+ROW_HEIGHT * index` and re-reviewed independently to confirm.
+**Tests:** New regression test reads `getItemLayout` directly off the
+FlatList (via a new `puzzle-gallery-list` testID) and asserts the correct
+row-scale offsets (513 total tests passing, up from 512).
+
+## Bugs fixed
+- `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
+  visible) loading indicator wouldn't have centered correctly — fixed as
+  part of iteration 1.
+- `PuzzleScreen.tsx` had two byte-for-byte duplicated loading-state
+  branches (dead code smell, not a user-visible bug) — fixed in iteration 2.
+- Image-only quiz answer options had no accessibility label at all — fixed
+  in iteration 3.
+- Puzzle-piece slots had no accessibility role/label/state at all — fixed
+  in iteration 4.
+- Tic-Tac-Toe board cells had no accessibility role/label/state at all —
+  fixed in iteration 5.
+- Settings' Save button had no rapid-double-tap protection in the common
+  (no-folder-change) case, causing a double navigation to Home — fixed in
+  iteration 6.
+- Tic-Tac-Toe celebrated a computer win against the child with the same
+  confetti/success styling as a real win — fixed in iteration 8.
+
 ## Performance improvements
-_(none yet)_
+- Puzzle gallery's FlatList now has a correct `getItemLayout` for its
+  fixed 128px/4-column tile grid, skipping per-row layout measurement as
+  the list renders/scrolls (iteration 9) — Coloring/Video galleries still
+  lack this (Coloring's tiles are flex/aspectRatio-sized rather than fixed
+  px, making the math messier; Video's row height is only a `minHeight`),
+  noted below as a follow-up.
 
 ## Screens improved
 - Coloring gallery (loading state)
-- Puzzle gallery (loading state)
+- Puzzle gallery (loading state; FlatList getItemLayout)
 - Video gallery (loading state)
 - Puzzle board screen (loading state deduplicated + unified; piece slots
   now accessible)
@@ -201,6 +249,9 @@ _(none yet)_
 - Video player (completion celebration added)
 
 ## Remaining polish opportunities (not yet done)
+- Coloring and Video galleries still lack `getItemLayout` (see iteration
+  9's Performance note) — feasible for both, just messier math than
+  Puzzle's clean fixed-px/fixed-column case.
 - Coloring has no completion celebration at all, unlike the other four
   activities — but genuinely has no natural "finished" signal to detect
   (fills/strokes are open-ended and re-doable indefinitely), so this needs

@@ -112,6 +112,36 @@ describe('PuzzleGallery', () => {
   // own declared width/height rather than a measured layout, the same way
   // this suite already checks the retry button's hitSlop below rather than
   // simulating a real tap-and-measure.
+  // Regression test for the premium-polish performance pass: every tile is
+  // a fixed 128x128 square in a fixed 4-column grid, so FlatList can be
+  // given `getItemLayout` to skip measuring each row as it renders/scrolls
+  // — a real win once a folder holds dozens-to-hundreds of pictures (the
+  // project brief's own "1000 images" bug-hunt scenario).
+  it('gives the FlatList a getItemLayout matching the real fixed 128px tile / 4-column grid', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/pictures/beach.jpg',
+    ]);
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const list = await findByTestId('puzzle-gallery-list');
+    const getItemLayout = list.props.getItemLayout;
+    expect(getItemLayout).toBeInstanceOf(Function);
+
+    // With numColumns > 1, FlatList's internal item count becomes the ROW
+    // count, and it calls getItemLayout with that same row-scale index —
+    // not the flat index into the image list — so index 0/1/2 here map to
+    // row 0/1/2, not individual tiles. Row height = 128px tile + 12px
+    // (spacing.sm) gap = 140.
+    expect(getItemLayout(null, 0)).toEqual({ length: 140, offset: 0, index: 0 });
+    expect(getItemLayout(null, 1)).toEqual({ length: 140, offset: 140, index: 1 });
+    expect(getItemLayout(null, 2)).toEqual({ length: 140, offset: 280, index: 2 });
+  });
+
   it('renders picture tiles at least 48dp in each dimension (comfortable touch target)', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/pictures/beach.jpg',

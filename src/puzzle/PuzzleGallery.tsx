@@ -31,6 +31,12 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const PUZZLE_PALETTE = getActivityPalette('puzzle');
 const TILE_SIZE = 128;
 const GRID_COLUMNS = 4;
+// Every row's rendered height, in px: the tile's own fixed height plus the
+// `gridRow` style's marginBottom gap below it (see styles.gridRow/tile
+// below) — both are compile-time constants (fixed tile size, fixed column
+// count), never derived from async-loaded content, so this can be computed
+// once up front instead of measured. Feeds `getItemLayout` below.
+const ROW_HEIGHT = TILE_SIZE + spacing.sm;
 const DIFFICULTY_OPTIONS: readonly PuzzleDifficulty[] = [4, 6, 9, 12];
 
 function isImageFile(uri: string): boolean {
@@ -308,12 +314,29 @@ export function PuzzleGallery({
         <EmptyStatePanel testID="puzzle-gallery-empty" emoji="🧩" title={t('emptyPictures')} />
       ) : (
         <FlatList
+          testID="puzzle-gallery-list"
           data={images}
           keyExtractor={(uri) => uri}
           numColumns={GRID_COLUMNS}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.gridRow}
           showsVerticalScrollIndicator={false}
+          // Every tile is a fixed 128x128 square in a fixed 4-column grid
+          // (see TILE_SIZE/GRID_COLUMNS above) — giving FlatList this ahead
+          // of time lets it jump straight to any scroll offset instead of
+          // measuring each row's real layout as it renders, which matters
+          // once a folder holds dozens-to-hundreds of pictures. With
+          // numColumns > 1, FlatList's internal item COUNT becomes the row
+          // count (data.length / numColumns) and it calls getItemLayout
+          // with that SAME row-scale index — not the flat index into
+          // `images` — so the offset is `ROW_HEIGHT * index` directly, with
+          // no further division by GRID_COLUMNS (that would double-divide
+          // and collapse every row to offset 0).
+          getItemLayout={(_, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
           renderItem={({ item }) => {
             const isSelected = selectedUris.has(item);
             return (
