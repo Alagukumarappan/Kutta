@@ -1,8 +1,69 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 13
-- Latest completed improvement (iteration 13, one commit): finished the
+- Phase: 1 (baseline verification + inventory), Iteration: 14
+- Latest completed improvement (iteration 14, one commit): Phase 2 item 3
+  (icon-only-controls accessibility audit, deferred from iteration 13's
+  `Next` item 1). Grepped every `Pressable`/`TouchableOpacity`/
+  `TouchableWithoutFeedback` in `src/` (14 files) and, for each one, read its
+  JSX children to classify it as icon-only (no adjacent visible `<Text>`) vs.
+  already-labeled/text-labeled. Findings:
+  - `src/home/HomeScreen.tsx`'s settings gear-icon button
+    (`home-settings-icon`, a lone `⚙️` `<Text>`, no adjacent label) was the
+    one genuine, unambiguous gap: it's the app's **only** path to the
+    Settings screen (no other affordance opens it), on the one screen with
+    `headerShown: false` (no native header chrome to fall back on). Fixed.
+  - The 4 home feature cards (`home-card-*`) are NOT icon-only — each
+    `Pressable` also renders `t(card.labelKey)` as visible text
+    (`Coloring`/`Quiz`/`Photo Puzzle`/`Videos`) alongside its emoji, which
+    screen readers already read automatically.
+  - All 7 retry buttons already have `accessibilityLabel` from iterations
+    12-13.
+  - `AgePicker`/`PieceCountPicker`'s picker fields and modal option rows all
+    have adjacent visible `<Text>` (age number / piece count / "English" /
+    "Deutsch" / etc.) — not icon-only.
+  - `SettingsScreen`/`OnboardingScreen`'s language pills and folder/save
+    buttons all render visible text inside the `Pressable`.
+  - `RootNavigator.tsx` has no custom `headerLeft`/`headerRight`/back-icon
+    render props — all 9 screens use React Navigation's native default
+    header back button, which ships with its own built-in accessible name
+    ("Back" / localized by the OS) — not an app-level gap to fix.
+  - `ColoringScreen.tsx`'s 12 palette-color swatches (`palette-color-${i}`,
+    lines ~404-429) genuinely ARE icon-only — a plain colored circle with no
+    children/text/label at all — but labeling them properly needs 12 new
+    per-color i18n name keys (e.g. "Red"/"Orange"/.../"Gray") x 2 languages
+    (24 new strings) plus a naming judgment call for each of the 12 hex
+    values in `src/coloring/palette.ts`. Judged materially larger and more
+    heterogeneous than the single settings-button fix, so deliberately
+    deferred rather than bundled in (see Next and Technical Decisions).
+  - TDD: added a new test to `__tests__/home/HomeScreen.test.tsx` —
+    `findByLabelText('Settings')`, presses it, asserts `onNavigate` was
+    called with `'settings'`. Confirmed it failed for the right reason first
+    (`Unable to find an element with accessibility label: Settings`) before
+    implementing.
+  - Fix: added `accessibilityRole="button"` and
+    `accessibilityLabel={t('settingsTitle')}` to the one `Pressable` in
+    `src/home/HomeScreen.tsx`, reusing the pre-existing `settingsTitle` i18n
+    key (`en`: "Settings", `de`: "Einstellungen" — already the Settings
+    screen's own header title, so the accessible name matches the
+    destination screen's own name). No new i18n strings needed. No
+    production logic changed beyond the two accessibility props.
+  - Verified `npx tsc --noEmit` clean, full suite 24/24 suites and 167/167
+    tests passing (166 baseline + 1 new). No existing test touched, skipped,
+    or renamed.
+  - A code-review subagent independently reviewed the diff: confirmed
+    `t('settingsTitle')` really produces "Settings"/"Einstellungen" by
+    reading `strings.ts`, confirmed the wording matches the button's action,
+    confirmed `findByLabelText('Settings')` can't ambiguously match anything
+    else on the screen (checked all other visible text on `HomeScreen`),
+    confirmed localization is complete, confirmed no `any`/unsafe casts,
+    confirmed only the two intended files changed (`git status`), and
+    confirmed the scoping decision (fix the one unambiguous gap, defer the
+    12-color palette swatches as a separate, larger effort) was correct.
+    Approved with no required or optional changes.
+  - Commit: `<see git log — loop: add an accessibilityLabel to the home
+    screen's settings icon button>`.
+- Previous iteration's completed improvement (iteration 13, one commit): finished the
   accessibility-label pass on the app's retry buttons (`Next` item 1 from
   iteration 12). First re-grepped `testID="[a-z-]*retry"` under `src/` to
   confirm iteration 12's named list of 4 remaining buttons was still
@@ -296,7 +357,10 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 24/24 suites passing, 166/166 tests passing (up from
+- Test status: 24/24 suites passing, 167/167 tests passing (up from
+  24/24 suites, 166/166 tests — iteration 14 added 1 new test,
+  `HomeScreen`'s settings-icon accessible-name test).
+- Previous test status: 24/24 suites passing, 166/166 tests passing (up from
   24/24 suites, 165/165 tests — iteration 13 added 1 new test, a
   `RootNavigator` test exercising `FolderErrorScreen`'s retry button for the
   first time ever; 3 other retry-flow tests had their press-target
@@ -786,6 +850,16 @@
     - See the full write-up under Current Status above.
     - Commit: `78ea4c9`.
 
+17. **loop: add an accessibilityLabel to the home screen's settings icon
+    button** (iteration 14, Phase 2 item 3, `Next` item 1 from iteration 13)
+    - Files: `src/home/HomeScreen.tsx` (production code, two props added)
+      and `__tests__/home/HomeScreen.test.tsx` (one new test)
+    - See the full write-up under Current Status above for the audit
+      method, finding, TDD trace, and code-review outcome — not duplicated
+      here to avoid drift.
+    - Commit: `<see git log — loop: add an accessibilityLabel to the home
+      screen's settings icon button>`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -816,25 +890,29 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 14 priority: the accessibility-label pass on every retry button in
-the app is now complete (all 7: `QuizScreen`, `ColoringGallery`,
-`ColoringScreen` from iteration 12; `PuzzleGallery`, `VideoGallery`,
-`RootNavigator`'s `FolderErrorScreen`, and `VideoPlayerScreen` from iteration
-13). Remaining options, in priority order:
-1. **Icon-only-controls accessibility audit (Phase 2 item 3 territory,
-   deferred from iteration 13).** Iteration 13's retry-button pass came in at
-   exactly 4 remaining buttons — at the edge of, not clearly under, the "3 or
-   fewer" quick-pass threshold given in that iteration's brief — so this
-   fast-follow was deliberately deferred rather than bundled in. Audit
-   whether icon-only controls elsewhere in the app (e.g. the home screen's
-   `⚙️` settings icon — `home-settings-icon`, seen in
-   `RootNavigator.test.tsx` — plus any back/close icon buttons on gallery or
-   detail screens) have an `accessibilityLabel`. Grep for `Pressable`/
-   `TouchableOpacity` elements whose only child is an emoji or icon `<Text>`
-   (no adjacent visible text) under `src/`, cross-check each against
-   `accessibilityLabel` presence, add labels + tests using the same
-   `findByLabelText` pattern established across iterations 12-13. Likely a
-   similarly small, well-scoped, real screen-reader win.
+Iteration 15 priority: the accessibility-label pass on every retry button
+(all 7, iterations 12-13) and the app's one unambiguous icon-only-control
+gap (the home settings-icon button, iteration 14) are now complete. Remaining
+options, in priority order:
+1. **Palette-color-swatch accessibility labels (deferred from iteration
+   14).** `src/coloring/ColoringScreen.tsx`'s 12 palette swatches
+   (`palette-color-${i}`, ~lines 404-429, mapped from the 12-entry
+   `PALETTE` array in `src/coloring/palette.ts`) are plain colored circles
+   with zero children/text/label — genuinely icon-only, screen-reader-silent
+   today. Fixing this properly needs: (a) 12 new per-color name i18n keys in
+   `src/i18n/strings.ts` (en/de each, so 24 new strings — e.g.
+   `paletteColorRed`/`paletteColorOrange`/.../`paletteColorGray`, matching
+   the existing `// red`/`// orange`/etc. comments already in
+   `palette.ts` as a naming reference), (b) wiring each `PaletteColor` entry
+   in `palette.ts` to its name key (either add a `nameKey` field to the
+   `PaletteColor` type, or a parallel array/lookup by index — either is a
+   small, safe, additive change), and (c) an `accessibilityLabel`/
+   `accessibilityRole="button"` on each swatch `Pressable` plus a test
+   asserting at least one swatch's `findByLabelText` (e.g. "Red") selects
+   the right fill color. This is materially larger than iteration 14's
+   single-button fix (12 colors x 2 languages vs. 1 button, plus a
+   naming/data-shape decision) but is still well-scoped and a real,
+   worthwhile screen-reader win — a good next Phase 2 item 3 task.
 2. **Optional smaller follow-up (unchanged from iteration 10)**: the
    `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
    `HomeScreen.tsx` remain untyped against `RootStackParamList` because
@@ -897,6 +975,23 @@ None found that affect correctness. Notes:
   with no device/emulator available in this environment.
 
 ## Technical Decisions
+- Iteration 14: chose to fix only the home settings-icon button and defer the
+  12 `ColoringScreen` palette swatches rather than doing both in one
+  iteration, and rather than doing neither. The task brief's scoping rule
+  was "fix ALL icon-only controls in a single well-scoped cohesive area" OR
+  "fix the single highest-value gap, document the rest" — a full repo-wide
+  icon-only audit found exactly one unambiguous, cheap, high-value gap (the
+  settings button — the app's only path to Settings, a one-line-diff fix
+  reusing an existing i18n key) and one much larger, more heterogeneous gap
+  (12 palette swatches needing 24 new i18n strings and a small data-shape
+  change to `palette.ts`). Bundling both into one diff would have made the
+  settings-button fix's review harder to isolate from the larger palette
+  change's own judgment calls (color-naming choices, `PaletteColor` type
+  shape). Splitting them keeps each diff minimal, reviewable, and safely
+  revertible independently — consistent with every prior iteration's
+  approach to "found a bigger related gap mid-task" (e.g. iteration 12's
+  retry-button-label decision, iteration 9's `RootNavigator` `any`-cast
+  decision).
 - Iteration 12: chose `player.replace(videoUri)` + `player.play()` as
   `VideoPlayerScreen`'s retry action instead of trying to force-mimic the
   `retryToken`-bump pattern every other screen uses. That pattern works
@@ -1034,6 +1129,32 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
+- What changed (iteration 14, one commit): added `accessibilityRole="button"`
+  and `accessibilityLabel={t('settingsTitle')}` to `src/home/HomeScreen.tsx`'s
+  settings gear-icon button (the app's only path to Settings), plus one new
+  test in `__tests__/home/HomeScreen.test.tsx` confirming the label is
+  screen-reader-queryable and still navigates correctly.
+- What's valuable: before this fix, a screen-reader user on the home screen
+  (the app's landing screen, with no native header) would hear nothing
+  useful when focusing the gear icon — no way to discover it opens Settings,
+  and no other affordance reaches Settings at all. This closes that dead end
+  with zero new i18n strings (reused the existing `settingsTitle` key,
+  which conveniently matches the destination screen's own header title).
+- What needs visual testing: nothing — `accessibilityLabel` is
+  screen-reader-only and has no visual effect. No new UI, no layout change.
+- Risks: none identified. `tsc` clean, 24/24 suites and 167/167 tests passing
+  (166 baseline + 1 new), no existing test touched/skipped/renamed. A
+  code-review subagent independently verified the i18n key's actual string
+  value, confirmed the test's `findByLabelText('Settings')` query is
+  unambiguous on this screen, and confirmed the scope decision to defer the
+  12-swatch palette-color-labeling task (a materially larger, separate piece
+  of work) was correct. Approved with no required or optional changes.
+- Open questions for the developer: none blocking. The 12 `ColoringScreen`
+  palette-color swatches still have no accessible name (screen-reader users
+  can't tell which color a given swatch is) — see `Next` above for the
+  scoped follow-up (needs 24 new i18n strings and a small `palette.ts`
+  data-shape addition, judged too large to bundle into this iteration's
+  single-button fix).
 - What changed (iteration 12, two commits): (1) added a Retry button and
   handler to `src/video/VideoPlayerScreen.tsx`'s playback-error state (the
   screen's first-ever test coverage, 4 new tests in
