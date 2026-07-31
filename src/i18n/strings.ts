@@ -130,6 +130,11 @@ export const UI_STRINGS = {
   profilePictureChoose: { en: 'Choose a picture', de: 'Bild auswählen' },
   profilePictureRemove: { en: 'Remove picture', de: 'Bild entfernen' },
   profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
+  // {name}'s Home-screen avatar accessible name/fallback — decorative only
+  // (not tappable), but still needs a real label for screen readers per
+  // this feature's own accessibility requirement.
+  homeProfilePictureLabel: { en: "{name}'s picture", de: 'Profilbild von {name}' },
+  homeProfilePicturePlaceholderLabel: { en: 'No profile picture set', de: 'Kein Profilbild festgelegt' },
   splashTagline: {
     en: 'Where learning feels like play',
     de: 'Wo Lernen sich wie Spielen anfühlt',

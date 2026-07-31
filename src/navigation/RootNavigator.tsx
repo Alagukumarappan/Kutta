@@ -144,6 +144,7 @@ function AppStack({
         {({ navigation }) => (
           <HomeScreen
             childName={profile.name}
+            pictureUri={profile.pictureUri}
             onNavigate={(destination) => navigation.navigate(destination)}
           />
         )}

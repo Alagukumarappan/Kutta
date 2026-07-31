@@ -1,9 +1,21 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { HomeScreen } from '../../src/home/HomeScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import * as profilePicture from '../../src/storage/profilePicture';
+
+jest.mock('../../src/storage/profilePicture');
 
 describe('HomeScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Default: no picture set / nothing resolves — matches most profiles
+    // (this app's data-layer field is optional, see Profile.pictureUri).
+    // Individual tests below override this to exercise the "set" and
+    // "resolves to null (missing file)" paths.
+    (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue(null);
+  });
+
   it('shows the child name and all four feature cards', async () => {
     const onNavigate = jest.fn();
     const { getByText } = await render(
@@ -111,6 +123,103 @@ describe('HomeScreen', () => {
       expect(onNavigate).toHaveBeenCalledTimes(2);
       expect(onNavigate).toHaveBeenNthCalledWith(1, 'coloring');
       expect(onNavigate).toHaveBeenNthCalledWith(2, 'quiz');
+    });
+  });
+
+  describe('profile picture avatar', () => {
+    it('shows a fallback placeholder avatar (not a broken image) when no picture is set', async () => {
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      expect(await findByTestId('home-avatar-placeholder')).toBeTruthy();
+      expect(queryByTestId('home-avatar-image')).toBeNull();
+    });
+
+    it('shows the resolved picture when Profile.pictureUri resolves to a real, still-existing file', async () => {
+      (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue('content://tree/pictures/me.jpg');
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/me.jpg" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const image = await findByTestId('home-avatar-image');
+      expect(image.props.source).toEqual({ uri: 'content://tree/pictures/me.jpg' });
+      expect(queryByTestId('home-avatar-placeholder')).toBeNull();
+    });
+
+    it('falls back to the placeholder when the picture file has gone missing (resolveProfilePictureUri returns null)', async () => {
+      (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue(null);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/deleted.jpg" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      expect(await findByTestId('home-avatar-placeholder')).toBeTruthy();
+      expect(queryByTestId('home-avatar-image')).toBeNull();
+    });
+
+    it('falls back to the placeholder if the resolved image itself fails to load (onError)', async () => {
+      (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue('content://tree/pictures/me.jpg');
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/me.jpg" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const image = await findByTestId('home-avatar-image');
+      await act(async () => {
+        image.props.onError();
+      });
+
+      expect(await findByTestId('home-avatar-placeholder')).toBeTruthy();
+      expect(queryByTestId('home-avatar-image')).toBeNull();
+    });
+
+    it('gives the avatar (image or placeholder) an accessible label for screen readers, and it is not tappable', async () => {
+      const { findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const placeholder = await findByLabelText('No profile picture set');
+      // Decorative-only: no onPress handler, so a tap does nothing (this
+      // just documents the "not a Pressable" contract rather than needing
+      // to fire an event and assert an absence of a callback).
+      expect(placeholder.props.onPress).toBeUndefined();
+    });
+
+    it('re-resolves the avatar when pictureUri changes to a different profile picture', async () => {
+      (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue('content://tree/pictures/first.jpg');
+
+      const { findByTestId, rerender } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/first.jpg" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      let image = await findByTestId('home-avatar-image');
+      expect(image.props.source).toEqual({ uri: 'content://tree/pictures/first.jpg' });
+
+      (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue('content://tree/pictures/second.jpg');
+      rerender(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/second.jpg" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await waitFor(async () => {
+        image = await findByTestId('home-avatar-image');
+        expect(image.props.source).toEqual({ uri: 'content://tree/pictures/second.jpg' });
+      });
     });
   });
 });

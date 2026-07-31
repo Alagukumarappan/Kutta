@@ -1,8 +1,19 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, useWindowDimensions, Animated } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet, useWindowDimensions, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
+import { resolveProfilePictureUri } from '../storage/profilePicture';
 import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
+
+// Fixed size of the optional avatar (image or fallback initial) shown next
+// to the greeting. Deliberately small: greetingBadge's own padding
+// (spacing.xs = 4 per side) plus this size must stay comfortably under
+// SETTINGS_BUTTON_SIZE (44) below, since headerReserve derives the whole
+// header row's reserved height from that one constant — a taller badge
+// would silently make headerReserve wrong and risk the card grid
+// overflowing a short screen (e.g. Galaxy S22 landscape).
+const AVATAR_SIZE = 28;
 
 export type HomeDestination = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'settings';
 
@@ -29,18 +40,45 @@ const CARDS: CardSpec[] = [
 
 export function HomeScreen({
   childName,
+  pictureUri,
   onNavigate,
 }: {
   childName: string;
+  // Raw Profile.pictureUri, resolved (existence-checked) below via
+  // resolveProfilePictureUri — optional since most profiles won't have set
+  // one (see SettingsScreen's picker, iteration 29).
+  pictureUri?: string;
   onNavigate: (destination: HomeDestination) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { width, height } = useWindowDimensions();
   // Home is the one screen with headerShown:false (no native
   // header/navigation chrome doing this for us elsewhere), so it's the only
   // screen that has to account for the status bar / notch / gesture-nav bar
   // on all four sides itself.
   const insets = useSafeAreaInsets();
+
+  // Resolved (existence-checked) picture uri, or null for "show the
+  // fallback avatar" — covers both "never set" and "was set but the file
+  // has since gone missing" (resolveProfilePictureUri never throws and
+  // returns null for both). Also reset on every onError from the <Image>
+  // itself below, for the rarer case where the file exists but fails to
+  // actually decode/load.
+  const [resolvedPictureUri, setResolvedPictureUri] = React.useState<string | null>(null);
+  const [avatarLoadFailed, setAvatarLoadFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setAvatarLoadFailed(false);
+    resolveProfilePictureUri(pictureUri).then((resolved) => {
+      if (!cancelled) setResolvedPictureUri(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pictureUri]);
+
+  const showAvatarImage = resolvedPictureUri !== null && !avatarLoadFailed;
 
   // One persistent Animated.Value per card, keyed by testID (not array
   // index) so it stays correctly matched to its card even if CARDS is ever
@@ -144,6 +182,32 @@ export function HomeScreen({
     >
       <View style={styles.header}>
         <View style={styles.greetingBadge}>
+          {/* Decorative-only per this feature's own guidance (see
+              PROGRESS.md's Next section for iteration 29): not wrapped in a
+              Pressable, so a child can't accidentally trigger anything by
+              tapping it — it's purely a visual identity cue. Still needs a
+              real accessibilityLabel for screen readers either way. */}
+          {showAvatarImage ? (
+            <Image
+              testID="home-avatar-image"
+              source={{ uri: resolvedPictureUri as string }}
+              style={styles.avatar}
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel={tFormat('homeProfilePictureLabel', language, { name: childName })}
+              onError={() => setAvatarLoadFailed(true)}
+            />
+          ) : (
+            <View
+              testID="home-avatar-placeholder"
+              style={[styles.avatar, styles.avatarPlaceholder]}
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel={t('homeProfilePicturePlaceholderLabel')}
+            >
+              <Text style={styles.avatarPlaceholderText}>{childName.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
           <Text style={styles.greetingText}>
             Hi, <Text testID="home-child-name" style={styles.greetingName}>{childName}</Text>! 👋
           </Text>
@@ -201,6 +265,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   greetingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.sun,
     borderRadius: radii.md,
     paddingVertical: spacing.xs,
@@ -216,6 +282,25 @@ const styles = StyleSheet.create({
   greetingName: {
     fontSize: 13,
     fontWeight: '700',
+    color: colors.ink,
+  },
+  // Shared by both the real avatar <Image> and its fallback <View> so the
+  // badge's height never changes between the two states (kept well under
+  // the SETTINGS_BUTTON_SIZE-derived header budget, see AVATAR_SIZE above).
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    marginRight: spacing.xs,
+  },
+  avatarPlaceholder: {
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarPlaceholderText: {
+    fontSize: 13,
+    fontWeight: 'bold',
     color: colors.ink,
   },
   settingsButton: {
