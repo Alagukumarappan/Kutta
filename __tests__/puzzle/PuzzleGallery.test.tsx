@@ -50,7 +50,9 @@ describe('PuzzleGallery', () => {
 
     const item = await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
     await fireEvent.press(item);
-    expect(onSelect).toHaveBeenCalledWith('content://tree/pictures/beach.jpg');
+    // Default difficulty (no stored preference yet) is 4 — see
+    // puzzleDifficultyStore.ts.
+    expect(onSelect).toHaveBeenCalledWith('content://tree/pictures/beach.jpg', 4);
   });
 
   it('shows the empty state when there are no pictures', async () => {
@@ -194,6 +196,68 @@ describe('PuzzleGallery', () => {
       await fireEvent.press(await findByTestId('puzzle-gallery-add'));
 
       await findByTestId('puzzle-item-content://picked/new.jpg');
+    });
+  });
+
+  describe('difficulty dropdown', () => {
+    it('defaults to difficulty 4 the first time, shows it next to the add button, and passes it to onSelect', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+      ]);
+      const onSelect = jest.fn();
+
+      const { findByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={onSelect} />
+        </LanguageProvider>
+      );
+
+      await findByLabelText('Difficulty: 4');
+      await fireEvent.press(await findByTestId('puzzle-item-content://tree/pictures/beach.jpg'));
+      expect(onSelect).toHaveBeenCalledWith('content://tree/pictures/beach.jpg', 4);
+    });
+
+    it('lets the parent change the difficulty, and remembers it for the next picture selected', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+      ]);
+      const onSelect = jest.fn();
+
+      const { findByTestId, findByLabelText, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={onSelect} />
+        </LanguageProvider>
+      );
+
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+      await fireEvent.press(await findByTestId('puzzle-difficulty-option-9'));
+
+      await findByLabelText('Difficulty: 9');
+      expect(queryByTestId('puzzle-difficulty-option-9')).toBeNull();
+
+      await fireEvent.press(await findByTestId('puzzle-item-content://tree/pictures/beach.jpg'));
+      expect(onSelect).toHaveBeenCalledWith('content://tree/pictures/beach.jpg', 9);
+    });
+
+    it('persists the chosen difficulty via savePuzzleDifficulty when changed', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+      await fireEvent.press(await findByTestId('puzzle-difficulty-option-12'));
+      await findByTestId('puzzle-gallery-empty');
+
+      // Read the store directly rather than remounting a second component
+      // instance — the round-trip persistence itself (AsyncStorage
+      // get/save) is covered independently in
+      // __tests__/storage/puzzleDifficultyStore.test.ts.
+      const { getPuzzleDifficulty } = require('../../src/storage/puzzleDifficultyStore');
+      await waitFor(async () => expect(await getPuzzleDifficulty()).toBe(12));
     });
   });
 

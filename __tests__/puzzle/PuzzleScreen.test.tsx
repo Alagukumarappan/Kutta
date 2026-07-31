@@ -46,17 +46,19 @@ function readOrder(getByTestId: (id: string) => any): number[] {
   return [0, 1, 2, 3].map((slotIndex) => pieceIndexInSlot(getByTestId(`puzzle-slot-${slotIndex}`)));
 }
 
-async function renderPuzzleScreen(imageUri: string = IMAGE_URI) {
+async function renderPuzzleScreen(imageUri: string = IMAGE_URI, pieceCount: 4 | 6 | 9 | 12 = 4) {
   return render(
     <LanguageProvider initialLanguage="en">
-      <PuzzleScreen imageUri={imageUri} />
+      <PuzzleScreen imageUri={imageUri} pieceCount={pieceCount} />
     </LanguageProvider>
   );
 }
 
+// pieceCount is now a required prop (chosen once in PuzzleGallery's header
+// dropdown, see puzzleDifficultyStore.ts) rather than picked via an
+// in-screen picker every time — so "starting" a puzzle is just waiting for
+// the initial shuffle + real photo size to resolve.
 async function startFourPiecePuzzle(utils: Awaited<ReturnType<typeof renderPuzzleScreen>>) {
-  await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-  await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
   await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
   return utils;
 }
@@ -74,27 +76,13 @@ describe('PuzzleScreen', () => {
     getSizeSpy.mockRestore();
   });
 
-  it('shows the piece-count picker and starts the puzzle when a count is selected', async () => {
-    const utils = await renderPuzzleScreen();
+  it('starts the puzzle immediately with the pieceCount passed in as a prop, no in-screen picker', async () => {
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
     const { findByTestId, queryByTestId } = utils;
 
-    expect(queryByTestId('puzzle-slot-0')).toBeNull();
-    const picker = await findByTestId('puzzle-piece-count-picker');
-    expect(picker).toBeTruthy();
-
-    await fireEvent.press(picker);
-    const option4 = await findByTestId('puzzle-piece-count-option-4');
-    const option6 = await findByTestId('puzzle-piece-count-option-6');
-    const option9 = await findByTestId('puzzle-piece-count-option-9');
-    const option12 = await findByTestId('puzzle-piece-count-option-12');
-    expect(option4).toBeTruthy();
-    expect(option6).toBeTruthy();
-    expect(option9).toBeTruthy();
-    expect(option12).toBeTruthy();
-
-    await fireEvent.press(option4);
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
 
+    expect(queryByTestId('puzzle-piece-count-picker')).toBeNull();
     expect(await findByTestId('puzzle-slot-0')).toBeTruthy();
     expect(await findByTestId('puzzle-slot-3')).toBeTruthy();
   });
@@ -200,7 +188,7 @@ describe('PuzzleScreen', () => {
       const onNext = jest.fn();
       const utils = await render(
         <LanguageProvider initialLanguage="en">
-          <PuzzleScreen imageUri={IMAGE_URI} onNext={onNext} />
+          <PuzzleScreen imageUri={IMAGE_URI} pieceCount={4} onNext={onNext} />
         </LanguageProvider>
       );
       await startFourPiecePuzzle(utils);
@@ -215,7 +203,7 @@ describe('PuzzleScreen', () => {
       const onNext = jest.fn();
       const utils = await render(
         <LanguageProvider initialLanguage="en">
-          <PuzzleScreen imageUri={IMAGE_URI} onNext={onNext} />
+          <PuzzleScreen imageUri={IMAGE_URI} pieceCount={4} onNext={onNext} />
         </LanguageProvider>
       );
       await startFourPiecePuzzle(utils);
@@ -312,9 +300,7 @@ describe('PuzzleScreen', () => {
       resolveGetSize = success;
     });
 
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
 
     expect(utils.queryByTestId('puzzle-loading')).toBeTruthy();
     expect(utils.queryByTestId('puzzle-slot-0')).toBeNull();
@@ -331,9 +317,7 @@ describe('PuzzleScreen', () => {
       failure?.(new Error('failed to load'));
     });
 
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
 
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
     expect(await utils.findByTestId('puzzle-slot-0')).toBeTruthy();
@@ -386,9 +370,7 @@ describe('PuzzleScreen', () => {
       .mockImplementation((_uri: string, success: (w: number, h: number) => void) => {
         success(photoWidth, photoHeight);
       });
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId(`puzzle-piece-count-option-${pieceCount}`));
+    const utils = await renderPuzzleScreen(IMAGE_URI, pieceCount);
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
     return utils;
   }
@@ -427,9 +409,7 @@ describe('PuzzleScreen', () => {
       success(300, 600);
     });
 
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-6'));
+    const utils = await renderPuzzleScreen(IMAGE_URI, 6);
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
 
     // 6 pieces, portrait -> computeGridDimensions(6, true) = {rows: 3, cols: 2} = 6 slots.

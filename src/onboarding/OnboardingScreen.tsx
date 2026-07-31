@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import { AgePicker } from '../components/AgePicker';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { ProfilePicturePicker } from '../settings/ProfilePicturePicker';
-import type { Language } from '../types/profile';
 import {
   colors,
   radii,
@@ -15,6 +15,7 @@ import {
   RaisedCard,
   RaisedPrimaryButton,
   AnimatedPressable,
+  withAlpha,
 } from '../design-system';
 
 // This first-launch screen is where a parent sets a child's profile up —
@@ -52,6 +53,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   // only offer "Browse anywhere", not a folder grid.
   const [pictureUri, setPictureUri] = useState<string | undefined>(undefined);
   const [pictureModalVisible, setPictureModalVisible] = useState(false);
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
   const nameValid = name.trim().length > 0;
   const ageValid = age !== null;
@@ -83,6 +85,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
+    <View style={styles.outer}>
     <ScrollView
       style={styles.scrollView}
       contentContainerStyle={styles.screen}
@@ -172,34 +175,15 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
           <View style={styles.cardContent}>
             <Text style={styles.label}>{t('onboardingLanguage')}</Text>
-            <View style={styles.languageRow}>
-              <AnimatedPressable
-                testID="onboarding-lang-en"
-                onPress={() => setLanguage('en' as Language)}
-                tilt="compact"
-                hitSlop={{ top: 6, bottom: 6 }}
-                style={styles.langPillOuter}
-                innerStyle={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
-                accessibilityLabel="English"
-              >
-                <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
-                  English
-                </Text>
-              </AnimatedPressable>
-              <AnimatedPressable
-                testID="onboarding-lang-de"
-                onPress={() => setLanguage('de' as Language)}
-                tilt="compact"
-                hitSlop={{ top: 6, bottom: 6 }}
-                style={styles.langPillOuter}
-                innerStyle={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
-                accessibilityLabel="Deutsch"
-              >
-                <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
-                  Deutsch
-                </Text>
-              </AnimatedPressable>
-            </View>
+            <LanguageSelector
+              value={language}
+              onChange={(next) => setLanguage(next)}
+              visible={languageModalVisible}
+              onOpen={() => setLanguageModalVisible(true)}
+              onClose={() => setLanguageModalVisible(false)}
+              testIDPrefix="onboarding-lang"
+              variant="playful"
+            />
           </View>
         </RaisedCard>
 
@@ -252,13 +236,47 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         onClose={() => setPictureModalVisible(false)}
       />
     </ScrollView>
+
+      {saving && (
+        // First save ever can take a few real seconds (creating the
+        // Kutta-games folder structure and copying in the bundled sample
+        // content, see folderAccess.ts's ensureContentStructure) — without
+        // this, the screen just sits there with a disabled button and no
+        // explanation, which reads as broken/frozen rather than working.
+        <View testID="onboarding-saving-overlay" style={styles.savingOverlay}>
+          <ActivityIndicator size="large" color={colors.white} />
+          <Text style={styles.savingText}>{t('onboardingSavingMessage')}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outer: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
     backgroundColor: colors.canvas,
+  },
+  savingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: withAlpha(colors.ink, 0.72),
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  savingText: {
+    marginTop: spacing.md,
+    fontSize: typography.body.fontSize,
+    fontWeight: '700',
+    color: colors.white,
+    textAlign: 'center',
   },
   screen: {
     flexGrow: 1,
@@ -357,37 +375,6 @@ const styles = StyleSheet.create({
   textInputFilled: {
     borderColor: colors.bubblegumDark,
     backgroundColor: colors.bubblegumSoft,
-  },
-  languageRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  langPillOuter: {
-    flex: 1,
-  },
-  langPill: {
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  langPillSelected: {
-    backgroundColor: colors.jade,
-    borderColor: colors.jadeDark,
-  },
-  langPillUnselected: {
-    backgroundColor: colors.surfaceSunk,
-    borderColor: colors.line,
-  },
-  langPillText: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  langPillTextSelected: {
-    color: colors.white,
-  },
-  langPillTextUnselected: {
-    color: colors.ink,
   },
   folderButtonOuter: {
     alignSelf: 'stretch',

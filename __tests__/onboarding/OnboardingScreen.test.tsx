@@ -61,6 +61,31 @@ describe('OnboardingScreen', () => {
     expect(onComplete).toHaveBeenCalled();
   });
 
+  it('shows a "please wait" spinner overlay while first-time setup (folder + sample content) is in progress', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+    let resolveEnsure!: () => void;
+    (folderAccess.ensureContentStructure as jest.Mock).mockImplementation(
+      () => new Promise<void>((resolve) => { resolveEnsure = resolve; })
+    );
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByTestId, getByText, queryByTestId } = await renderScreen();
+
+    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
+    await selectAge(getByTestId, 4);
+    await fireEvent.press(getByText('Choose content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+
+    expect(queryByTestId('onboarding-saving-overlay')).toBeNull();
+    fireEvent.press(getByText('Save'));
+
+    expect(await waitFor(() => getByTestId('onboarding-saving-overlay'))).toBeTruthy();
+    expect(getByText(/please wait/i)).toBeTruthy();
+
+    resolveEnsure();
+    await waitFor(() => expect(queryByTestId('onboarding-saving-overlay')).toBeNull());
+  });
+
   it('does not save when age has not been selected', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
     (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
@@ -164,24 +189,49 @@ describe('OnboardingScreen', () => {
     expect(confirmText.props.children).not.toBe('Folder selected ✓');
   });
 
-  it('gives the language pills and folder-picker button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
+  it('gives the language dropdown field and folder-picker button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
     // Same gap, and same fix, as SettingsScreen's identically-styled (but
-    // separately-defined) language pills and folder button, addressed for
+    // separately-defined) language field and folder button, addressed for
     // OnboardingScreen too so the two nearly-identical screens don't drift
     // out of consistency with each other.
     const { getByTestId } = await renderScreen(jest.fn());
 
-    for (const testID of ['onboarding-lang-en', 'onboarding-lang-de']) {
-      const pill = getByTestId(testID);
-      const hitSlop = pill.props.hitSlop ?? {};
-      expect(hitSlop.top).toBeGreaterThanOrEqual(4);
-      expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
-    }
+    const languageField = getByTestId('onboarding-lang-picker');
+    const hitSlop = languageField.props.hitSlop ?? {};
+    expect(hitSlop.top).toBeGreaterThanOrEqual(4);
+    expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
 
     const folderButton = getByTestId('onboarding-folder-picker');
     const folderHitSlop = folderButton.props.hitSlop ?? {};
     expect(folderHitSlop.top).toBeGreaterThanOrEqual(4);
     expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
+  });
+
+  it('opens the language dropdown and switches the selected language', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+    (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByTestId, getByText, queryByTestId } = await renderScreen(jest.fn());
+
+    expect(getByText('English')).toBeTruthy();
+    await fireEvent.press(getByTestId('onboarding-lang-picker'));
+    await fireEvent.press(getByTestId('onboarding-lang-option-de'));
+
+    expect(queryByTestId('onboarding-lang-option-de')).toBeNull();
+    expect(getByText('Deutsch')).toBeTruthy();
+
+    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
+    await selectAge(getByTestId, 4);
+    await fireEvent.press(getByTestId('onboarding-folder-picker'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    await fireEvent.press(getByTestId('onboarding-save-button'));
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ language: 'de' })
+      )
+    );
   });
 
   it('shows a welcoming subtitle under the title in English', async () => {

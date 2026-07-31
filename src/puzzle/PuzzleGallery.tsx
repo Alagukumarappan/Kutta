@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Image, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Image, Pressable, Modal, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -7,6 +7,11 @@ import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
 import { removeGalleryItems } from '../storage/galleryRemoval';
+import {
+  getPuzzleDifficulty,
+  savePuzzleDifficulty,
+  type PuzzleDifficulty,
+} from '../storage/puzzleDifficultyStore';
 import { colors, spacing, radii, elevation, getActivityPalette, RaisedCard, EmptyStatePanel } from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
@@ -17,6 +22,7 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const PUZZLE_PALETTE = getActivityPalette('puzzle');
 const TILE_SIZE = 128;
 const GRID_COLUMNS = 4;
+const DIFFICULTY_OPTIONS: readonly PuzzleDifficulty[] = [4, 6, 9, 12];
 
 function isImageFile(uri: string): boolean {
   const lower = uri.toLowerCase();
@@ -28,7 +34,7 @@ export function PuzzleGallery({
   onSelect,
 }: {
   picturesFolderUri: string;
-  onSelect: (imageUri: string) => void;
+  onSelect: (imageUri: string, difficulty: PuzzleDifficulty) => void;
 }) {
   const { t, language } = useLanguage();
   // Shown with headerShown:true (see RootNavigator), so the native header
@@ -59,6 +65,31 @@ export function PuzzleGallery({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
   const [removing, setRemoving] = useState(false);
+
+  // Remembered difficulty (piece count), loaded once on mount — see
+  // puzzleDifficultyStore.ts. Defaults to 4 until the stored value resolves,
+  // matching the "first time going the difficulty level should be 4"
+  // requirement without blocking the rest of the gallery on this load.
+  const [difficulty, setDifficulty] = useState<PuzzleDifficulty>(4);
+  const [difficultyModalVisible, setDifficultyModalVisible] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPuzzleDifficulty().then((stored) => {
+      if (!cancelled) setDifficulty(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleSelectDifficulty(next: PuzzleDifficulty) {
+    setDifficulty(next);
+    setDifficultyModalVisible(false);
+    // Fire-and-forget: a failed write just means the next app open falls
+    // back to the previous/default difficulty, not a broken gallery.
+    savePuzzleDifficulty(next).catch(() => {});
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -115,7 +146,7 @@ export function PuzzleGallery({
     if (selectionMode) {
       toggleSelected(uri);
     } else {
-      onSelect(uri);
+      onSelect(uri, difficulty);
     }
   }
 
@@ -214,16 +245,50 @@ export function PuzzleGallery({
             </View>
           </View>
         ) : (
-          <AddFilesButton
-            testID="puzzle-gallery-add"
-            label={t('addPuzzlePicture')}
-            contentType="puzzle"
-            mimeType="image/*"
-            onAdded={() => setRetryToken((n) => n + 1)}
-            compact
-          />
+          <>
+            <Pressable
+              testID="puzzle-difficulty-picker"
+              onPress={() => setDifficultyModalVisible(true)}
+              style={styles.difficultyPill}
+              accessibilityRole="button"
+              accessibilityLabel={tFormat('puzzleDifficultyLabel', language, { count: difficulty })}
+              hitSlop={{ top: 6, bottom: 6 }}
+            >
+              <Text style={styles.difficultyPillText}>{tFormat('puzzleDifficultyLabel', language, { count: difficulty })}</Text>
+              <Text style={styles.difficultyPillChevron}>▾</Text>
+            </Pressable>
+            <AddFilesButton
+              testID="puzzle-gallery-add"
+              label={t('addPuzzlePicture')}
+              contentType="puzzle"
+              mimeType="image/*"
+              onAdded={() => setRetryToken((n) => n + 1)}
+              compact
+            />
+          </>
         )}
       </View>
+
+      <Modal visible={difficultyModalVisible} transparent animationType="fade" onRequestClose={() => setDifficultyModalVisible(false)}>
+        <Pressable style={styles.difficultyModalOverlay} onPress={() => setDifficultyModalVisible(false)}>
+          <View style={styles.difficultyModalCard}>
+            {DIFFICULTY_OPTIONS.map((option) => (
+              <Pressable
+                key={option}
+                testID={`puzzle-difficulty-option-${option}`}
+                onPress={() => handleSelectDifficulty(option)}
+                style={[styles.difficultyOptionRow, option === difficulty && styles.difficultyOptionRowSelected]}
+              >
+                <Text
+                  style={[styles.difficultyOptionText, option === difficulty && styles.difficultyOptionTextSelected]}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
       {images.length === 0 ? (
         <EmptyStatePanel testID="puzzle-gallery-empty" emoji="🧩" title={t('emptyPictures')} />
       ) : (
@@ -277,10 +342,67 @@ const styles = StyleSheet.create({
   // multi-select mode, this same row swaps to the selection bar instead.
   headerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'flex-end',
+    gap: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
+  },
+  difficultyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    minHeight: 44,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: PUZZLE_PALETTE.accentDark,
+  },
+  difficultyPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: PUZZLE_PALETTE.accentDark,
+  },
+  difficultyPillChevron: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: PUZZLE_PALETTE.accentDark,
+  },
+  difficultyModalOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlayScrim,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  difficultyModalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.sm,
+    width: '100%',
+    maxWidth: 260,
+    ...elevation.level4,
+  },
+  difficultyOptionRow: {
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+  },
+  difficultyOptionRowSelected: {
+    backgroundColor: PUZZLE_PALETTE.accentSoft,
+  },
+  difficultyOptionText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  difficultyOptionTextSelected: {
+    color: PUZZLE_PALETTE.accentDark,
   },
   selectionBar: {
     flex: 1,

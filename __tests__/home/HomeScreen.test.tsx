@@ -127,40 +127,46 @@ describe('HomeScreen', () => {
     });
   });
 
-  describe('redesigned layout (asymmetrical hero grid, design-system cards)', () => {
-    it('gives the Coloring card extra width as the "hero" tile, wider than the other three equal-width cards', async () => {
+  describe('redesigned layout (horizontal scrolling carousel, design-system cards)', () => {
+    it('lays out all four cards at the same fixed width, inside a horizontally-scrolling row', async () => {
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
           <HomeScreen childName="Sam" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
-      // Width is set on the wrapper View one level above each RaisedCard's
-      // own testID (see HomeScreen.tsx's grid: the RaisedCard fills a sized
-      // wrapper via flex:1) — a static style check, not an animation replay,
-      // matching this file's existing convention of reading rendered style
-      // rather than driving/asserting on Animated values directly.
-      const heroWidth = getByTestId('home-card-coloring').parent?.props.style.width;
+      // Width is set on the wrapper Animated.View one level above each
+      // RaisedCard's own testID (see HomeScreen.tsx's carousel: the
+      // RaisedCard fills a fixed-size wrapper via flex:1) — a static style
+      // check, not an animation replay, matching this file's existing
+      // convention of reading rendered style rather than driving/asserting
+      // on Animated values directly. All four cards now share one constant
+      // width so the row can grow to fit more cards later without ever
+      // needing to shrink the existing ones.
+      const coloringWidth = getByTestId('home-card-coloring').parent?.props.style.width;
       const quizWidth = getByTestId('home-card-quiz').parent?.props.style.width;
       const puzzleWidth = getByTestId('home-card-puzzle').parent?.props.style.width;
       const videoWidth = getByTestId('home-card-video').parent?.props.style.width;
 
-      expect(heroWidth).toBeGreaterThan(quizWidth);
+      expect(coloringWidth).toBeCloseTo(quizWidth, 5);
       expect(quizWidth).toBeCloseTo(puzzleWidth, 5);
       expect(quizWidth).toBeCloseTo(videoWidth, 5);
+
+      const scrollRow = getByTestId('home-card-row');
+      expect(scrollRow.props.horizontal).toBe(true);
     });
 
-    it('shows the Coloring hero card with its extra tagline copy, and the other cards without one', async () => {
-      const { getByText, queryByText } = await render(
+    it('shows each card with its own tagline copy', async () => {
+      const { getByText } = await render(
         <LanguageProvider initialLanguage="en">
           <HomeScreen childName="Sam" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
       expect(getByText("Let's create!")).toBeTruthy();
-      expect(queryByText('Test your smarts')).toBeNull();
-      expect(queryByText('Piece it together')).toBeNull();
-      expect(queryByText('Watch & learn')).toBeNull();
+      expect(getByText('Test your smarts')).toBeTruthy();
+      expect(getByText('Piece it together')).toBeTruthy();
+      expect(getByText('Watch & learn')).toBeTruthy();
     });
 
     it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video each distinct)', async () => {

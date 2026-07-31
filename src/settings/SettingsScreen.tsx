@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView, Image, Animated } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
 import { useLanguage } from '../i18n/LanguageContext';
-import { getProfile, saveProfile } from '../storage/profileStore';
-import { requestFolderAccess } from '../storage/folderAccess';
+import { getProfile, saveProfile, clearProfile } from '../storage/profileStore';
+import { requestFolderAccess, findChildUri, KUTTA_GAMES_FOLDER_NAME } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import { AgePicker } from '../components/AgePicker';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { ProfilePicturePicker } from './ProfilePicturePicker';
-import type { Language, Profile } from '../types/profile';
+import type { Profile } from '../types/profile';
 import { colors, radii, spacing, elevation, typography, motion, parentPaperTheme } from '../design-system';
 
 // This screen deliberately renders in Kutta's CALMER "parent" register (see
@@ -35,7 +37,11 @@ import { colors, radii, spacing, elevation, typography, motion, parentPaperTheme
 // screens. Renders nothing extra when not mounted; the parent still controls
 // whether the banner exists at all via a `&&` guard, this only animates its
 // entrance.
-function FadeInBanner({ children, style }: { children: React.ReactNode; style: object }) {
+function FadeInBanner({
+  children,
+  style,
+  testID,
+}: { children: React.ReactNode; style: object; testID?: string }) {
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -47,13 +53,32 @@ function FadeInBanner({ children, style }: { children: React.ReactNode; style: o
     }).start();
   }, [opacity]);
 
-  return <Animated.View style={[style, { opacity }]}>{children}</Animated.View>;
+  return (
+    <Animated.View testID={testID} style={[style, { opacity }]}>
+      {children}
+    </Animated.View>
+  );
 }
+
+// How long the "Saved successfully" toast stays up before this screen
+// navigates back to Home on its own — long enough for a parent to actually
+// read it, short enough not to feel like the app is stuck after a tap.
+const SAVED_TOAST_DURATION_MS = 1200;
 
 export function SettingsScreen({
   onProfileChanged,
+  onGoHome,
+  onReset,
   picturesFolderUri,
-}: { onProfileChanged?: () => void; picturesFolderUri?: string } = {}) {
+}: {
+  onProfileChanged?: () => void;
+  onGoHome?: () => void;
+  // Called after the parent confirms "Reset" and everything has been wiped
+  // (content folder + saved profile) — RootNavigator wires this to send the
+  // app back to onboarding, the same way a genuinely first-ever launch would.
+  onReset?: () => void;
+  picturesFolderUri?: string;
+} = {}) {
   const { t, setLanguage } = useLanguage();
   // Shown with headerShown:true (see RootNavigator), so the native header
   // already covers the top inset — only left/right/bottom are ours to
@@ -63,6 +88,7 @@ export function SettingsScreen({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [age, setAge] = useState<number | null>(null);
   const [ageModalVisible, setAgeModalVisible] = useState(false);
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const [pendingFolderUri, setPendingFolderUri] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [migrationError, setMigrationError] = useState<string | null>(null);
@@ -74,6 +100,15 @@ export function SettingsScreen({
   // resolveProfilePictureUri (src/storage/profilePicture.ts), which the
   // Home screen side of this feature uses for the same file.
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [savedToastVisible, setSavedToastVisible] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const goHomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (goHomeTimeoutRef.current) clearTimeout(goHomeTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     getProfile().then((p) => {
@@ -134,6 +169,39 @@ export function SettingsScreen({
     });
   }
 
+  function handleReset() {
+    if (!profile || resetting) return;
+    Alert.alert(
+      t('settingsResetConfirmTitle'),
+      t('settingsResetConfirmBody'),
+      [
+        { text: t('cancel'), style: 'cancel', onPress: () => {} },
+        { text: t('settingsReset'), style: 'destructive', onPress: performReset },
+      ],
+      { cancelable: true }
+    );
+  }
+
+  async function performReset() {
+    setResetting(true);
+    try {
+      if (profile?.rootFolderUri) {
+        // Best-effort: if the Kutta-games folder can't be found or deleted
+        // (SAF grant already revoked, folder already gone), the profile is
+        // still cleared below — a parent asking to reset should never get
+        // stuck here over a folder that's already missing.
+        const gamesUri = await findChildUri(profile.rootFolderUri, KUTTA_GAMES_FOLDER_NAME).catch(() => null);
+        if (gamesUri) {
+          await FileSystem.StorageAccessFramework.deleteAsync(gamesUri, { idempotent: true }).catch(() => {});
+        }
+      }
+      await clearProfile();
+      onReset?.();
+    } finally {
+      setResetting(false);
+    }
+  }
+
   async function handleSave() {
     if (!profile || migrating) return;
     setMigrationError(null);
@@ -168,6 +236,12 @@ export function SettingsScreen({
     setProfile(nextProfile);
     setLanguage(nextProfile.language);
     onProfileChanged?.();
+
+    setSavedToastVisible(true);
+    goHomeTimeoutRef.current = setTimeout(() => {
+      setSavedToastVisible(false);
+      onGoHome?.();
+    }, SAVED_TOAST_DURATION_MS);
   }
 
   const insetStyle = {
@@ -223,46 +297,15 @@ export function SettingsScreen({
           <View style={styles.row}>
             <View style={[styles.card, styles.halfCard]}>
               <Text style={styles.label}>{t('onboardingLanguage')}</Text>
-              <View style={styles.languageRow}>
-                <Pressable
-                  testID="settings-lang-en"
-                  onPress={() => setProfile({ ...profile, language: 'en' as Language })}
-                  style={({ pressed }) => [
-                    styles.langPill,
-                    profile.language === 'en' ? styles.langPillSelected : styles.langPillUnselected,
-                    pressed && styles.pressedSubtle,
-                  ]}
-                  hitSlop={{ top: 8, bottom: 8 }}
-                >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      profile.language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected,
-                    ]}
-                  >
-                    English
-                  </Text>
-                </Pressable>
-                <Pressable
-                  testID="settings-lang-de"
-                  onPress={() => setProfile({ ...profile, language: 'de' as Language })}
-                  style={({ pressed }) => [
-                    styles.langPill,
-                    profile.language === 'de' ? styles.langPillSelected : styles.langPillUnselected,
-                    pressed && styles.pressedSubtle,
-                  ]}
-                  hitSlop={{ top: 8, bottom: 8 }}
-                >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      profile.language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected,
-                    ]}
-                  >
-                    Deutsch
-                  </Text>
-                </Pressable>
-              </View>
+              <LanguageSelector
+                value={profile.language}
+                onChange={(next) => setProfile({ ...profile, language: next })}
+                visible={languageModalVisible}
+                onOpen={() => setLanguageModalVisible(true)}
+                onClose={() => setLanguageModalVisible(false)}
+                testIDPrefix="settings-lang"
+                variant="parent"
+              />
             </View>
 
             <View style={[styles.card, styles.halfCard]}>
@@ -336,6 +379,11 @@ export function SettingsScreen({
               <Text style={styles.errorBannerText}>{migrationError}</Text>
             </FadeInBanner>
           )}
+          {savedToastVisible && (
+            <FadeInBanner testID="settings-saved-toast" style={styles.successBanner}>
+              <Text style={styles.successBannerText}>{t('settingsSavedToast')}</Text>
+            </FadeInBanner>
+          )}
 
           <Pressable
             testID="settings-save"
@@ -350,6 +398,20 @@ export function SettingsScreen({
             <Text style={[styles.saveButtonText, migrating ? styles.saveButtonTextDisabled : styles.saveButtonTextEnabled]}>
               {t('settingsSave')}
             </Text>
+          </Pressable>
+
+          <Pressable
+            testID="settings-reset"
+            onPress={handleReset}
+            disabled={resetting}
+            style={({ pressed }) => [
+              styles.resetButton,
+              resetting && styles.resetButtonDisabled,
+              pressed && !resetting && styles.pressedSubtle,
+            ]}
+            hitSlop={{ top: 6, bottom: 6 }}
+          >
+            <Text style={styles.resetButtonText}>{t('settingsReset')}</Text>
           </Pressable>
         </ScrollView>
 
@@ -419,37 +481,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.parent.ink,
     backgroundColor: colors.parent.background,
-  },
-  languageRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  langPill: {
-    flex: 1,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  langPillSelected: {
-    backgroundColor: colors.parent.accent,
-    borderColor: colors.parent.accentDark,
-  },
-  langPillUnselected: {
-    backgroundColor: colors.parent.background,
-    borderColor: colors.parent.border,
-  },
-  langPillText: {
-    fontSize: typography.bodySmall.fontSize,
-    fontWeight: '700',
-  },
-  langPillTextSelected: {
-    color: colors.white,
-  },
-  langPillTextUnselected: {
-    color: colors.parent.ink,
   },
   folderStatus: {
     flexDirection: 'row',
@@ -577,6 +608,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  // A calm, positive confirmation — this screen's `jade`/success-adjacent
+  // family rather than the `parent.accent` used for informational banners,
+  // so "it worked" reads distinctly from "here's a status update".
+  successBanner: {
+    backgroundColor: colors.jade,
+    borderRadius: radii.md,
+    padding: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  successBannerText: {
+    color: colors.white,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   saveButton: {
     minHeight: 48,
     justifyContent: 'center',
@@ -604,6 +649,30 @@ const styles = StyleSheet.create({
   },
   saveButtonTextDisabled: {
     color: colors.disabledText,
+  },
+  // Deliberately a plain outlined "danger" link-style control, not a filled
+  // button — it sits below Save and must never visually compete with it as
+  // the screen's primary action, while still reading unmistakably as
+  // destructive via the same berry error hue used by removePictureButton
+  // above.
+  resetButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.berry,
+    backgroundColor: 'transparent',
+  },
+  resetButtonDisabled: {
+    opacity: 0.5,
+  },
+  resetButtonText: {
+    color: colors.berryDark,
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: '700',
   },
   // Shared "pressed" feedback for this screen's plain Pressables: a subtle
   // opacity dip applied instantly via Pressable's own `pressed` render prop

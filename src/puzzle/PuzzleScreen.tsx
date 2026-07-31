@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
-import { PieceCountPicker } from '../components/PieceCountPicker';
+import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import {
   colors,
   radii,
@@ -108,9 +108,15 @@ function PuzzlePiece({
 
 export function PuzzleScreen({
   imageUri,
+  pieceCount,
   onNext = () => {},
 }: {
   imageUri: string;
+  // Chosen once in PuzzleGallery's header dropdown and remembered as the
+  // parent's default (see puzzleDifficultyStore.ts) — this screen no longer
+  // asks again per-photo, so it's a required prop rather than something
+  // this screen picks itself.
+  pieceCount: PuzzleDifficulty;
   // Optional so existing call sites/tests that don't need to go back to the
   // gallery (e.g. ones that never reach the solved state) don't have to pass
   // one. RootNavigator always wires a real `() => navigation.goBack()` in
@@ -128,8 +134,6 @@ export function PuzzleScreen({
   // account for insets.top itself. Zero out top here so it isn't double-
   // counted on top of what the header already reserved; bottom/left/right
   // still need to be handled since the header doesn't cover those.
-  const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
-  const [pieceCountModalVisible, setPieceCountModalVisible] = useState(false);
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   // The board's shape and crop rects depend on the ACTUAL picked photo's real
@@ -237,8 +241,7 @@ export function PuzzleScreen({
   const board = computePuzzleBoardSize(width, height, imageWidth, imageHeight, { ...insets, top: 0 });
   const isImageSizeReady = imageSize !== null || imageSizeFailed;
 
-  function startPuzzle(count: 4 | 6 | 9 | 12) {
-    setPieceCount(count);
+  function startPuzzle(count: PuzzleDifficulty) {
     setOrder(shufflePieceOrder(count));
     setSelectedSlot(null);
     // Fresh puzzle: clear the correctness baseline so the new shuffle's
@@ -247,6 +250,14 @@ export function PuzzleScreen({
     // should be able to.
     prevCorrectRef.current = null;
   }
+
+  // pieceCount is fixed for the lifetime of this screen (chosen once in the
+  // gallery, passed in as a prop) — shuffle exactly once per mounted puzzle
+  // instance, rather than every time this effect's deps happen to change.
+  useEffect(() => {
+    startPuzzle(pieceCount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleTapSlot(slotIndex: number) {
     if (selectedSlot === null) {
@@ -271,7 +282,7 @@ export function PuzzleScreen({
     // shuffling approach — which also clears selectedSlot and the
     // correctness baseline, so the completion overlay closes immediately
     // since shufflePieceOrder guarantees a non-identity (unsolved) order.
-    if (pieceCount) startPuzzle(pieceCount);
+    startPuzzle(pieceCount);
   }
 
   function handleNextPuzzle() {
@@ -280,40 +291,14 @@ export function PuzzleScreen({
     onNext();
   }
 
-  if (!pieceCount) {
+  if (order.length === 0) {
+    // Briefly true only between mount and the shuffle effect above running —
+    // matches the loading spinner shown below while the photo's real size
+    // is still resolving.
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={{
-          flexGrow: 1,
-          padding: spacing.md,
-          paddingTop: spacing.md + insets.top,
-          paddingBottom: spacing.md + insets.bottom,
-          paddingLeft: spacing.md + insets.left,
-          paddingRight: spacing.md + insets.right,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <RaisedCard color={colors.surface} borderColor={PUZZLE_PALETTE.accentDark} style={styles.pickerCard}>
-          <View style={styles.pickerCardInner}>
-            <Text style={styles.pickerEmoji}>🧩</Text>
-            <Text style={styles.pickerTitle}>{t('puzzlePickPieces')}</Text>
-            <View style={{ marginTop: spacing.md, width: '100%', maxWidth: 220 }}>
-              <PieceCountPicker
-                value={pieceCount}
-                onChange={startPuzzle}
-                visible={pieceCountModalVisible}
-                onOpen={() => setPieceCountModalVisible(true)}
-                onClose={() => setPieceCountModalVisible(false)}
-                placeholder={t('puzzlePickPieces')}
-                testIDPrefix="puzzle-piece-count"
-                isPortrait={isPortrait}
-              />
-            </View>
-          </View>
-        </RaisedCard>
-      </ScrollView>
+      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
+        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
+      </View>
     );
   }
 
@@ -432,24 +417,6 @@ const styles = StyleSheet.create({
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pickerCard: {
-    width: '100%',
-    maxWidth: 360,
-  },
-  pickerCardInner: {
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  pickerEmoji: {
-    fontSize: 56,
-    marginBottom: spacing.xs,
-  },
-  pickerTitle: {
-    fontSize: typography.h2.fontSize,
-    fontWeight: typography.h2.fontWeight,
-    color: colors.ink,
-    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',

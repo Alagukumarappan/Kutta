@@ -16,6 +16,7 @@ import { ColoringGallery } from '../coloring/ColoringGallery';
 import { ColoringScreen } from '../coloring/ColoringScreen';
 import { PuzzleGallery } from '../puzzle/PuzzleGallery';
 import { PuzzleScreen } from '../puzzle/PuzzleScreen';
+import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { VideoGallery } from '../video/VideoGallery';
 import { VideoPlayerScreen } from '../video/VideoPlayerScreen';
 import { SplashScreen } from '../splash/SplashScreen';
@@ -59,7 +60,7 @@ type RootStackParamList = {
   coloring: undefined;
   'coloring-detail': { imageUri: string };
   puzzle: undefined;
-  'puzzle-detail': { imageUri: string };
+  'puzzle-detail': { imageUri: string; pieceCount: PuzzleDifficulty };
   video: undefined;
   'video-detail': { videoUri: string };
 };
@@ -84,11 +85,13 @@ async function resolveSubfolderUris(rootUri: string): Promise<SubfolderUris> {
   // renamed a subfolder from outside the app (a file manager, etc.),
   // ensureContentStructure recreates whatever's missing so resolution below
   // — and a Retry tap on FolderErrorScreen — can self-heal instead of
-  // failing identically forever.
-  await ensureContentStructure(rootUri);
+  // failing identically forever. Its return value is the "Kutta-games"
+  // folder actually holding pictures/videos/coloring/quiz — NOT the raw
+  // folder the parent picked in onboarding/Settings.
+  const gamesUri = await ensureContentStructure(rootUri);
 
   async function findChild(name: string): Promise<string> {
-    const match = await findChildUri(rootUri, name);
+    const match = await findChildUri(gamesUri, name);
     if (!match) {
       throw new Error(`Content folder "${name}" was not found under the selected root folder.`);
     }
@@ -126,10 +129,12 @@ function AppStack({
   profile,
   folderUris,
   onProfileChanged,
+  onReset,
 }: {
   profile: Profile;
   folderUris: SubfolderUris;
   onProfileChanged: () => void;
+  onReset: () => void;
 }) {
   const { t } = useLanguage();
 
@@ -150,7 +155,14 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="settings" options={{ title: titleFor('settingsTitle') }}>
-        {() => <SettingsScreen onProfileChanged={onProfileChanged} picturesFolderUri={folderUris.pictures} />}
+        {({ navigation }) => (
+          <SettingsScreen
+            onProfileChanged={onProfileChanged}
+            picturesFolderUri={folderUris.pictures}
+            onGoHome={() => navigation.navigate('Home')}
+            onReset={onReset}
+          />
+        )}
       </Stack.Screen>
       <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
         {({ navigation }) => (
@@ -176,13 +188,17 @@ function AppStack({
         {({ navigation }) => (
           <PuzzleGallery
             picturesFolderUri={folderUris.pictures}
-            onSelect={(imageUri) => navigation.navigate('puzzle-detail', { imageUri })}
+            onSelect={(imageUri, pieceCount) => navigation.navigate('puzzle-detail', { imageUri, pieceCount })}
           />
         )}
       </Stack.Screen>
       <Stack.Screen name="puzzle-detail" options={{ title: titleFor('puzzleDetailTitle') }}>
         {({ navigation, route }) => (
-          <PuzzleScreen imageUri={route.params.imageUri} onNext={() => navigation.goBack()} />
+          <PuzzleScreen
+            imageUri={route.params.imageUri}
+            pieceCount={route.params.pieceCount}
+            onNext={() => navigation.goBack()}
+          />
         )}
       </Stack.Screen>
       <Stack.Screen name="video" options={{ title: titleFor('homeVideo') }}>
@@ -216,35 +232,25 @@ export function RootNavigator() {
     setRetryToken((n) => n + 1);
   }, []);
 
-  // Lock portrait immediately on mount, before the splash below even
-  // paints, so there's no visible landscape flash while the profile loads.
-  useEffect(() => {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch((err) => {
-      // No user-facing recovery to build for this today, but a silent
-      // failure here would leave orientation unconstrained in an app that's
-      // landscape-only by design — worth knowing about during development.
-      console.warn('Failed to lock orientation to portrait for splash', err);
-    });
+  // Settings' "Reset everything" flow has already wiped the saved profile
+  // (and content folder) by the time this fires — clearing `profile` here
+  // is what actually swaps AppStack back out for OnboardingScreen below,
+  // exactly like a genuinely first-ever launch.
+  const handleReset = useCallback(() => {
+    setProfile(null);
   }, []);
 
   // Initial load only: resolve the profile and hold the splash up for at
-  // least MINIMUM_SPLASH_DELAY_MS, then lock landscape — the orientation
-  // every screen after the splash is designed for — before revealing
-  // onboarding or the app shell. Later profile refreshes (onboarding
-  // complete, settings save) go through `refreshProfile` directly and don't
-  // repeat this splash/orientation dance; the screen is already landscape
-  // by then.
+  // least MINIMUM_SPLASH_DELAY_MS. Deliberately does NOT lock landscape here
+  // — the splash and onboarding flow are portrait-only by design (see the
+  // landscape-lock effect below, which only fires once the app is actually
+  // about to show the Home/AppStack screen). Later profile refreshes
+  // (onboarding complete, settings save) go through `refreshProfile`
+  // directly and don't repeat this splash dance.
   useEffect(() => {
     let cancelled = false;
     Promise.all([getProfile(), delay(MINIMUM_SPLASH_DELAY_MS)])
-      .then(async ([loadedProfile]) => {
-        if (cancelled) return;
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((err) => {
-          // Same reasoning as the portrait lock above: no user-facing recovery
-          // to build right now, but a failure leaving orientation unconstrained
-          // in a landscape-only app is worth surfacing rather than swallowing.
-          console.warn('Failed to lock orientation to landscape', err);
-        });
+      .then(([loadedProfile]) => {
         if (cancelled) return;
         setProfile(loadedProfile);
       })
@@ -258,6 +264,25 @@ export function RootNavigator() {
       cancelled = true;
     };
   }, []);
+
+  // Everything up through onboarding (splash, name/age/folder setup) stays
+  // portrait — it's a vertical, form-like flow. Only once a profile AND its
+  // folders are both resolved does the app actually reveal Home/AppStack,
+  // which is the landscape-designed part of the app, so the lock flips here
+  // rather than the moment a profile is merely loaded (a returning user with
+  // an already-complete profile still needs `folderUris` resolved first).
+  const readyForAppStack = Boolean(profile?.rootFolderUri) && folderUris !== null && !folderError;
+  useEffect(() => {
+    const targetLock = readyForAppStack
+      ? ScreenOrientation.OrientationLock.LANDSCAPE
+      : ScreenOrientation.OrientationLock.PORTRAIT_UP;
+    ScreenOrientation.lockAsync(targetLock).catch((err) => {
+      // No user-facing recovery to build for this today, but a silent
+      // failure here would leave orientation unconstrained, worth knowing
+      // about during development.
+      console.warn('Failed to lock orientation', err);
+    });
+  }, [readyForAppStack]);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,7 +325,7 @@ export function RootNavigator() {
           folderError ? (
             <FolderErrorScreen onRetry={retryFolderResolution} />
           ) : folderUris ? (
-            <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} />
+            <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} onReset={handleReset} />
           ) : null
         ) : (
           <OnboardingScreen onComplete={refreshProfile} />

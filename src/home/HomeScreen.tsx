@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, Image, Animated, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
@@ -37,10 +37,6 @@ type CardSpec = {
   taglineKey: 'homeColoringTagline' | 'homeQuizTagline' | 'homePuzzleTagline' | 'homeVideoTagline';
   emoji: string;
   activity: ActivityId;
-  // The one card given extra width in the grid below — see the `grid`
-  // layout comment for why an asymmetrical "hero + three" composition was
-  // chosen over four identical rectangles.
-  hero?: boolean;
 };
 
 // Matches settingsButton's width/height below — pulled out as a constant so
@@ -50,12 +46,21 @@ type CardSpec = {
 // than the old theme's 44px.
 const SETTINGS_BUTTON_SIZE = touchTarget.iconButton;
 
+// A horizontally-scrolling row (not a fixed 4-up grid) so more activity
+// cards can be added later without ever needing to shrink existing ones to
+// make room — each card keeps a comfortable, constant size regardless of
+// how many siblings it has. CARD_GAP/SIDE_PADDING both feed into the
+// snap-scroll math below, so they're shared constants rather than
+// independent style literals.
+const CARD_GAP = spacing.md;
+const SIDE_PADDING = spacing.md;
+
 // Per-activity accent comes from the shared design system's
 // `getActivityPalette()` (Coloring -> bubblegum, Quiz -> violet, Puzzle ->
 // jade, Video -> marigold) rather than hand-picked colors, so Home stays in
 // sync with any future screen that also colors itself by activity.
 const CARDS: CardSpec[] = [
-  { testID: 'home-card-coloring', destination: 'coloring', labelKey: 'homeColoring', taglineKey: 'homeColoringTagline', emoji: '🎨', activity: 'coloring', hero: true },
+  { testID: 'home-card-coloring', destination: 'coloring', labelKey: 'homeColoring', taglineKey: 'homeColoringTagline', emoji: '🎨', activity: 'coloring' },
   { testID: 'home-card-quiz', destination: 'quiz', labelKey: 'homeQuiz', taglineKey: 'homeQuizTagline', emoji: '🧠', activity: 'quiz' },
   { testID: 'home-card-puzzle', destination: 'puzzle', labelKey: 'homePuzzle', taglineKey: 'homePuzzleTagline', emoji: '🧩', activity: 'puzzle' },
   { testID: 'home-card-video', destination: 'video', labelKey: 'homeVideo', taglineKey: 'homeVideoTagline', emoji: '🎬', activity: 'video' },
@@ -148,23 +153,27 @@ export function HomeScreen({
     rearmTimeoutsRef.current.push(timeoutId);
   }
 
-  // Landscape gives ample width and limited height, so the 4 cards sit in a
-  // single row instead of a 2x2 stack (unchanged from before). What changes
-  // is the row's composition: rather than four identical rectangles, the
-  // first (Coloring) card is given extra flex weight as a "hero" tile, with
-  // the remaining three sharing the rest — an asymmetrical grid that still
-  // fits the exact same height budget and screen-fit math as before (no
-  // extra chrome height added), just a different width split.
+  // Landscape gives ample width and limited height, so the row of cards
+  // scrolls horizontally rather than stacking. CARD_WIDTH is a fixed
+  // fraction of the screen (clamped to a sane range) rather than dividing
+  // the full width by the card count — that's what lets more cards be added
+  // later without shrinking the existing ones; the row just scrolls a
+  // little further. Sized so a bit more than 3 cards are visible at once on
+  // a typical landscape phone, with the next card peeking in at the edge as
+  // a natural "there's more, keep scrolling" cue.
   const availableWidth = width - insets.left - insets.right;
-  const gap = spacing.md;
-  // Chrome above/below the card row: screen's top+bottom padding (spacing.md
-  // each) plus the settings-icon row's fixed height (SETTINGS_BUTTON_SIZE)
-  // plus its marginBottom (spacing.md) separating it from the card grid.
+  const CARD_WIDTH = clamp(availableWidth / 3.4, 150, 240);
   const headerReserve = spacing.md * 3 + SETTINGS_BUTTON_SIZE + insets.top + insets.bottom;
-  const cardHeight = clamp(height - headerReserve, 120, 220);
-  const HERO_WEIGHT = 1.35;
-  const totalWeight = CARDS.reduce((sum, card) => sum + (card.hero ? HERO_WEIGHT : 1), 0);
-  const usableWidth = availableWidth - gap * (CARDS.length - 1);
+  const cardHeight = clamp(height - headerReserve, 140, 240);
+
+  // Drives the scroll-linked focus effect below: the centered-ish card
+  // scales/brightens up slightly while cards further from view ease back
+  // down, the same "each card responds to where it sits in the row" feel
+  // established children's/media apps use for horizontal rows — native
+  // driver only (transform/opacity), so this costs nothing on the JS thread
+  // while scrolling.
+  const scrollX = React.useRef(new Animated.Value(0)).current;
+  const step = CARD_WIDTH + CARD_GAP;
 
   return (
     <View
@@ -235,18 +244,33 @@ export function HomeScreen({
         </AnimatedPressable>
       </View>
 
-      <View style={styles.grid}>
+      <Animated.ScrollView
+        testID="home-card-row"
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToInterval={step}
+        snapToAlignment="start"
+        contentContainerStyle={[styles.gridContent, { paddingHorizontal: SIDE_PADDING }]}
+        style={styles.grid}
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true })}
+      >
         {CARDS.map((card, index) => {
           const palette = getActivityPalette(card.activity);
-          const weight = card.hero ? HERO_WEIGHT : 1;
-          const cardWidth = (usableWidth * weight) / totalWeight;
+          const itemOffset = index * step;
+          const inputRange = [itemOffset - step, itemOffset, itemOffset + step];
+          const scale = scrollX.interpolate({ inputRange, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' });
+          const focusOpacity = scrollX.interpolate({ inputRange, outputRange: [0.85, 1, 0.85], extrapolate: 'clamp' });
           return (
-            <View
+            <Animated.View
               key={card.testID}
               style={{
-                width: cardWidth,
+                width: CARD_WIDTH,
                 height: cardHeight,
-                marginRight: index < CARDS.length - 1 ? gap : 0,
+                marginRight: index < CARDS.length - 1 ? CARD_GAP : 0,
+                transform: [{ scale }],
+                opacity: focusOpacity,
               }}
             >
               <RaisedCard
@@ -260,17 +284,17 @@ export function HomeScreen({
                 style={styles.cardFill}
               >
                 <View style={styles.cardContent}>
-                  <View style={[styles.emojiBadge, card.hero && styles.emojiBadgeHero]}>
-                    <Text style={[styles.cardEmoji, card.hero && styles.cardEmojiHero]}>{card.emoji}</Text>
+                  <View style={styles.emojiBadge}>
+                    <Text style={styles.cardEmoji}>{card.emoji}</Text>
                   </View>
-                  <Text style={[styles.cardLabel, card.hero && styles.cardLabelHero]}>{t(card.labelKey)}</Text>
-                  {card.hero && <Text style={styles.cardTagline}>{t(card.taglineKey)}</Text>}
+                  <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+                  <Text style={styles.cardTagline}>{t(card.taglineKey)}</Text>
                 </View>
               </RaisedCard>
-            </View>
+            </Animated.View>
           );
         })}
-      </View>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -319,6 +343,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
+    paddingHorizontal: SIDE_PADDING,
   },
   greetingBadge: {
     flexDirection: 'row',
@@ -385,7 +410,8 @@ const styles = StyleSheet.create({
   },
   grid: {
     flex: 1,
-    flexDirection: 'row',
+  },
+  gridContent: {
     alignItems: 'center',
   },
   cardFill: {
@@ -411,26 +437,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
-  emojiBadgeHero: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-  },
   cardEmoji: {
-    fontSize: 36,
-  },
-  cardEmojiHero: {
-    fontSize: 44,
+    fontSize: 40,
   },
   cardLabel: {
     fontSize: typography.h3.fontSize,
     fontWeight: typography.h3.fontWeight,
     color: colors.white,
     textAlign: 'center',
-  },
-  cardLabelHero: {
-    fontSize: typography.h2.fontSize,
-    fontWeight: typography.h2.fontWeight,
   },
   cardTagline: {
     marginTop: spacing.xxs,

@@ -16,6 +16,10 @@ jest.mock('expo-file-system/legacy', () => ({
 
 describe('ensureContentStructure', () => {
   const rootUri = 'content://tree/root';
+  // All content now lives one level deeper, inside "Kutta-games" (see
+  // folderAccess.ts's KUTTA_GAMES_FOLDER_NAME) — this is the URI every
+  // subfolder assertion below is actually made against.
+  const gamesUri = `${rootUri}/Kutta-games`;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -35,9 +39,47 @@ describe('ensureContentStructure', () => {
     expect(madeDirs).toEqual(expect.arrayContaining(['pictures', 'videos', 'coloring', 'quiz']));
   });
 
+  it('nests all content one level down inside a "Kutta-games" folder rather than directly under the picked root, and returns its URI', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+    const returnedUri = await ensureContentStructure(rootUri);
+
+    expect(returnedUri).toBe(gamesUri);
+    const gamesFolderCall = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.find(
+      (c) => c[1] === 'Kutta-games'
+    );
+    expect(gamesFolderCall?.[0]).toBe(rootUri);
+
+    // Every one of the 4 known subfolders is created under Kutta-games, not
+    // directly under the picked root — otherwise switching folders in
+    // Settings could clutter a folder the parent already uses for other
+    // things.
+    for (const folder of ['pictures', 'videos', 'coloring', 'quiz']) {
+      const call = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.find(
+        (c) => c[1] === folder
+      );
+      expect(call?.[0]).toBe(gamesUri);
+    }
+  });
+
+  it('re-finds the existing "Kutta-games" folder instead of creating a second one', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
+      if (uri === rootUri) return [gamesUri];
+      return [];
+    });
+
+    await ensureContentStructure(rootUri);
+
+    const madeDirs = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.map(
+      (c) => c[1]
+    );
+    expect(madeDirs).not.toContain('Kutta-games');
+  });
+
   it('does not recreate a subfolder that already exists', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
-      if (uri === rootUri) return [`${rootUri}/pictures`];
+      if (uri === rootUri) return [gamesUri];
+      if (uri === gamesUri) return [`${gamesUri}/pictures`];
       return [];
     });
 
@@ -84,10 +126,10 @@ describe('ensureContentStructure', () => {
     const quizMakeDirCall = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.find(
       (c) => c[1] === 'images'
     );
-    expect(quizMakeDirCall?.[0]).toBe(`${rootUri}/quiz`);
+    expect(quizMakeDirCall?.[0]).toBe(`${gamesUri}/quiz`);
 
     expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledWith(
-      `${rootUri}/quiz`,
+      `${gamesUri}/quiz`,
       'questions.json',
       'application/json'
     );
@@ -95,11 +137,11 @@ describe('ensureContentStructure', () => {
 
   it('does not mistake an unrelated similarly-named folder (e.g. "Old pictures") for the "pictures" subfolder', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
-      if (uri === rootUri) {
+      if (uri === gamesUri) {
         // A pre-existing, unrelated sibling whose name merely *ends with*
         // "pictures" — must NOT be treated as the "pictures" subfolder, or
         // photo-puzzle content would get written into the user's own files.
-        return [`${rootUri}/Old%20pictures`];
+        return [`${gamesUri}/Old%20pictures`];
       }
       return [];
     });
@@ -114,17 +156,17 @@ describe('ensureContentStructure', () => {
     const picturesCall = (FileSystem.StorageAccessFramework.makeDirectoryAsync as jest.Mock).mock.calls.find(
       (c) => c[1] === 'pictures'
     );
-    // ...directly under rootUri, not treated as already satisfied by "Old pictures".
-    expect(picturesCall?.[0]).toBe(rootUri);
+    // ...directly under the Kutta-games folder, not treated as already satisfied by "Old pictures".
+    expect(picturesCall?.[0]).toBe(gamesUri);
   });
 
   it('does not mistake a differently-named file (e.g. "my-questions.json") for questions.json', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(async (uri: string) => {
-      if (uri === `${rootUri}/quiz`) return [`${rootUri}/quiz/my-questions.json`];
+      if (uri === `${gamesUri}/quiz`) return [`${gamesUri}/quiz/my-questions.json`];
       return [];
     });
     (FileSystem.StorageAccessFramework.createFileAsync as jest.Mock).mockResolvedValue(
-      `${rootUri}/quiz/questions.json`
+      `${gamesUri}/quiz/questions.json`
     );
 
     await ensureContentStructure(rootUri);
@@ -132,7 +174,7 @@ describe('ensureContentStructure', () => {
     // "my-questions.json" ends with "questions.json" but is not an exact
     // match, so the template file must still be created.
     expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledWith(
-      `${rootUri}/quiz`,
+      `${gamesUri}/quiz`,
       'questions.json',
       'application/json'
     );

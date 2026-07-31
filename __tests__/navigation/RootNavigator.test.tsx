@@ -3,9 +3,14 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
 import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 jest.mock('../../src/storage/profileStore');
 jest.mock('../../src/storage/folderAccess');
+jest.mock('expo-screen-orientation', () => ({
+  OrientationLock: { PORTRAIT_UP: 'PORTRAIT_UP', LANDSCAPE: 'LANDSCAPE' },
+  lockAsync: jest.fn().mockResolvedValue(undefined),
+}));
 // ColoringScreen pulls in @shopify/react-native-skia, which isn't
 // transformable under this project's (untouched) jest config — stub it out
 // so requiring RootNavigator doesn't drag that native module in for a test
@@ -96,5 +101,39 @@ describe('RootNavigator header titles', () => {
 
     await findByTestId('folder-resolve-error');
     await findByLabelText('Retry');
+  });
+});
+
+// The app opens portrait-only (splash, onboarding) and only switches to
+// landscape once Home/AppStack is actually about to show — see
+// RootNavigator.tsx's `readyForAppStack`-driven lock effect. Getting this
+// wrong previously showed as a visible portrait->landscape->portrait->
+// landscape flicker across the splash/onboarding boundary on a real device.
+describe('RootNavigator orientation lock', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('locks portrait while showing onboarding (no profile yet), never landscape', async () => {
+    (profileStore.getProfile as jest.Mock).mockResolvedValue(null);
+
+    await render(<RootNavigator />);
+
+    await waitFor(() => expect(ScreenOrientation.lockAsync).toHaveBeenCalled());
+    expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('PORTRAIT_UP');
+    expect(ScreenOrientation.lockAsync).not.toHaveBeenCalledWith('LANDSCAPE');
+  });
+
+  it('locks landscape once the Home/AppStack screen is actually ready to show', async () => {
+    (profileStore.getProfile as jest.Mock).mockResolvedValue(profile);
+    (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+    (folderAccess.findChildUri as jest.Mock).mockImplementation(async (_root: string, name: string) => {
+      return `content://tree/root/${name}`;
+    });
+
+    const { findByTestId } = await render(<RootNavigator />);
+
+    await findByTestId('home-child-name');
+    await waitFor(() => expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('LANDSCAPE'));
   });
 });
