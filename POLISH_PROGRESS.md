@@ -471,6 +471,33 @@ convention.
 background color instead of the old bare, unstyled container (535 total
 tests passing, up from 534).
 
+### Iteration 22 — Restyle Quiz's error state onto the design-system
+**Screen:** Quiz.
+**Problem:** Direct follow-up to iteration 21's visual-consistency angle.
+`QuizScreen.tsx`'s error state (a real, reachable path when `loadQuestions`
+rejects — a revoked SAF grant or deleted folder) had been left on the OLD
+`theme/tokens.ts` styling (a bare `Pressable`+`Text` retry button) — the
+file's own header comment explicitly flagged this as an intentional-but-
+deferred gap, since the completion screen and every other gallery/player's
+error state (VideoPlayerScreen, ColoringGallery, PuzzleGallery,
+VideoGallery) had already converged on `RaisedCard`+`RaisedPrimaryButton`.
+**Fix:** Restyled just the error state (loading/empty states deliberately
+untouched, staying in scope) onto that same pattern, using `quizPalette`
+for the card border/button accent. Removed the now-dead `retryButton`/
+`retryButtonText` styles and their now-unused imports.
+**Caught during self-review and fixed before committing:** the initial
+version set `textColor` to a hardcoded `dsColors.ink`, copied from
+VideoPlayerScreen's own error card — but that only happens to be correct
+there because video's activity palette (marigold) needs ink text per
+iteration 10's WCAG contrast fix; quiz's palette (violet) needs WHITE text.
+Fixed to read `quizPalette.onAccentText` instead of hardcoding a color, so
+this can never drift out of sync with the per-activity contrast rule again.
+**Tests:** New regression test confirming the retry button now renders as
+the shared `RaisedPrimaryButton` (Paper's structurally distinct style
+shape) rather than the old flat-styled `Pressable`; confirmed via
+`git stash` that it genuinely fails without the fix (536 total tests
+passing, up from 535).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -537,15 +564,14 @@ tests passing, up from 534).
 - Tic-Tac-Toe setup (Start button double-tap protection)
 - Global FolderErrorScreen (restyled from bare/unstyled to match every
   other error state's design-system pattern)
+- Quiz (error state restyled onto RaisedCard+RaisedPrimaryButton)
 
 ## Remaining polish opportunities (not yet done)
-- `QuizScreen.tsx`'s loading/error/empty states still use the OLD
-  `theme/tokens.ts` palette with a plain `Pressable`+text retry button —
-  self-documented in the file's own header comment as an intentional-but-
-  deferred gap, unlike Coloring/Video/Puzzle galleries and
-  VideoPlayerScreen, which all converged on `RaisedCard`+
-  `RaisedPrimaryButton`/`RaisedSecondaryButton`. Worth scoping to just the
-  error state (not also the empty state) to keep it single-purpose.
+- `QuizScreen.tsx`'s loading/empty states still use the OLD
+  `theme/tokens.ts` palette (the error state was fixed in iteration 22) —
+  self-documented in the file's own header comment as intentionally out of
+  scope for now, since these are lower-traffic moments than the error
+  state was.
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
   imported anywhere in the app. Its i18n key `puzzlePickPieces` is likewise
   unused. Not a fix candidate (nothing to improve on unreachable code); a

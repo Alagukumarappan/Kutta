@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, View, Text, Pressable, StyleSheet } from 'react-native';
+import { Animated, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
@@ -7,7 +7,7 @@ import { loadQuestions } from './loadQuestions';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
 import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 import {
   colors as dsColors,
   spacing as dsSpacing,
@@ -21,15 +21,16 @@ import {
 } from '../design-system';
 
 // REDESIGN (matches QuestionRenderer.tsx's iteration 2 pass onto
-// src/design-system/): only the completion screen below (score card + Play
-// Again/Home) is rebuilt on the new design-system foundation — the
-// loading/error/empty states above still intentionally use the OLD
-// src/theme/tokens.ts palette, since redesigning those is out of this
-// iteration's scope (same "one screen/moment at a time" precedent
+// src/design-system/): the completion screen (score card + Play Again/Home)
+// and, as of the premium-polish pass's error-state consistency fix, the
+// error state too, are built on the new design-system foundation — the
+// loading/empty states above still intentionally use the OLD
+// src/theme/tokens.ts palette, since redesigning those is out of scope for
+// a single-purpose iteration (same "one screen/moment at a time" precedent
 // QuestionRenderer's own file-header comment set). Both `colors`/`spacing`
 // imports (old theme + new design-system) therefore coexist in this file on
 // purpose, aliased as `dsColors`/`dsSpacing` to keep every existing
-// loading/error-state usage of the old, unprefixed `colors`/`spacing`
+// loading/empty-state usage of the old, unprefixed `colors`/`spacing`
 // unambiguous and untouched.
 const quizPalette = getActivityPalette('quiz');
 
@@ -177,18 +178,29 @@ export function QuizScreen({
   };
 
   if (error) {
+    // Restyled onto the shared design-system's error-card shape — the same
+    // RaisedCard + RaisedPrimaryButton pattern every other gallery/player's
+    // error state already converged on (VideoPlayerScreen, ColoringGallery,
+    // PuzzleGallery, VideoGallery), which this screen had been left behind
+    // on (see this file's own header comment on why the completion screen
+    // moved onto the new foundation first but the loading/error/empty
+    // states didn't). Deliberately scoped to just the error state here —
+    // the loading/empty branches below are untouched.
     return (
       <View testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
-        <Text style={styles.messageText}>{t('loadError')}</Text>
-        <Pressable
-          testID="quiz-retry"
-          onPress={() => setRetryToken((n) => n + 1)}
-          style={styles.retryButton}
-          accessibilityRole="button"
-          accessibilityLabel={t('retry')}
-        >
-          <Text style={styles.retryButtonText}>{t('retry')}</Text>
-        </Pressable>
+        <RaisedCard color={dsColors.surface} borderColor={quizPalette.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
+          <View style={styles.errorCardInner}>
+            <Text style={styles.errorTitle}>{t('loadError')}</Text>
+            <RaisedPrimaryButton
+              testID="quiz-retry"
+              label={t('retry')}
+              onPress={() => setRetryToken((n) => n + 1)}
+              color={quizPalette.accent}
+              textColor={quizPalette.onAccentText}
+              accessibilityLabel={t('retry')}
+            />
+          </View>
+        </RaisedCard>
       </View>
     );
   }
@@ -344,20 +356,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.md,
   },
-  retryButton: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    ...shadow,
-    elevation: 4,
+  errorCardOuter: {
+    width: '100%',
+    maxWidth: 420,
   },
-  retryButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.white,
+  errorCardInner: {
+    alignItems: 'center',
+    paddingVertical: dsSpacing.lg,
+    paddingHorizontal: dsSpacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: dsColors.ink,
+    textAlign: 'center',
+    marginBottom: dsSpacing.md,
   },
   // Wraps RaisedCard purely to carry the entrance opacity/scale transform —
   // RaisedCard's own static-panel path renders a plain (non-Animated) View,

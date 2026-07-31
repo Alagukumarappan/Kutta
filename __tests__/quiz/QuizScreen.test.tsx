@@ -216,6 +216,36 @@ describe('QuizScreen', () => {
     await findByText('2 + 2?');
   });
 
+  // Regression test for the premium-polish visual-consistency pass:
+  // QuizScreen's error state had been left behind on the old theme/tokens
+  // look (a plain Pressable+text button) after every other gallery/player's
+  // error state converged on RaisedCard+RaisedPrimaryButton — see this
+  // file's own header comment, which explicitly flagged this as an
+  // intentional-but-deferred gap.
+  it('gives the error state a real design-system RaisedPrimaryButton, not the old bare Pressable', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockRejectedValueOnce(new Error('SAF grant revoked'));
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    const retryButton = await findByTestId('quiz-retry');
+    // The old bare Pressable's style was a flat object (backgroundColor:
+    // colors.coral, borderColor, borderWidth: 2, ...radii.xl). Paper's
+    // Button (what RaisedPrimaryButton renders under the hood) instead
+    // always exposes its style as an array whose second entry is a plain
+    // `{ borderRadius }` — a reliable, non-brittle signal from outside that
+    // this button now goes through the shared design-system component
+    // instead of the old hand-rolled box.
+    expect(Array.isArray(retryButton.props.style)).toBe(true);
+    const { StyleSheet } = require('react-native');
+    const flattened = StyleSheet.flatten(retryButton.props.style);
+    expect(flattened.backgroundColor).toBeUndefined();
+    expect(flattened.borderWidth).toBeUndefined();
+  });
+
   describe('progress indicator wiring to real session state', () => {
     it('advances the progress label on Next but leaves it unchanged across a Try Again retry', async () => {
       (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
