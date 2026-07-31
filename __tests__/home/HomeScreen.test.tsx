@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { HomeScreen } from '../../src/home/HomeScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as profilePicture from '../../src/storage/profilePicture';
+import { getActivityPalette } from '../../src/design-system';
 
 jest.mock('../../src/storage/profilePicture');
 
@@ -123,6 +124,76 @@ describe('HomeScreen', () => {
       expect(onNavigate).toHaveBeenCalledTimes(2);
       expect(onNavigate).toHaveBeenNthCalledWith(1, 'coloring');
       expect(onNavigate).toHaveBeenNthCalledWith(2, 'quiz');
+    });
+  });
+
+  describe('redesigned layout (asymmetrical hero grid, design-system cards)', () => {
+    it('gives the Coloring card extra width as the "hero" tile, wider than the other three equal-width cards', async () => {
+      const { getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      // Width is set on the wrapper View one level above each RaisedCard's
+      // own testID (see HomeScreen.tsx's grid: the RaisedCard fills a sized
+      // wrapper via flex:1) — a static style check, not an animation replay,
+      // matching this file's existing convention of reading rendered style
+      // rather than driving/asserting on Animated values directly.
+      const heroWidth = getByTestId('home-card-coloring').parent?.props.style.width;
+      const quizWidth = getByTestId('home-card-quiz').parent?.props.style.width;
+      const puzzleWidth = getByTestId('home-card-puzzle').parent?.props.style.width;
+      const videoWidth = getByTestId('home-card-video').parent?.props.style.width;
+
+      expect(heroWidth).toBeGreaterThan(quizWidth);
+      expect(quizWidth).toBeCloseTo(puzzleWidth, 5);
+      expect(quizWidth).toBeCloseTo(videoWidth, 5);
+    });
+
+    it('shows the Coloring hero card with its extra tagline copy, and the other cards without one', async () => {
+      const { getByText, queryByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      expect(getByText("Let's create!")).toBeTruthy();
+      expect(queryByText('Test your smarts')).toBeNull();
+      expect(queryByText('Piece it together')).toBeNull();
+      expect(queryByText('Watch & learn')).toBeNull();
+    });
+
+    it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video each distinct)', async () => {
+      const { toJSON } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      // RaisedCard renders its `color` prop as the accent backgroundColor
+      // somewhere in its inner tree — rather than depend on RaisedCard's own
+      // internal DOM shape, just confirm each activity's expected accent hex
+      // (from design-system's getActivityPalette, per REDESIGN_PROGRESS.md's
+      // Coloring->bubblegum/Quiz->violet/Puzzle->jade/Video->marigold mapping)
+      // appears in the rendered tree — i.e. this is a real four-color grid,
+      // not four identical rectangles.
+      const rendered = JSON.stringify(toJSON());
+      expect(rendered).toContain(getActivityPalette('coloring').accent);
+      expect(rendered).toContain(getActivityPalette('quiz').accent);
+      expect(rendered).toContain(getActivityPalette('puzzle').accent);
+      expect(rendered).toContain(getActivityPalette('video').accent);
+    });
+
+    it('gives the settings icon button a touch target that meets the design system\'s 48dp minimum', async () => {
+      const { getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const hitArea = getByTestId('home-settings-icon').props.style;
+      expect(hitArea.width).toBeGreaterThanOrEqual(48);
+      expect(hitArea.height).toBeGreaterThanOrEqual(48);
     });
   });
 

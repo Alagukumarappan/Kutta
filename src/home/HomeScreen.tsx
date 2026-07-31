@@ -1,19 +1,31 @@
 import React from 'react';
-import { View, Text, Pressable, Image, StyleSheet, useWindowDimensions, Animated } from 'react-native';
+import { View, Text, Image, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { resolveProfilePictureUri } from '../storage/profilePicture';
-import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
+import {
+  colors,
+  radii,
+  spacing,
+  typography,
+  elevation,
+  touchTarget,
+  clamp,
+  getActivityPalette,
+  type ActivityId,
+  RaisedCard,
+  AnimatedPressable,
+} from '../design-system';
 
 // Fixed size of the optional avatar (image or fallback initial) shown next
 // to the greeting. Deliberately small: greetingBadge's own padding
-// (spacing.xs = 4 per side) plus this size must stay comfortably under
-// SETTINGS_BUTTON_SIZE (44) below, since headerReserve derives the whole
-// header row's reserved height from that one constant — a taller badge
-// would silently make headerReserve wrong and risk the card grid
-// overflowing a short screen (e.g. Galaxy S22 landscape).
-const AVATAR_SIZE = 28;
+// (spacing.xs per side) plus this size must stay comfortably under
+// SETTINGS_BUTTON_SIZE below, since headerReserve derives the whole header
+// row's reserved height from that one constant — a taller badge would
+// silently make headerReserve wrong and risk the card grid overflowing a
+// short screen (e.g. Galaxy S22 landscape).
+const AVATAR_SIZE = 36;
 
 export type HomeDestination = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'settings';
 
@@ -21,44 +33,32 @@ type CardSpec = {
   testID: string;
   destination: HomeDestination;
   labelKey: 'homeColoring' | 'homeQuiz' | 'homePuzzle' | 'homeVideo';
+  taglineKey: 'homeColoringTagline' | 'homeQuizTagline' | 'homePuzzleTagline' | 'homeVideoTagline';
   emoji: string;
-  bg: string;
-  border: string;
+  activity: ActivityId;
+  // The one card given extra width in the grid below — see the `grid`
+  // layout comment for why an asymmetrical "hero + three" composition was
+  // chosen over four identical rectangles.
+  hero?: boolean;
 };
 
 // Matches settingsButton's width/height below — pulled out as a constant so
 // the headerReserve math in HomeScreen can derive from it instead of
-// duplicating (or drifting from) the literal 44 in the stylesheet.
-const SETTINGS_BUTTON_SIZE = 44;
+// duplicating (or drifting from) the literal in the stylesheet. Uses the new
+// design system's `touchTarget.iconButton` (48dp, Material's minimum) rather
+// than the old theme's 44px.
+const SETTINGS_BUTTON_SIZE = touchTarget.iconButton;
 
+// Per-activity accent comes from the shared design system's
+// `getActivityPalette()` (Coloring -> bubblegum, Quiz -> violet, Puzzle ->
+// jade, Video -> marigold) rather than hand-picked colors, so Home stays in
+// sync with any future screen that also colors itself by activity.
 const CARDS: CardSpec[] = [
-  { testID: 'home-card-coloring', destination: 'coloring', labelKey: 'homeColoring', emoji: '🎨', bg: colors.pink, border: colors.pinkDark },
-  { testID: 'home-card-quiz', destination: 'quiz', labelKey: 'homeQuiz', emoji: '🧠', bg: colors.periwinkle, border: colors.periwinkleDark },
-  { testID: 'home-card-puzzle', destination: 'puzzle', labelKey: 'homePuzzle', emoji: '🧩', bg: colors.mint, border: colors.mintDark },
-  { testID: 'home-card-video', destination: 'video', labelKey: 'homeVideo', emoji: '🎬', bg: colors.orange, border: colors.orangeDark },
+  { testID: 'home-card-coloring', destination: 'coloring', labelKey: 'homeColoring', taglineKey: 'homeColoringTagline', emoji: '🎨', activity: 'coloring', hero: true },
+  { testID: 'home-card-quiz', destination: 'quiz', labelKey: 'homeQuiz', taglineKey: 'homeQuizTagline', emoji: '🧠', activity: 'quiz' },
+  { testID: 'home-card-puzzle', destination: 'puzzle', labelKey: 'homePuzzle', taglineKey: 'homePuzzleTagline', emoji: '🧩', activity: 'puzzle' },
+  { testID: 'home-card-video', destination: 'video', labelKey: 'homeVideo', taglineKey: 'homeVideoTagline', emoji: '🎬', activity: 'video' },
 ];
-
-// Fakes a soft diagonal "light source" gradient on top of a flat card color,
-// using two overlapping semi-transparent Views (lighter wash over the top
-// half, darker wash under the bottom half) instead of a real gradient
-// library. `expo-linear-gradient` isn't installed, and this iteration is
-// scoped to NOT add any new dependency; wiring Skia's own <LinearGradient>
-// for what's ultimately a still, four-corner-static color wash on a plain
-// rectangle would mean adding a Skia <Canvas> (and the
-// jest.mock('@shopify/react-native-skia') boilerplate ColoringScreen.test.tsx
-// already needs, see that file) to a screen that has none of that today —
-// a lot of new surface area for a purely decorative background. Pure,
-// static Views also cost nothing on every animation frame below (no re-run
-// per tilt tick), unlike a Canvas repaint would.
-function CardBackground({ color }: { color: string }) {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: color }]} />
-      <View style={styles.cardBackgroundHighlight} />
-      <View style={styles.cardBackgroundShadow} />
-    </View>
-  );
-}
 
 export function HomeScreen({
   childName,
@@ -102,90 +102,6 @@ export function HomeScreen({
 
   const showAvatarImage = resolvedPictureUri !== null && !avatarLoadFailed;
 
-  // One persistent Animated.Value per card, keyed by testID (not array
-  // index) so it stays correctly matched to its card even if CARDS is ever
-  // reordered. Purely a decorative press-feedback transform — created once
-  // via useRef so identity is stable across re-renders, matching the
-  // `scaleAnim`/`opacityAnim` convention QuestionRenderer's celebration
-  // animation already established (iteration 17) rather than re-creating a
-  // fresh Animated.Value on every render.
-  //
-  // This single 0.95 (pressed) -> 1 (rest) value now drives a full 3D
-  // "tilt and lift" (perspective + rotateX + rotateY + a small lift, plus
-  // the original scale squish), not just scale — see cardTiltStyle below,
-  // which derives all of those via .interpolate() off this one value rather
-  // than juggling four separate Animated.Values per card. Deliberately kept
-  // as RN's built-in `Animated` API (bundled with react-native, already
-  // used and already covered by this file's own tests) rather than
-  // react-native-reanimated: reanimated 4 / react-native-worklets 0.10 (the
-  // versions pinned in package.json) need a `react-native-worklets/plugin`
-  // Babel plugin AND jest-side native-module mocking wired up, and neither
-  // exists anywhere in this codebase yet (confirmed by grepping
-  // babel.config.js and every existing screen/test) — see the identical,
-  // pre-existing rationale in QuestionRenderer.tsx's celebration animation
-  // comment. A hands-on spike this iteration confirmed that wiring: even
-  // after adding the Babel plugin and `react-native-reanimated/mock`'s
-  // moduleNameMapper, importing 'react-native-reanimated' under Jest still
-  // throws (`Cannot read properties of undefined (reading 'loadUnpackers')`)
-  // — a real, unresolved incompatibility, not just missing config. Forcing
-  // it through was judged riskier than this focused iteration's scope
-  // warrants, since it could destabilize the whole suite; RN's Animated API
-  // fully supports perspective/rotateX/rotateY/scale together under
-  // useNativeDriver, so it delivers the same tilt effect with zero new risk.
-  const cardScales = React.useRef(
-    Object.fromEntries(CARDS.map((card) => [card.testID, new Animated.Value(1)])) as Record<string, Animated.Value>
-  ).current;
-
-  // Any in-flight per-card animation, so it can be stopped on unmount below
-  // instead of left running. This can't cause a setState-after-unmount
-  // warning either way (it's a bare Animated.Value, not React state), but an
-  // in-flight spring left to finish on its own keeps its native-driver frame
-  // callbacks alive for a little while after the screen is gone — stopping
-  // it explicitly is the cleaner, fully-self-contained behavior, and (in
-  // Jest specifically) avoids one running test's still-settling spring
-  // spilling stray native-driver ticks into whatever the *next* test renders.
-  const activeAnimationsRef = React.useRef<Record<string, Animated.CompositeAnimation>>({});
-
-  function animateCard(testID: string, toValue: number) {
-    // Brief, native-driven spring — only ever changes `transform`, so it
-    // never touches layout size (no reflow, no S22 screen-fit risk). Kept
-    // gentle (low bounciness, no overshoot past the target) since this
-    // plays on every single tap for a 2-8 year old audience: per this app's
-    // motion-safety convention, decorative motion must stay brief and calm,
-    // never bouncy/attention-grabbing enough to distract from the actual
-    // navigation the tap just triggered.
-    const animation = Animated.spring(cardScales[testID], {
-      toValue,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 0,
-    });
-    activeAnimationsRef.current[testID] = animation;
-    animation.start();
-  }
-
-  // Derives the full tilt-and-lift transform for one card from its single
-  // driving Animated.Value (0.95 pressed -> 1 rest). `perspective` is a
-  // plain (non-animated) number — Animated's native driver only needs the
-  // *animated* entries in a transform array to be Animated nodes, a static
-  // sibling entry like this is fine and is exactly how RN's own "flip card"
-  // examples set perspective. Rotation stays a few degrees (per this
-  // iteration's "gentle, not extreme" instruction) and the lift is a 3px
-  // translateY, so the whole effect reads as a subtle dimensional press
-  // rather than a showy spin.
-  function cardTiltStyle(testID: string) {
-    const driver = cardScales[testID];
-    return {
-      transform: [
-        { perspective: 900 },
-        { rotateX: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['6deg', '0deg'] }) },
-        { rotateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['-4deg', '0deg'] }) },
-        { translateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: [3, 0] }) },
-        { scale: driver },
-      ],
-    };
-  }
-
   // Home has no navigation-driven unmount to rely on (unlike e.g. the quiz's
   // "Home" button, which permanently leaves its screen instance) — React
   // Navigation's native stack keeps HomeScreen mounted underneath whatever
@@ -201,6 +117,11 @@ export function HomeScreen({
   // window but far short of any real "browsed a gallery and came back"
   // return trip, so a later, genuine return visit to Home can still navigate
   // normally.
+  //
+  // The press-in/press-out tilt/lift/scale itself is no longer hand-rolled
+  // here — RaisedCard (via AnimatedPressable/useTiltPress) owns that
+  // animation and its own unmount cleanup now, so this component only needs
+  // to guard navigation, not animation state.
   const navLockRef = React.useRef<Record<string, boolean>>({});
   // Every re-arm timer this instance has scheduled, so it can be cancelled on
   // unmount below — without this, a timer from one rendered instance (e.g. a
@@ -213,7 +134,6 @@ export function HomeScreen({
   React.useEffect(() => {
     return () => {
       rearmTimeoutsRef.current.forEach(clearTimeout);
-      Object.values(activeAnimationsRef.current).forEach((animation) => animation.stop());
     };
   }, []);
 
@@ -228,17 +148,22 @@ export function HomeScreen({
   }
 
   // Landscape gives ample width and limited height, so the 4 cards sit in a
-  // single row instead of a 2x2 stack. Size them from the actual window
-  // rather than a fixed pixel size, and cap the height so the row never
-  // outgrows a short screen (leaving room for the header above it).
+  // single row instead of a 2x2 stack (unchanged from before). What changes
+  // is the row's composition: rather than four identical rectangles, the
+  // first (Coloring) card is given extra flex weight as a "hero" tile, with
+  // the remaining three sharing the rest — an asymmetrical grid that still
+  // fits the exact same height budget and screen-fit math as before (no
+  // extra chrome height added), just a different width split.
   const availableWidth = width - insets.left - insets.right;
   const gap = spacing.md;
-  const cardWidth = (availableWidth - spacing.md * 2 - gap * (CARDS.length - 1)) / CARDS.length;
   // Chrome above/below the card row: screen's top+bottom padding (spacing.md
   // each) plus the settings-icon row's fixed height (SETTINGS_BUTTON_SIZE)
   // plus its marginBottom (spacing.md) separating it from the card grid.
   const headerReserve = spacing.md * 3 + SETTINGS_BUTTON_SIZE + insets.top + insets.bottom;
   const cardHeight = clamp(height - headerReserve, 120, 220);
+  const HERO_WEIGHT = 1.35;
+  const totalWeight = CARDS.reduce((sum, card) => sum + (card.hero ? HERO_WEIGHT : 1), 0);
+  const usableWidth = availableWidth - gap * (CARDS.length - 1);
 
   return (
     <View
@@ -252,6 +177,14 @@ export function HomeScreen({
         },
       ]}
     >
+      {/* Purely decorative depth shapes behind everything — soft, static,
+          low-opacity tinted circles bleeding off the edges of the screen, so
+          the background reads as layered rather than a single flat color.
+          pointerEvents="none" so they can never intercept a child's tap. */}
+      <View style={styles.decorTopRight} pointerEvents="none" />
+      <View style={styles.decorBottomLeft} pointerEvents="none" />
+      <View style={styles.decorMid} pointerEvents="none" />
+
       <View style={styles.header}>
         <View style={styles.greetingBadge}>
           {/* Decorative-only per this feature's own guidance (see
@@ -280,50 +213,62 @@ export function HomeScreen({
               <Text style={styles.avatarPlaceholderText}>{childName.charAt(0).toUpperCase()}</Text>
             </View>
           )}
-          <Text style={styles.greetingText}>
-            Hi, <Text testID="home-child-name" style={styles.greetingName}>{childName}</Text>! 👋
-          </Text>
+          <View>
+            <Text style={styles.greetingHi}>{t('homeGreetingHi')}</Text>
+            <Text style={styles.greetingText}>
+              <Text testID="home-child-name" style={styles.greetingName}>{childName}</Text>! 👋
+            </Text>
+          </View>
         </View>
 
-        <Pressable
+        <AnimatedPressable
           testID="home-settings-icon"
           onPress={() => onNavigate('settings')}
-          style={styles.settingsButton}
+          tilt="compact"
+          style={styles.settingsHitArea}
+          innerStyle={styles.settingsButton}
           accessibilityRole="button"
           accessibilityLabel={t('settingsTitle')}
         >
           <Text style={styles.settingsIcon}>⚙️</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
 
       <View style={styles.grid}>
-        {CARDS.map((card) => (
-          <Pressable
-            key={card.testID}
-            testID={card.testID}
-            onPress={() => handleCardPress(card)}
-            onPressIn={() => animateCard(card.testID, 0.95)}
-            onPressOut={() => animateCard(card.testID, 1)}
-            style={{ width: cardWidth, height: cardHeight }}
-          >
-            {/* This outer Animated.View ("card face") is what actually
-                tilts, and carries the border + drop shadow. It deliberately
-                does NOT set overflow:'hidden' itself — on iOS, overflow
-                hidden on the same view as a shadow clips the shadow away
-                along with everything else, so the rounded-corner *clipping*
-                for CardBackground below lives one level deeper instead
-                (cardClip), leaving this view free to cast its shadow. */}
-            <Animated.View style={[styles.cardFace, cardTiltStyle(card.testID), { borderColor: card.border }]}>
-              <View style={styles.cardClip}>
-                <CardBackground color={card.bg} />
-                <View style={styles.cardInner}>
-                  <Text style={styles.cardEmoji}>{card.emoji}</Text>
-                  <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+        {CARDS.map((card, index) => {
+          const palette = getActivityPalette(card.activity);
+          const weight = card.hero ? HERO_WEIGHT : 1;
+          const cardWidth = (usableWidth * weight) / totalWeight;
+          return (
+            <View
+              key={card.testID}
+              style={{
+                width: cardWidth,
+                height: cardHeight,
+                marginRight: index < CARDS.length - 1 ? gap : 0,
+              }}
+            >
+              <RaisedCard
+                testID={card.testID}
+                onPress={() => handleCardPress(card)}
+                color={palette.accent}
+                borderColor={palette.accentDark}
+                elevationLevel="level3"
+                tilt="regular"
+                accessibilityLabel={t(card.labelKey)}
+                style={styles.cardFill}
+              >
+                <View style={styles.cardContent}>
+                  <View style={[styles.emojiBadge, card.hero && styles.emojiBadgeHero]}>
+                    <Text style={[styles.cardEmoji, card.hero && styles.cardEmojiHero]}>{card.emoji}</Text>
+                  </View>
+                  <Text style={[styles.cardLabel, card.hero && styles.cardLabelHero]}>{t(card.labelKey)}</Text>
+                  {card.hero && <Text style={styles.cardTagline}>{t(card.taglineKey)}</Text>}
                 </View>
-              </View>
-            </Animated.View>
-          </Pressable>
-        ))}
+              </RaisedCard>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -332,36 +277,71 @@ export function HomeScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvas,
+    overflow: 'hidden',
     // Base padding; the actual per-side padding used at render time also
     // adds this screen's safe-area insets (see the inline style override in
     // the component) since this is the one screen with no native header.
   },
+  decorTopRight: {
+    position: 'absolute',
+    top: -60,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: colors.violetSoft,
+    opacity: 0.6,
+  },
+  decorBottomLeft: {
+    position: 'absolute',
+    bottom: -70,
+    left: -60,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: colors.marigoldSoft,
+    opacity: 0.5,
+  },
+  decorMid: {
+    position: 'absolute',
+    top: '30%',
+    left: '38%',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: colors.jadeSoft,
+    opacity: 0.35,
+  },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
   greetingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.sun,
-    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
-    ...shadow,
-    elevation: 2,
+    ...elevation.level2,
+  },
+  greetingHi: {
+    fontSize: typography.caption.fontSize,
+    fontWeight: typography.caption.fontWeight,
+    color: colors.inkMuted,
   },
   greetingText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
     color: colors.ink,
   },
   greetingName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.ink,
+    fontSize: typography.body.fontSize,
+    fontWeight: '800',
+    color: colors.bubblegumDark,
   },
   // Shared by both the real avatar <Image> and its fallback <View> so the
   // badge's height never changes between the two states (kept well under
@@ -370,91 +350,88 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
-    marginRight: spacing.xs,
+    marginRight: spacing.sm,
   },
   avatarPlaceholder: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.violetSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlaceholderText: {
-    fontSize: 13,
+    fontSize: typography.body.fontSize,
     fontWeight: 'bold',
-    color: colors.ink,
+    color: colors.violetDark,
+  },
+  // AnimatedPressable's outer Pressable (layout/hit-area only, matching the
+  // "outer never animates" convention every design-system pressable shares)
+  // — sized to the full SETTINGS_BUTTON_SIZE so the tappable area itself
+  // never shrinks or shifts as the inner face tilts.
+  settingsHitArea: {
+    width: SETTINGS_BUTTON_SIZE,
+    height: SETTINGS_BUTTON_SIZE,
   },
   settingsButton: {
     width: SETTINGS_BUTTON_SIZE,
     height: SETTINGS_BUTTON_SIZE,
-    borderRadius: 22,
-    backgroundColor: colors.white,
+    borderRadius: SETTINGS_BUTTON_SIZE / 2,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow,
-    elevation: 3,
+    ...elevation.level3,
   },
   settingsIcon: {
     fontSize: 22,
   },
   grid: {
+    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  // The tilting "card face": border, shadow, and the transform from
-  // cardTiltStyle all live here, one level below the Pressable itself, so
-  // the press-in/press-out tilt/lift/scale transform never changes the
-  // Pressable's own layout box/hit area — purely a visual effect on what's
-  // inside it, same guarantee the old scale-only version already had.
-  cardFace: {
-    flex: 1,
-    borderRadius: radii.xl,
-    borderWidth: 4,
-    ...shadow,
-    elevation: 4,
-  },
-  // A second, inner box purely for overflow:'hidden' clipping (so
-  // CardBackground's layers respect the rounded corners) — kept off
-  // cardFace above because overflow:'hidden' on the same view as a shadow
-  // clips iOS's shadow rendering away too.
-  cardClip: {
-    flex: 1,
-    borderRadius: radii.xl,
-    overflow: 'hidden',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.md,
   },
-  cardInner: {
+  cardFill: {
+    flex: 1,
+  },
+  cardContent: {
     flex: 1,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: spacing.md,
   },
-  cardBackgroundHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-    backgroundColor: colors.white,
-    opacity: 0.16,
-  },
-  cardBackgroundShadow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '45%',
-    backgroundColor: colors.ink,
-    opacity: 0.08,
-  },
-  cardEmoji: {
-    fontSize: 52,
+  emojiBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.sm,
   },
+  emojiBadgeHero: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+  },
+  cardEmoji: {
+    fontSize: 36,
+  },
+  cardEmojiHero: {
+    fontSize: 44,
+  },
   cardLabel: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: colors.ink,
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: colors.white,
+    textAlign: 'center',
+  },
+  cardLabelHero: {
+    fontSize: typography.h2.fontSize,
+    fontWeight: typography.h2.fontWeight,
+  },
+  cardTagline: {
+    marginTop: spacing.xxs,
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
+    color: 'rgba(255,255,255,0.85)',
     textAlign: 'center',
   },
 });
