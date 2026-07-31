@@ -107,6 +107,32 @@ export function QuestionRenderer({
   // src/i18n/strings.ts for the actual wording in both languages.
   const incorrectTextKey = typeof childAge === 'number' && childAge <= 4 ? 'quizIncorrectYoung' : 'quizIncorrectOlder';
 
+  // Deliberate, developer-requested behavior change (supersedes the earlier
+  // "never leak the answer through the wording" design): on a WRONG answer,
+  // the feedback overlay now also names/shows the correct option itself,
+  // e.g. "Nice try! Take another look. The correct answer is: 4" —
+  // alongside the encouraging line above, not instead of it. This is a
+  // natural extension of behavior the grid already has (the ✓/✕ marks in
+  // renderOption already visually reveal the correct option), not a new
+  // leak.
+  //
+  // Looked up via correctOptionId (never selectedOptionId) so this always
+  // names/shows the RIGHT option, regardless of which wrong option the
+  // child picked. Text-and/or-image aware, matching how option cards
+  // elsewhere in this file already render combined content: text-only
+  // options show just the label, image-only options show just a small
+  // picture (reusing ImageWithFallback for the same broken-image handling
+  // the answer grid already gets), and options with both show both.
+  // loadQuestions' own validation (isValidOption) already guarantees every
+  // loaded option has at least one of text/image, but correctAnswerImage
+  // and correctAnswerText both default to null regardless, so even a
+  // hand-built Question missing both (e.g. in a test) can't crash or print
+  // "undefined" — the reveal simply renders nothing extra in that case.
+  const correctOption = question.options.find((option) => option.id === question.correctOptionId);
+  const correctAnswerText = !isCorrect && correctOption?.text ? correctOption.text[language] : null;
+  const correctAnswerImage = !isCorrect && correctOption?.image ? correctOption.image : null;
+  const showCorrectAnswerReveal = correctAnswerText !== null || correctAnswerImage !== null;
+
   // Brief, non-blocking "correct answer" celebration: a pop-in/fade-out
   // bubble that plays alongside (never in front of, and never gating) the
   // existing feedback banner + Next button below. Built with RN's built-in
@@ -657,6 +683,39 @@ export function QuestionRenderer({
                     </Text>
                   </View>
 
+                  {showCorrectAnswerReveal && (
+                    // Second, separate block — appended below the
+                    // encouraging message above, never merged into that
+                    // string itself, so quizIncorrectYoung/quizIncorrectOlder's
+                    // own wording (and the "no leakage" test guarding it)
+                    // stays exactly as before. Text-and/or-image aware: the
+                    // label+text line only renders when there's text, the
+                    // small image only renders when there's an image, and
+                    // with both present they stack (text above image) same
+                    // as this file's own question/option cards already do.
+                    <View testID="quiz-correct-answer-reveal" style={styles.correctAnswerReveal}>
+                      {correctAnswerText && (
+                        <Text
+                          testID="quiz-correct-answer-text"
+                          style={styles.feedbackCorrectAnswerText}
+                          numberOfLines={2}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.75}
+                        >
+                          {`${t('quizCorrectAnswerLabel', language)} ${correctAnswerText}`}
+                        </Text>
+                      )}
+                      {correctAnswerImage && (
+                        <ImageWithFallback
+                          uri={correctAnswerImage}
+                          testID="quiz-correct-answer-image"
+                          style={styles.correctAnswerImage}
+                          fallbackIconSize={22}
+                        />
+                      )}
+                    </View>
+                  )}
+
                   {/* Retry + Next together, whether correct or wrong: Retry
                       (calls onRetry — clears the selection only, never
                       scores, see the onRetry prop doc above) lets the child
@@ -961,6 +1020,32 @@ const styles = StyleSheet.create({
   },
   feedbackIncorrectText: {
     color: colors.coralDark,
+  },
+  // Wraps the whole correct-answer reveal (wrong-answer path only) —
+  // carries the marginBottom before Retry/Next so it's present whether this
+  // renders text, an image, or both (rather than living on the text style
+  // alone, which would vanish for an image-only correct option).
+  correctAnswerReveal: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  // The correct-answer reveal's text line — deliberately plainer/smaller
+  // than feedbackText above (no bold accent color) so the encouraging
+  // message stays the visual focus and this reads as supporting
+  // information underneath it, not a second competing headline.
+  feedbackCorrectAnswerText: {
+    flexShrink: 1,
+    fontSize: 16,
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  // A small preview, not a full answer-grid-sized image — this is
+  // supporting confirmation, not a second answer option to consider.
+  correctAnswerImage: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.md,
+    marginTop: spacing.xs,
   },
   feedbackButtonGroup: {
     flexDirection: 'row',

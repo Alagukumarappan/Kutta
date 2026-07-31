@@ -57,6 +57,14 @@ export const UI_STRINGS = {
   // language, not a literal translation of the other.
   quizIncorrectYoung: { en: "Good try! Let's try again.", de: "Gut versucht! Versuchen wir's noch mal." },
   quizIncorrectOlder: { en: 'Nice try! Take another look.', de: 'Netter Versuch! Schau noch mal genau hin.' },
+  // Deliberate, developer-requested behavior change: on a wrong answer, this
+  // now labels a second line in the feedback card that names the correct
+  // option's own text (see QuestionRenderer's correctAnswerText), e.g. "The
+  // correct answer is: 4" — shown alongside, never instead of, the
+  // encouraging quizIncorrectYoung/Older line above it. Only rendered when
+  // the correct option actually has `.text` (image-only options render
+  // nothing extra), so this key is never shown standing alone.
+  quizCorrectAnswerLabel: { en: 'The correct answer is:', de: 'Die richtige Antwort ist:' },
   // Shown in a brief, auto-fading celebration pop (see QuestionRenderer)
   // alongside quizCorrect — kept intentionally short (a few characters) so
   // it can never cause the child-facing quiz screen to need scrolling.

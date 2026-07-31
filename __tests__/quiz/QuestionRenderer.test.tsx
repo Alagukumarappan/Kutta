@@ -175,7 +175,20 @@ describe('QuestionRenderer', () => {
       expect(getByText('Netter Versuch! Schau noch mal genau hin.')).toBeTruthy();
     });
 
-    it('never reveals the correct answer through the wrong-answer wording itself (no answer text leakage)', async () => {
+    // RENAMED from "never reveals the correct answer through the
+    // wrong-answer wording itself (no answer text leakage)". That title
+    // encoded an OLD design decision (the encouraging line must never
+    // contain the answer, full stop) which has since been deliberately
+    // SUPERSEDED by a developer-requested product change: the feedback
+    // overlay now DOES reveal the correct answer's text on a wrong pick —
+    // see the "correct-answer reveal" describe block below. This test still
+    // has a real, narrower job: the encouraging phrase itself
+    // (quizIncorrectYoung/Older) must stay a fixed, generic string that
+    // never has the answer baked INTO it — the reveal always lives in its
+    // own separate line/Text node instead, so this wording key keeps
+    // working for questions with no revealable text (e.g. image-only
+    // correct options) without ever needing per-question interpolation.
+    it('keeps the encouraging wrong-answer phrase itself free of the answer text (the reveal lives in its own separate line, not baked into this wording)', async () => {
       const { getByText } = await render(
         <QuestionRenderer
           question={imageQuestion}
@@ -188,11 +201,150 @@ describe('QuestionRenderer', () => {
       );
 
       // The correct option's own text ("4") must not appear inside the
-      // feedback wording — only as the pre-existing on-option checkmark,
-      // which is a separate, already-established piece of UI (see the
-      // "marks the correct option" test above) that this iteration does not
-      // change.
+      // encouraging feedback wording itself — it's shown separately (see
+      // "correct-answer reveal" below), never spliced into this string.
       expect(getByText("Good try! Let's try again.").props.children).not.toContain('4');
+    });
+  });
+
+  describe('correct-answer reveal (wrong-answer path)', () => {
+    // Deliberate, developer-requested behavior change: the feedback overlay
+    // now also names the correct option's own text on a wrong pick,
+    // alongside (never replacing) the age-tiered encouraging line above.
+    it('shows "The correct answer is: <text>" using the CORRECT option\'s text, not the selected wrong option\'s', async () => {
+      const { getByText, queryByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // imageQuestion's correctOptionId is 'b' (text "4"); selectedOptionId
+      // here is the wrong option 'a' (text "3") — the reveal must name the
+      // correct one ("4"), never the one the child actually picked.
+      expect(getByText('The correct answer is: 4')).toBeTruthy();
+      expect(queryByText('The correct answer is: 3')).toBeNull();
+    });
+
+    it('shows the German label + answer text when language is de', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="de"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(getByText('Die richtige Antwort ist: 4')).toBeTruthy();
+    });
+
+    it('shows the encouraging line AND the correct-answer reveal together, not one instead of the other', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          childAge={3}
+        />
+      );
+
+      expect(getByText("Good try! Let's try again.")).toBeTruthy();
+      expect(getByText('The correct answer is: 4')).toBeTruthy();
+    });
+
+    it('shows a small image (not a broken/"undefined" text line) when the correct option has an image but no text', async () => {
+      const imageOnlyCorrectQuestion: Question = {
+        id: 'q3',
+        category: 'image',
+        minAge: 2,
+        maxAge: 8,
+        question: { image: 'content://tree/quiz/images/missing.png' },
+        options: [
+          { id: 'a', image: 'content://tree/quiz/images/apple.png' },
+          { id: 'b', text: { en: 'Wrong text', de: 'Falscher Text' } },
+          { id: 'c', text: { en: 'Also wrong', de: 'Auch falsch' } },
+          { id: 'd', text: { en: 'Still wrong', de: 'Immer noch falsch' } },
+        ],
+        correctOptionId: 'a',
+      };
+
+      const { getByText, getByTestId, queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageOnlyCorrectQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // The encouraging line still renders on its own, plus a small image of
+      // the correct option — but no "The correct answer is:" text line,
+      // since there's no text to build one from (no crash, no "undefined").
+      expect(getByText('Nice try! Take another look.')).toBeTruthy();
+      expect(getByTestId('quiz-correct-answer-image')).toBeTruthy();
+      expect(queryByTestId('quiz-correct-answer-text')).toBeNull();
+    });
+
+    it('shows both the text label and a small image when the correct option has both', async () => {
+      const { getByText, getByTestId } = await render(
+        <QuestionRenderer
+          question={combinedQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // combinedQuestion's correctOptionId is 'a' (text "Apple", plus an
+      // image) — both should render together, same as this file's own
+      // question/option cards already do for combined content.
+      expect(getByText('The correct answer is: Apple')).toBeTruthy();
+      expect(getByTestId('quiz-correct-answer-image')).toBeTruthy();
+    });
+
+    it('renders nothing extra, and does not crash, for the (validation-guaranteed-unreachable) case of a correct option with neither text nor image', async () => {
+      // src/quiz/loadQuestions.ts's isValidOption already rejects any real
+      // loaded option missing both text and image, so this shape can't
+      // occur via normal content loading — this test exists purely to pin
+      // down that a hand-built Question in this shape still can't crash or
+      // render a broken reveal, defensively, since QuestionRenderer itself
+      // has no such guarantee at the type level.
+      const neitherCorrectQuestion: Question = {
+        id: 'q4',
+        category: 'text',
+        minAge: 2,
+        maxAge: 8,
+        question: { text: { en: 'Pick one', de: 'Wähle eins' } },
+        options: [
+          { id: 'a' } as Question['options'][number],
+          { id: 'b', text: { en: 'Wrong', de: 'Falsch' } },
+          { id: 'c', text: { en: 'Also wrong', de: 'Auch falsch' } },
+          { id: 'd', text: { en: 'Still wrong', de: 'Immer noch falsch' } },
+        ],
+        correctOptionId: 'a',
+      };
+
+      const { getByText, queryByTestId } = await render(
+        <QuestionRenderer
+          question={neitherCorrectQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(getByText('Nice try! Take another look.')).toBeTruthy();
+      expect(queryByTestId('quiz-correct-answer-reveal')).toBeNull();
     });
   });
 
