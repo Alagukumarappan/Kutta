@@ -1,8 +1,17 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 16
-- Latest completed improvements (iteration 16, two commits): a direct
+- Phase: 3 (delight/polish), Iteration: 17
+- Latest completed improvement (iteration 17, one commit): a brief,
+  non-blocking animated correct-answer celebration in the quiz flow — see
+  Completed entry below for full detail.
+  - Baseline before this iteration: tsc clean, 25/25 suites, 178/178 tests.
+  - After this iteration: tsc clean, 25/25 suites, **186/186 tests** (+8
+    new tests, all in `__tests__/quiz/QuestionRenderer.test.tsx`, no
+    existing test modified/removed/skipped).
+  - Commit: `5cdcd6e` — `loop: add a brief animated correct-answer
+    celebration to the quiz`.
+- Previous iteration (16, two commits): a direct
   `palette.ts` smoke test (this iteration's primary task, `Next` item 1 from
   iteration 15) plus a touch-target-sizing fix for `ColoringScreen`'s
   palette swatches (secondary, Phase 2 fast-follow).
@@ -1014,6 +1023,86 @@
       method, data-shape decision, i18n choices, TDD trace, and code-review
       outcome — not duplicated here to avoid drift.
     - Commit: `136d42f`.
+19. **loop: add a brief animated correct-answer celebration to the quiz**
+    (iteration 17, Phase 3 item 1, `Next` item from iteration 16)
+    - Files: `src/quiz/QuestionRenderer.tsx` (production), `src/i18n/strings.ts`
+      (production, 1 new key x 2 languages), `__tests__/quiz/QuestionRenderer.test.tsx`
+      (8 new tests, no existing test modified)
+    - What it does: when the child's selected answer is correct, a small
+      rounded bubble (🎉 + a new short localized message,
+      `t('quizCelebration', language)` → "Yay! ⭐" / "Juhu! ⭐") pops in with
+      a scale+opacity spring/timing sequence (~200ms in), holds briefly
+      (900ms), then fades out (300ms) — ~1.4s total, non-looping,
+      non-flashing, and auto-resolves without any user action needed.
+    - Built entirely with RN's built-in `Animated` API (`useRef(new
+      Animated.Value(...))` + `Animated.sequence`/`parallel`/`spring`/`timing`/
+      `delay`), per iteration 16's `Next` plan. **Technical decision**:
+      `react-native-reanimated` IS present in `package.json`, but it has no
+      babel plugin wired into `babel.config.js` and is used nowhere in the
+      app today — wiring it up would be a build-config change, judged
+      riskier than warranted for an unsupervised overnight iteration with no
+      device/emulator to verify a native rebuild against. RN's `Animated` is
+      bundled with `react-native` itself, so this is "no new dependency"
+      either way.
+    - Layout/screen-fit: the celebration bubble is `position: 'absolute'`
+      (pinned to the top of the column, over the question card — never over
+      the feedback row/Next button), so it sits outside this screen's
+      carefully-tuned proportional flexbox layout entirely and cannot force
+      the existing ScrollView safety net to engage on a small device.
+    - Safety/correctness:
+      - Cleanup: the effect's `return () => animation.stop()` cancels the
+        in-flight animation on unmount, on question change, or when
+        `isCorrect` flips back to false — no leaked timers/handles. An
+        `isMountedRef` additionally guards the `.start()` completion
+        callback's `setShowCelebration(false)` against firing after unmount
+        (defense in depth; a code-review subagent noted `.stop()` already
+        makes this technically redundant since it fires the callback with
+        `finished:false`, but kept it as harmless, consistent with this
+        app's existing `cancelled`-flag effect-cleanup idiom).
+      - Double-fire guard: the effect is keyed on `[isCorrect, question.id,
+        scaleAnim, opacityAnim]` — re-renders with the same correct answer
+        cannot restart it. This is on top of (not a replacement for) the
+        pre-existing `!hasAnswered` guard in `renderOption`'s `onPress`,
+        which already prevents `onSelect`/scoring from firing more than
+        once per question under rapid/repeated tapping. `question.id` was
+        added to the dependency array (beyond just `isCorrect`) per
+        code-review feedback, as defense-in-depth against `QuizScreen`'s
+        reset-`selectedOptionId`-to-`null`-before-advancing contract ever
+        changing in a future edit.
+      - Next button: never gated, delayed, disabled, or visually covered by
+        the celebration (`pointerEvents="none"` on the overlay, plus the
+        positioning noted above) — verified by a dedicated test that taps
+        "Next" while the celebration is showing and confirms `onNext` fires
+        immediately. No new `setTimeout`-driven auto-advance was introduced.
+    - Accessibility decision: the celebration bubble is marked
+      `accessibilityElementsHidden` + `importantForAccessibility="no-hide-descendants"`
+      (purely decorative, hidden from screen readers) because the
+      pre-existing `feedbackText` ("Correct!"/`quizCorrect`) already
+      announces the result — this avoids a redundant/competing
+      announcement. A code-review subagent confirmed this is a reasonable
+      call, not a gap.
+    - i18n: `quizCelebration` added to `UI_STRINGS` for both `en`/`de` in
+      the same commit; automatically validated by the existing generic
+      completeness test in `__tests__/i18n/strings.test.ts` (asserts every
+      key has a non-empty value in both languages) — no dedicated test
+      needed beyond that.
+    - TDD: 8 new tests written first against the (still static-only) 🎉
+      banner and confirmed failing for the right reason (`quiz-celebration`
+      testID did not exist yet), then implemented until green. One
+      RNTL-specific gotcha hit and resolved during this: because the
+      overlay is intentionally hidden from the accessibility tree, RNTL's
+      default `getByTestId`/`getByText`/`queryByTestId` queries (which skip
+      accessibility-hidden nodes) could not find it — fixed by passing
+      `{ includeHiddenElements: true }` in the tests that need to look
+      inside it, not by changing the accessibility props themselves.
+    - Code review: a code-review subagent reviewed the diff against all 8
+      focus areas from the iteration brief (cleanup, double-fire, Next-button
+      correctness, i18n completeness, motion-safety, screen-fit, hard
+      limits, accessibility) and returned "Approve with nits" — the one nit
+      (dependency-array robustness) was addressed (see above) before commit.
+    - tsc: clean. Tests: 25/25 suites, 186/186 tests (up from 178/178
+      baseline; +8 new, 0 modified/removed/skipped).
+    - Commit: `5cdcd6e`.
 
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
@@ -1045,11 +1134,47 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 17 priority: **begin Phase 3 item 1, a joyful/brief/cancellable
-correct-answer celebration in the quiz flow.** This was scoped but
-deliberately NOT started in iteration 16 (out of that iteration's normal
-scope alongside the two already-completed improvements) — the plan below is
-concrete and ready to execute:
+Iteration 18 priority: **visual polish follow-ups for iteration 17's quiz
+celebration, deferred deliberately to keep that diff focused on
+correctness/safety first (per the iteration brief's guidance to prioritize
+correctness over visual complexity):**
+- The current celebration is a single static 🎉 + short text bubble that
+  pops/fades. Possible small, still-Animated-API-only enhancements if this
+  is picked up: a couple of small animated "sparkle" glyphs (e.g. ✨) drifting
+  outward from the bubble on independent `Animated.Value`s, or a slight
+  rotation/wiggle on the emoji itself. Keep the same hard constraints:
+  bounded duration (~1-2s), no looping, `Animated` API only, cleaned up on
+  unmount, `pointerEvents="none"`, positioned outside the flex layout.
+- Consider whether the celebration bubble's position (currently pinned to
+  the top of the column, over the question card) is the best spot on a real
+  device — this was a "seems safe" choice made without visual verification;
+  see the Visual Review Required entry below for what to actually check on
+  a Galaxy S22.
+- Re-examine whether `QuestionRenderer.tsx`'s static feedbackEmoji at
+  `feedbackRow` (still unanimated, unchanged this iteration) should also
+  get a small pop-in treatment for visual consistency with the new overlay
+  bubble, once the overlay's real-device look is confirmed good — deferred
+  to avoid two rounds of animation-tuning in one iteration.
+- **Unchanged from iteration 10** (still open, still small/optional): the
+  `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
+  `HomeScreen.tsx` remain untyped against `RootStackParamList` (see
+  Completed #13 and Technical Decisions) — a custom-typed wrapper around
+  each render prop's `navigation` argument would close this; judged
+  low-value enough to keep deferring.
+- If none of the above are fruitful, continue the general Phase 2/3 sweep:
+  the touch-target/motion-safety/screen-fit scan pattern used in iterations
+  15-16 could be repeated against any newer screens, and the
+  `AgePicker.tsx` minor touch-target check noted in iteration 16 (still
+  "likely fine but unmeasured") remains open.
+
+<details><summary>Iteration 17's original plan (now implemented — kept for
+reference/audit trail, not actionable anymore)</summary>
+
+Iteration 17 priority (DONE, see Completed #19): **begin Phase 3 item 1, a
+joyful/brief/cancellable correct-answer celebration in the quiz flow.** This
+was scoped but deliberately NOT started in iteration 16 (out of that
+iteration's normal scope alongside the two already-completed improvements)
+— the plan below is concrete and ready to execute:
 - **Where to hook in**: `src/quiz/QuestionRenderer.tsx` is the file that
   renders the correct/incorrect feedback today (the static 🎉 emoji + `<Text>`
   banner using `t('quizCorrect')`, around lines 197-201, driven by the
@@ -1124,8 +1249,59 @@ concrete and ready to execute:
 (The pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning
 under BLOCKED below is a related but separate test-hygiene item, not itself
 part of the error-state audit.)
+</details>
 
 ## Visual Review Required
+- **Iteration 17's quiz correct-answer celebration** (new visible UI —
+  needs real-device confirmation, unlike most recent iterations' invisible
+  accessibility-only changes):
+  - **Screen**: `QuizScreen` while a question is showing, rendered via
+    `QuestionRenderer.tsx` (not the end-of-quiz score screen — unchanged).
+  - **Expected behavior**: when the child taps an answer option that is
+    correct, in addition to the pre-existing green highlight + checkmark on
+    the option and the "Correct!"/`quizCorrect` text + static 🎉 in the
+    feedback row below, a NEW small white rounded bubble (🎉 emoji + "Yay!
+    ⭐" in English / "Juhu! ⭐" in German) pops in near the TOP of the screen
+    (over the question card area), holds for under a second, then fades out
+    — total animation time ~1.4 seconds, no looping, nothing to tap to
+    dismiss it.
+  - **Interaction steps to trigger it**: open Quiz from the home screen →
+    answer any question by tapping the option that matches
+    `question.correctOptionId` → the bubble should appear immediately,
+    overlapping the top of the question card, then disappear on its own
+    within ~1.5s. Tapping a WRONG answer should show no bubble at all (only
+    the existing red highlight + "Try again!" text). Tapping "Next"
+    immediately (before the ~1.4s animation finishes) should work exactly
+    as before — the bubble should not need to finish or be dismissed first.
+  - **Potential visual concerns to check specifically**:
+    1. Does the bubble visually overlap/obscure the question image or
+       question text underneath it in a way that looks broken (it's
+       absolutely positioned over the question card, not beside it) —
+       this was a from-code judgment call, not verified on a real screen.
+    2. Does the bubble's small font size (16px text / 26px emoji) render
+       legibly and not clipped inside its own rounded border on a real
+       device's actual DPI?
+    3. Does the pop-in/fade-out feel "brief and joyful" rather than jarring
+       or distracting for a 2-3 year old — this is inherently subjective
+       and worth a literal "does this look nice" gut-check.
+    4. Confirm no visible flash/flicker (the fade-out is a plain opacity
+       timing, should be smooth, but real-device frame timing under
+       `useNativeDriver: true` should be watched once).
+  - **EN + DE check**: confirm both "Yay! ⭐" (English) and "Juhu! ⭐"
+    (German) render correctly (no missing-glyph boxes for the star emoji on
+    the target device/font) and fit inside the bubble without wrapping or
+    clipping (`numberOfLines={1}` is set, so an overly long font-scale
+    setting could in theory truncate — unlikely given how short both
+    strings are, but worth a glance).
+  - **Small-screen check**: on the Galaxy S22 in landscape (this app's only
+    supported orientation), confirm the bubble never gets clipped off the
+    top edge of the screen and never causes the screen to need scrolling —
+    it's `position: 'absolute'` and outside the flex layout specifically to
+    prevent this, but that reasoning has not been confirmed on a real
+    device/emulator (none was available in this environment).
+  - **Ages affected**: all ages 2-8 that use the Quiz feature (the
+    celebration has no age gating — it fires identically for every child
+    profile).
 - Iteration 16's two changes are both invisible on-screen: the
   `palette.test.ts` addition is test-only (no production code changed), and
   the `hitSlop` addition on `ColoringScreen`'s palette swatches only
