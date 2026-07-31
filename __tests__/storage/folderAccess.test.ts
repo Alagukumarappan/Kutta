@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { ensureContentStructure } from '../../src/storage/folderAccess';
+import { ensureContentStructure, leafNameOf } from '../../src/storage/folderAccess';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: {
@@ -131,5 +131,37 @@ describe('ensureContentStructure', () => {
       'questions.json',
       'application/json'
     );
+  });
+});
+
+// `leafNameOf` itself had no direct test before this — every existing test
+// above only exercises it indirectly, through `ensureContentStructure`, and
+// only ever with already-percent-encoded URIs that have no trailing slash.
+// These directly pin down the documented-but-previously-unverified edge
+// cases from the pure-logic module inventory.
+describe('leafNameOf', () => {
+  it('returns the final segment of an already-decoded (unencoded) URI', () => {
+    expect(leafNameOf('content://tree/primary:Root/pictures')).toBe('pictures');
+  });
+
+  it('decodes a partially-encoded URI (e.g. a folder name with a percent-encoded space)', () => {
+    expect(leafNameOf('content://tree/primary%3ARoot/My%20Folder')).toBe('My Folder');
+  });
+
+  it('returns the whole string when there is no slash at all', () => {
+    expect(leafNameOf('justaname')).toBe('justaname');
+  });
+
+  it('returns an empty string for a URI with a trailing slash (documents current behavior)', () => {
+    // decodeURIComponent('.../pictures/') keeps the trailing slash, so
+    // lastIndexOf('/') finds that trailing slash rather than the one before
+    // "pictures" — the "leaf name" after it is the empty string. Real SAF
+    // directory-listing results are not observed to include trailing
+    // slashes (confirmed against every mocked entry used elsewhere in this
+    // file and in loadQuestions.test.ts), so this does not currently cause
+    // an observed bug — but it is a real, previously-undocumented sharp
+    // edge in this exact function, worth pinning down explicitly rather
+    // than leaving as an unverified assumption.
+    expect(leafNameOf('content://tree/primary%3ARoot/pictures/')).toBe('');
   });
 });
