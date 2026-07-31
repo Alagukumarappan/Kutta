@@ -1,36 +1,57 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Animated, ScrollView, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React from 'react';
+import { View, Text, Image, Pressable, StyleSheet, ScrollView } from 'react-native';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t } from '../i18n/strings';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
-import { computeQuizLayout, OPTION_CARD_MARGIN, SCREEN_PADDING } from './layout';
 
-// This screen is shown with headerShown:true (see RootNavigator), so the
-// native-stack header already consumes the top safe-area inset before this
-// component's flex:1 container gets its share of the window — but
-// useWindowDimensions() below reports the FULL window height, header
-// included. computeQuizLayout nets that back out so the sizing math below is
-// computed against the space actually left for content, not the whole
-// screen. It only affects how big we *try* to make things — the ScrollView
-// wrapper is the real safety net if this estimate runs low.
+// This screen rebuilds the quiz UI as a single-question, STACKED layout
+// (progress row on top, question card, then a 2x2 answer grid below it,
+// then a feedback/Next footer) rather than the old side-by-side
+// question-left/options-right split.
 //
-// All the sizing arithmetic itself (header/padding reservations, the 2x2
-// option grid, and the question image) lives in ./layout.ts as a pure,
-// unit-tested function, since this math is fiddly enough that it has drifted
-// out of sync with the actual styles before.
+// Two prior rounds of bugs here came from hand-summing exact pixel budgets
+// (padding + border + font-size arithmetic that has to add up exactly
+// against the real rendered styles) in a separate ./layout.ts module. This
+// version deliberately has NO such module: every section below is sized with
+// flexbox ratios (flex: N on siblings inside a flex:1 column) so the
+// available height is divided proportionally by Yoga at render time, using
+// whatever space the device actually has, instead of a number this file
+// has to predict in advance. The progress row and the feedback/Next footer
+// are NOT given a flex share — they're auto-sized to their own content,
+// and the flexed question/grid sections simply receive whatever height is
+// left over, which Yoga computes correctly without this file doing the sum.
+//
+// The one place a component still needs *some* numeric sizing is the images
+// (RN's <Image> doesn't size itself from content) - those use
+// aspectRatio: 1 + resizeMode="contain" inside a flex-sized box instead of a
+// pixel value computed here, so they simply fill whatever square-ish space
+// their flex parent ends up with.
+//
+// The 2x2 answer grid is built from two EXPLICIT row <View>s (not
+// flexWrap:'wrap') for the same reason the Photo Puzzle screen was fixed the
+// same way: flexWrap decides where to break a row using float-precision
+// comparisons, and fractional dp values (routine on real devices) can cause
+// an early/late wrap. An explicit "exactly 2 per row" structure can't wrap
+// unpredictably because there is no wrapping decision to make.
 
-function ImageWithFallback({ uri, testID, size }: { uri: string; testID: string; size: number }) {
-  const [failed, setFailed] = useState(false);
+function ImageWithFallback({
+  uri,
+  testID,
+  style,
+  fallbackIconSize = 32,
+}: {
+  uri: string;
+  testID: string;
+  style: object;
+  fallbackIconSize?: number;
+}) {
+  const [failed, setFailed] = React.useState(false);
 
   if (failed) {
     return (
-      <View
-        testID={`${testID}-broken`}
-        style={[styles.imageFallback, { width: size, height: size }]}
-      >
-        <Text style={styles.imageFallbackIcon}>🖼️</Text>
+      <View testID={`${testID}-broken`} style={[styles.imageFallback, style]}>
+        <Text style={{ fontSize: fallbackIconSize }}>🖼️</Text>
       </View>
     );
   }
@@ -40,7 +61,7 @@ function ImageWithFallback({ uri, testID, size }: { uri: string; testID: string;
       source={{ uri }}
       testID={testID}
       onError={() => setFailed(true)}
-      style={{ width: size, height: size, borderRadius: radii.md }}
+      style={[styles.image, style]}
       resizeMode="contain"
     />
   );
@@ -69,153 +90,120 @@ export function QuestionRenderer({
   const hasAnswered = selectedOptionId !== null;
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
 
-  const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-
   const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
 
-  // This screen is landscape-only (see RootNavigator's runtime orientation
-  // lock) and by far the busiest layout in the app: a question (text and/or
-  // up to a sizeable image) plus a 4-option grid plus a feedback bar plus a
-  // Next button. Stacked vertically that content can run to ~650-700dp,
-  // roughly double what a real landscape phone gives us after the header
-  // (~300-360dp). Laying the question out on the LEFT and the 2x2 option
-  // grid on the RIGHT — side by side, using the width landscape actually
-  // gives us — turns "everything stacked in one tall column" into a single
-  // row that fits inside that height budget. Sizes below are derived from
-  // the actual window rather than fixed constants so this adapts instead of
-  // assuming one specific device.
-  const { questionColumnWidth, optionsColumnWidth, optionSize, questionImageSize } = computeQuizLayout({
-    windowWidth: width,
-    windowHeight: height,
-    insetTop: insets.top,
-    insetBottom: insets.bottom,
-    insetLeft: insets.left,
-    insetRight: insets.right,
-    showProgress,
-    hasQuestionText: Boolean(question.question.text),
-  });
+  const rows: [ [typeof question.options[number], typeof question.options[number]], [typeof question.options[number], typeof question.options[number]] ] = [
+    [question.options[0], question.options[1]],
+    [question.options[2], question.options[3]],
+  ];
 
-  // A small pop-in for the feedback bar (bounce up to a slight overshoot,
-  // then settle) so getting an answer right/wrong feels a bit more alive
-  // than text just appearing — cheap enough with RN's built-in Animated API
-  // that it isn't worth skipping, but subtle enough not to distract or delay
-  // the child from tapping Next.
-  const feedbackScale = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (hasAnswered) {
-      feedbackScale.setValue(0.6);
-      Animated.spring(feedbackScale, {
-        toValue: 1,
-        friction: 5,
-        tension: 80,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [hasAnswered, selectedOptionId, feedbackScale]);
+  function renderOption(option: Question['options'][number]) {
+    const isCorrectOption = option.id === question.correctOptionId;
+    const isSelectedOption = option.id === selectedOptionId;
+    // Once answered: highlight the correct option green, and — if the child
+    // picked a wrong one — highlight their (wrong) pick red too, so the
+    // feedback is visible directly on the options, not just in the footer.
+    const highlight = hasAnswered ? (isCorrectOption ? 'correct' : isSelectedOption ? 'incorrect' : null) : null;
+
+    return (
+      <Pressable
+        key={option.id}
+        testID={`option-${option.id}`}
+        onPress={() => !hasAnswered && onSelect(option.id)}
+        style={[
+          styles.optionCard,
+          highlight === 'correct' && styles.optionCorrect,
+          highlight === 'incorrect' && styles.optionIncorrect,
+        ]}
+      >
+        {option.image && (
+          <ImageWithFallback uri={option.image} testID={`option-image-${option.id}`} style={styles.optionImage} fallbackIconSize={22} />
+        )}
+        {option.text && (
+          <Text
+            style={styles.optionText}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
+            {option.text[language]}
+          </Text>
+        )}
+        {highlight === 'correct' && (
+          <View testID={`option-mark-${option.id}`} style={styles.correctMark}>
+            <Text style={styles.markText}>✓</Text>
+          </View>
+        )}
+        {highlight === 'incorrect' && (
+          <View testID={`option-mark-${option.id}`} style={styles.incorrectMark}>
+            <Text style={styles.markText}>✕</Text>
+          </View>
+        )}
+      </Pressable>
+    );
+  }
 
   return (
     <ScrollView
       style={styles.scrollView}
-      // flexGrow:1 (rather than a fixed flex:1 on the content) is a safety
-      // net, not the primary fix: the row-based layout above is sized to fit
-      // a real landscape screen without scrolling, but an unusually small
-      // screen or an unusually large question image should degrade to
-      // scrolling rather than clipping content off-screen unreachably.
-      contentContainerStyle={[
-        styles.screen,
-        {
-          paddingLeft: SCREEN_PADDING + insets.left,
-          paddingRight: SCREEN_PADDING + insets.right,
-          paddingBottom: SCREEN_PADDING + insets.bottom,
-        },
-      ]}
+      // flexGrow:1 on the content container (rather than a fixed height) is
+      // the safety net, not the primary layout strategy: the flex column
+      // below is sized to fit a real landscape screen without scrolling, but
+      // an unusually large image or an unusually small screen should degrade
+      // to scrolling rather than clipping content off-screen unreachably.
+      contentContainerStyle={styles.scrollContent}
     >
-      {showProgress && (
-        <View testID="quiz-progress" style={styles.progressRow}>
-          {Array.from({ length: totalQuestions as number }).map((_, i) => (
-            <View
-              key={i}
-              testID={`quiz-progress-dot-${i}`}
-              style={[
-                styles.progressDot,
-                i < (currentIndex as number) && styles.progressDotDone,
-                i === currentIndex && styles.progressDotCurrent,
-              ]}
-            />
+      <View style={styles.column}>
+        {showProgress && (
+          <View testID="quiz-progress" style={styles.progressRow}>
+            {Array.from({ length: totalQuestions as number }).map((_, i) => (
+              <View
+                key={i}
+                testID={`quiz-progress-dot-${i}`}
+                style={[
+                  styles.progressDot,
+                  i < (currentIndex as number) && styles.progressDotDone,
+                  i === currentIndex && styles.progressDotCurrent,
+                ]}
+              />
+            ))}
+          </View>
+        )}
+
+        <View style={styles.questionCard}>
+          {question.question.image && (
+            <ImageWithFallback uri={question.question.image} testID="question-image" style={styles.questionImage} fallbackIconSize={40} />
+          )}
+          {question.question.text && (
+            <Text style={styles.questionText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {question.question.text[language]}
+            </Text>
+          )}
+        </View>
+
+        <View testID="quiz-options-grid" style={styles.grid}>
+          {rows.map((rowOptions, rowIndex) => (
+            <View key={rowIndex} testID={`quiz-options-row-${rowIndex}`} style={styles.gridRow}>
+              {renderOption(rowOptions[0])}
+              {renderOption(rowOptions[1])}
+            </View>
           ))}
         </View>
-      )}
 
-      <View style={styles.row}>
-        <View style={[styles.questionCard, { width: questionColumnWidth }]}>
-          {question.question.image && (
-            <ImageWithFallback uri={question.question.image} testID="question-image" size={questionImageSize} />
-          )}
-          {question.question.text && <Text style={styles.questionText}>{question.question.text[language]}</Text>}
-        </View>
-
-        <View style={[styles.optionsGrid, { width: optionsColumnWidth }]}>
-          {question.options.map((option) => {
-            const isCorrectOption = option.id === question.correctOptionId;
-            const isSelectedOption = option.id === selectedOptionId;
-            // Once answered: highlight the correct option green, and — if the
-            // child picked a wrong one — highlight their (wrong) pick red too,
-            // so the feedback is visible directly on the options, not just in
-            // a separate line of text.
-            const highlight = hasAnswered
-              ? isCorrectOption
-                ? 'correct'
-                : isSelectedOption
-                  ? 'incorrect'
-                  : null
-              : null;
-
-            return (
-              <Pressable
-                key={option.id}
-                testID={`option-${option.id}`}
-                onPress={() => !hasAnswered && onSelect(option.id)}
-                style={[
-                  styles.optionCard,
-                  { width: optionSize, height: optionSize },
-                  highlight === 'correct' && styles.optionCorrect,
-                  highlight === 'incorrect' && styles.optionIncorrect,
-                ]}
-              >
-                {option.image && (
-                  <ImageWithFallback
-                    uri={option.image}
-                    testID={`option-image-${option.id}`}
-                    size={Math.max(24, optionSize - spacing.md * 2)}
-                  />
-                )}
-                {option.text && <Text style={styles.optionText}>{option.text[language]}</Text>}
-              </Pressable>
-            );
-          })}
-        </View>
+        {hasAnswered && (
+          <View testID="quiz-feedback" style={styles.feedbackRow}>
+            {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
+            <Text
+              style={[styles.feedbackText, isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText]}
+            >
+              {isCorrect ? t('quizCorrect', language) : t('quizIncorrect', language)}
+            </Text>
+            <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
+              <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
-
-      {hasAnswered && (
-        <Animated.View
-          testID="quiz-feedback"
-          style={[styles.feedbackBar, { transform: [{ scale: feedbackScale }] }]}
-        >
-          {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
-          <Text
-            style={[
-              styles.feedbackText,
-              isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText,
-            ]}
-          >
-            {isCorrect ? t('quizCorrect', language) : t('quizIncorrect', language)}
-          </Text>
-          <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
-            <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
-          </Pressable>
-        </Animated.View>
-      )}
     </ScrollView>
   );
 }
@@ -225,10 +213,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  screen: {
+  scrollContent: {
     flexGrow: 1,
-    alignItems: 'center',
-    paddingTop: spacing.md,
+    padding: spacing.md,
+  },
+  column: {
+    flex: 1,
   },
   progressRow: {
     flexDirection: 'row',
@@ -256,50 +246,55 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'center',
-    columnGap: spacing.md,
-  },
+  // The question gets a smaller share of the flexed space than the answer
+  // grid (2 vs 3) since it's a single card, while the grid has to fit 4.
   questionCard: {
+    flex: 2,
+    flexDirection: 'row',
     backgroundColor: colors.white,
     borderRadius: radii.xl,
     borderWidth: 4,
     borderColor: colors.periwinkleDark,
-    padding: spacing.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    columnGap: spacing.sm,
     ...shadow,
     elevation: 4,
   },
+  questionImage: {
+    height: '100%',
+    aspectRatio: 1,
+    borderRadius: radii.md,
+  },
   questionText: {
+    flexShrink: 1,
     fontSize: 24,
-    // Pinned equal to fontSize (rather than left to the platform's ~1.2-1.4x
-    // default) so QUESTION_TEXT_RESERVED_HEIGHT in ./layout.ts — which
-    // assumes lineHeight === fontSize — stays an exact match instead of a
-    // few dp short, per a review that found this class of drift twice.
-    lineHeight: 24,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
-    marginTop: spacing.xs,
   },
-  optionsGrid: {
+  grid: {
+    flex: 3,
+    rowGap: spacing.xs,
+  },
+  gridRow: {
+    flex: 1,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignContent: 'center',
-    justifyContent: 'center',
+    columnGap: spacing.xs,
   },
   optionCard: {
-    margin: OPTION_CARD_MARGIN,
+    flex: 1,
+    flexDirection: 'row',
     borderRadius: radii.lg,
     borderWidth: 3,
     borderColor: colors.disabledBorder,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.sm,
+    padding: spacing.xs,
+    columnGap: spacing.xs,
     ...shadow,
     elevation: 3,
   },
@@ -311,11 +306,44 @@ const styles = StyleSheet.create({
     borderColor: colors.coralDark,
     backgroundColor: colors.coral,
   },
+  optionImage: {
+    height: '100%',
+    aspectRatio: 1,
+    borderRadius: radii.md,
+  },
   optionText: {
-    fontSize: 20,
+    flexShrink: 1,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
+  },
+  correctMark: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.mintDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incorrectMark: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.coralDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   imageFallback: {
     backgroundColor: colors.disabledBg,
@@ -323,20 +351,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  imageFallbackIcon: {
-    fontSize: 32,
-  },
-  feedbackBar: {
+  image: {},
+  feedbackRow: {
     marginTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     columnGap: spacing.sm,
   },
   feedbackEmoji: {
-    fontSize: 24,
+    fontSize: 22,
   },
   feedbackText: {
+    flexShrink: 1,
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -358,10 +385,6 @@ const styles = StyleSheet.create({
   },
   nextButtonText: {
     fontSize: 18,
-    // Pinned equal to fontSize so FEEDBACK_BAR_HEIGHT in ./layout.ts — which
-    // assumes lineHeight === fontSize — stays exact rather than a few dp
-    // short (see the note on questionText above).
-    lineHeight: 18,
     fontWeight: 'bold',
     color: colors.white,
   },
