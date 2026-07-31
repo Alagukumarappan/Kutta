@@ -135,6 +135,12 @@ export const UI_STRINGS = {
   addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
   penSizeLabel: { en: 'Pen size', de: 'Stiftgröße' },
   profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
+  // Lets a parent pick a profile picture from anywhere on the device (not
+  // just the configured "pictures" folder listed above it in the same
+  // modal), via the system file picker in single-select mode — mirrors
+  // AddFilesButton's picker invocation but picks exactly one image.
+  profilePictureBrowseAnywhere: { en: 'Browse anywhere on your device', de: 'Auf dem ganzen Gerät suchen' },
+  profilePictureBrowseError: { en: "Couldn't open that picture — please try again.", de: 'Konnte das Bild nicht öffnen — bitte erneut versuchen.' },
   // {name}'s Home-screen avatar accessible name/fallback — decorative only
   // (not tappable), but still needs a real label for screen readers per
   // this feature's own accessibility requirement.

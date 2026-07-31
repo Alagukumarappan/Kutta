@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, FlatList, Pressable, Image, Modal, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, Image, Modal, StyleSheet, Alert } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
 import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 
@@ -45,6 +46,17 @@ export function ProfilePicturePicker({
   // to back (a real double-tap) both run before a `setState`-driven flag
   // would have re-rendered, so state alone can't block the second one.
   const selectingRef = useRef(false);
+  // Separate busy flag for the "Browse anywhere" button below — it opens
+  // expo-document-picker (the same pattern AddFilesButton uses, but
+  // single-select since a profile picture is exactly one image) rather
+  // than tapping a thumbnail from the folder list. Guarded the same way:
+  // a ref for the synchronous double-tap block, plus state to visually
+  // disable the button while the native picker is open. Deliberately NOT
+  // reset in the reopen effect below like selectingRef is — its own
+  // try/finally already clears it after every single getDocumentAsync
+  // call, so it can never be left stuck true across a reopen.
+  const browsingRef = useRef(false);
+  const [browsing, setBrowsing] = useState(false);
 
   // Re-list every time the modal is (re-)opened, not just when
   // picturesFolderUri changes — content can change between opens (a photo
@@ -84,6 +96,30 @@ export function ProfilePicturePicker({
     // picker only needs to hand back the URI the child tapped, not
     // re-verify it.
     onSelect(uri);
+  }
+
+  async function handleBrowseAnywhere() {
+    if (browsingRef.current || selectingRef.current) return;
+    browsingRef.current = true;
+    setBrowsing(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'image/*',
+        multiple: false,
+        copyToCacheDirectory: false,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        handleSelect(result.assets[0].uri);
+      }
+    } catch {
+      // Mirrors AddFilesButton's error handling — a picker failure (e.g. a
+      // misbehaving external file provider) surfaces as a friendly alert
+      // instead of crashing this modal.
+      Alert.alert(t('profilePictureBrowseError'));
+    } finally {
+      browsingRef.current = false;
+      setBrowsing(false);
+    }
   }
 
   return (
@@ -140,6 +176,18 @@ export function ProfilePicturePicker({
               )}
             />
           )}
+
+          <Pressable
+            testID="profile-picture-picker-browse-anywhere"
+            onPress={handleBrowseAnywhere}
+            disabled={browsing}
+            style={[styles.browseButton, browsing && styles.browseButtonDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel={t('profilePictureBrowseAnywhere')}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text style={styles.browseButtonText}>{t('profilePictureBrowseAnywhere')}</Text>
+          </Pressable>
 
           <Pressable
             testID="profile-picture-picker-cancel"
@@ -208,6 +256,28 @@ const styles = StyleSheet.create({
   thumb: {
     width: 100,
     height: 100,
+  },
+  browseButton: {
+    marginTop: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.xl,
+    backgroundColor: colors.sky,
+    ...shadow,
+    elevation: 2,
+  },
+  browseButtonDisabled: {
+    backgroundColor: colors.disabledBg,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  browseButtonText: {
+    color: colors.white,
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   cancelButton: {
     marginTop: spacing.sm,

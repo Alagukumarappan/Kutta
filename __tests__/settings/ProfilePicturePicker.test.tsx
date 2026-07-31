@@ -1,12 +1,15 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ProfilePicturePicker } from '../../src/settings/ProfilePicturePicker';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn() },
 }));
+jest.mock('expo-document-picker');
 
 describe('ProfilePicturePicker', () => {
   beforeEach(() => {
@@ -170,5 +173,128 @@ describe('ProfilePicturePicker', () => {
     );
 
     await waitFor(() => expect(FileSystem.StorageAccessFramework.readDirectoryAsync).toHaveBeenCalledTimes(1));
+  });
+
+  it('opens the system document picker in single-select image mode when "Browse anywhere" is tapped', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={jest.fn()}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+
+    expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith({
+      type: 'image/*',
+      multiple: false,
+      copyToCacheDirectory: false,
+    });
+  });
+
+  it('calls onSelect with the picked uri when browsing anywhere succeeds', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'content://other-app/holiday.png', name: 'holiday.png', lastModified: 0 }],
+    });
+    const onSelect = jest.fn();
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={onSelect}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith('content://other-app/holiday.png'));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when the "Browse anywhere" pick is cancelled', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
+    const onSelect = jest.fn();
+    const onClose = jest.fn();
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={onSelect}
+          onClose={onClose}
+        />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+
+    await waitFor(() => expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledTimes(1));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows a friendly alert instead of crashing when the document picker throws', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockRejectedValue(new Error('boom'));
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const onSelect = jest.fn();
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={onSelect}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('ignores a rapid second tap on "Browse anywhere" while the first pick is still in flight', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    let resolvePicker: (value: unknown) => void = () => {};
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePicker = resolve;
+      })
+    );
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={jest.fn()}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+    const button = await findByTestId('profile-picture-picker-browse-anywhere');
+
+    fireEvent.press(button);
+    fireEvent.press(button);
+    resolvePicker({ canceled: true, assets: null });
+    await waitFor(() => expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledTimes(1));
   });
 });
