@@ -16,12 +16,22 @@ export function AddFilesButton({
   contentType,
   mimeType,
   onAdded,
+  compact = false,
 }: {
   testID: string;
   label: string;
   contentType: FileReferenceContentType;
   mimeType: string;
   onAdded: () => void;
+  // Renders a small "+" pill instead of the full-label button — for
+  // placement in a header row's top-right corner rather than as a
+  // prominent CTA above the list. The full `label` is still exposed via
+  // accessibilityLabel either way, so screen-reader users always get the
+  // complete description even though the visible glyph shrinks to "+".
+  // The visual box shrinks below the ~44x44 guideline in this mode, so
+  // hitSlop below restores an effective tap target that meets it (same
+  // convention as the gallery retry buttons).
+  compact?: boolean;
 }) {
   const { t } = useLanguage();
   const [busy, setBusy] = useState(false);
@@ -64,10 +74,14 @@ export function AddFilesButton({
       disabled={busy}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.button, busy && styles.buttonDisabled]}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      style={[styles.button, compact && styles.buttonCompact, busy && styles.buttonDisabled]}
+      hitSlop={
+        compact
+          ? { top: 10, bottom: 10, left: 10, right: 10 }
+          : { top: 8, bottom: 8, left: 8, right: 8 }
+      }
     >
-      <Text style={styles.text}>{label}</Text>
+      <Text style={[styles.text, compact && styles.textCompact]}>{compact ? '+' : label}</Text>
     </Pressable>
   );
 }
@@ -85,6 +99,19 @@ const styles = StyleSheet.create({
     ...shadow,
     elevation: 2,
   },
+  // Visual box is intentionally under the 44x44 guideline — the larger
+  // hitSlop above (10 on each side, giving an effective ~44x44 tap target)
+  // is what keeps this accessible, matching the retry-button convention
+  // used elsewhere in the galleries for small, isolated controls.
+  buttonCompact: {
+    minWidth: 32,
+    minHeight: 32,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: radii.md,
+    alignItems: 'center',
+  },
   buttonDisabled: {
     backgroundColor: colors.disabledBg,
     elevation: 0,
@@ -94,5 +121,9 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  textCompact: {
+    fontSize: 20,
+    lineHeight: 22,
   },
 });

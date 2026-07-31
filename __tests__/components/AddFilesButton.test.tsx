@@ -80,6 +80,60 @@ describe('AddFilesButton', () => {
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
   });
 
+  describe('compact mode (top-right header placement)', () => {
+    function renderCompactButton(onAdded = jest.fn()) {
+      return render(
+        <LanguageProvider initialLanguage="en">
+          <AddFilesButton
+            testID="add-files"
+            label="+ Add coloring picture"
+            contentType="coloring"
+            mimeType="image/*"
+            onAdded={onAdded}
+            compact
+          />
+        </LanguageProvider>
+      );
+    }
+
+    it('still carries the full descriptive accessibility label even though the visible glyph shrinks', async () => {
+      const { findByTestId, findByLabelText } = await renderCompactButton();
+
+      const button = await findByTestId('add-files');
+      expect(button.props.accessibilityLabel).toBe('+ Add coloring picture');
+      // A screen reader announces the full label regardless of the
+      // shrunken visible text — assert it's reachable by that full label.
+      await findByLabelText('+ Add coloring picture');
+    });
+
+    it('gives the shrunken visual box a hitSlop so the effective tap target still meets the ~44x44 guideline', async () => {
+      const { findByTestId } = await renderCompactButton();
+
+      const button = await findByTestId('add-files');
+      const { top, bottom, left, right } = button.props.hitSlop ?? {};
+      expect(top).toBeGreaterThanOrEqual(8);
+      expect(bottom).toBeGreaterThanOrEqual(8);
+      expect(left).toBeGreaterThanOrEqual(8);
+      expect(right).toBeGreaterThanOrEqual(8);
+    });
+
+    it('still triggers the picker and calls onAdded on a selection, same as the full-size button', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://tree/pic1.png', name: 'pic1.png', lastModified: 0 }],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderCompactButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'image/*', multiple: true })
+      );
+    });
+  });
+
   it('ignores a rapid second tap while the first pick is still in flight', async () => {
     let resolvePicker: (value: unknown) => void = () => {};
     (DocumentPicker.getDocumentAsync as jest.Mock).mockReturnValue(

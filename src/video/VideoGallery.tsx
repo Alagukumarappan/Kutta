@@ -97,13 +97,16 @@ export function VideoGallery({
 
   return (
     <View style={[{ flex: 1 }, insetStyle]}>
-      <AddFilesButton
-        testID="video-gallery-add"
-        label={t('addVideo')}
-        contentType="video"
-        mimeType="video/*"
-        onAdded={() => setRetryToken((n) => n + 1)}
-      />
+      <View style={styles.headerRow}>
+        <AddFilesButton
+          testID="video-gallery-add"
+          label={t('addVideo')}
+          contentType="video"
+          mimeType="video/*"
+          onAdded={() => setRetryToken((n) => n + 1)}
+          compact
+        />
+      </View>
       {videos.length === 0 ? (
         <EmptyState testID="video-gallery-empty" emoji="🎥" message={t('emptyVideos')} />
       ) : (
@@ -122,6 +125,13 @@ export function VideoGallery({
 }
 
 const styles = StyleSheet.create({
+  // Thin header row that right-aligns the compact Add button above the
+  // list, instead of the button itself acting as a prominent CTA.
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingBottom: spacing.sm,
+  },
   // Rows are rendered back-to-back with no gap/separator, so a `hitSlop`
   // fix (as used for the isolated retry button above) would make adjacent
   // rows' tap zones overlap. A real minHeight instead grows the row itself,

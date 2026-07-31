@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, Image } from 'react-native';
+import { View, Text, FlatList, Pressable, Image, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
 import { EmptyState } from '../components/EmptyState';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
+import { spacing } from '../theme/tokens';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
@@ -91,13 +92,16 @@ export function PuzzleGallery({
 
   return (
     <View style={[{ flex: 1 }, insetStyle]}>
-      <AddFilesButton
-        testID="puzzle-gallery-add"
-        label={t('addPuzzlePicture')}
-        contentType="puzzle"
-        mimeType="image/*"
-        onAdded={() => setRetryToken((n) => n + 1)}
-      />
+      <View style={styles.headerRow}>
+        <AddFilesButton
+          testID="puzzle-gallery-add"
+          label={t('addPuzzlePicture')}
+          contentType="puzzle"
+          mimeType="image/*"
+          onAdded={() => setRetryToken((n) => n + 1)}
+          compact
+        />
+      </View>
       {images.length === 0 ? (
         <EmptyState testID="puzzle-gallery-empty" emoji="🧩" message={t('emptyPictures')} />
       ) : (
@@ -114,3 +118,13 @@ export function PuzzleGallery({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  // Thin header row that right-aligns the compact Add button above the
+  // list, instead of the button itself acting as a prominent CTA.
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingBottom: spacing.sm,
+  },
+});
