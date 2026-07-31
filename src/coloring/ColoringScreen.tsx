@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert, Animated } from 'react-native';
+import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert, Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -14,23 +14,51 @@ import {
 } from '@shopify/react-native-skia';
 import { floodFill } from './floodFill';
 import { base64ToUint8Array } from './base64';
-import { computeResponsiveRectSize } from '../theme/tokens';
-import { colors, spacing, radii, shadow } from '../theme/tokens';
+import {
+  computeResponsiveRectSize,
+  colors,
+  spacing,
+  radii,
+  elevation,
+  typography,
+  touchTarget,
+  getActivityPalette,
+  RaisedPrimaryButton,
+} from '../design-system';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
 import Slider from '@react-native-community/slider';
+
+// Coloring's recognizable accent (see getActivityPalette in
+// src/design-system/tokens.ts) — drives the active-tool highlight, the
+// selected-swatch ring, and the pen-size slider's tint, so this screen's
+// chrome reads as "Coloring" the same way its gallery/home card do.
+const coloringAccent = getActivityPalette('coloring');
+
+// Circular palette swatches, sized to the design system's "comfortable"
+// touch target (see touchTarget.comfortable in tokens.ts) rather than the
+// old flat 44px — bigger, more tappable, and visually richer with the new
+// raised selection ring below.
+const SWATCH_SIZE = touchTarget.comfortable;
 
 // Reserves room for the toolbar + palette footer strip rendered below the
 // canvas, and outer margins, so the canvas gets as much of the screen as
 // possible while still leaving room to pick a tool/color. This screen is
 // landscape-only via RootNavigator's runtime orientation lock (app.json
-// itself now uses "default" rather than a manifest-level lock). The footer
-// (toolbar row ~36dp + its marginBottom 8dp + the 44dp-tall palette strip
-// with 8dp of its own margin + the footer's own paddingTop/paddingBottom
-// 8+16dp) comes out to roughly 120dp; 150 leaves a modest margin for a
-// second toolbar-row wrap (see the "toolbar row screen-fit" note below)
-// without reserving as much dead space as the old flat 200dp estimate did.
-const CANVAS_RESERVED_HEIGHT = 150;
+// itself now uses "default" rather than a manifest-level lock).
+//
+// Recomputed for this iteration's redesigned chrome (raised design-system
+// buttons + larger circular swatches, replacing the old bordered-rectangle
+// toolbar and flat 44px swatches): footer paddingTop (spacing.sm, 12dp) +
+// a worst-case TWO-LINE toolbar row (two 48dp-tall raised buttons — see
+// touchTarget.minimum — plus the row's own inter-line gap and marginBottom,
+// spacing.sm each, ~128dp total; see the "toolbar row screen-fit" note
+// below for why two lines must be budgeted for) + the palette strip
+// (56dp swatches, touchTarget.comfortable, plus spacing.xs margin on each
+// side, ~72dp) + footer paddingBottom (spacing.md, 16dp) comes out to
+// ~228dp; 240 leaves a small safety margin, same spirit as the old
+// constant's own buffer over its hand-computed chrome height.
+const CANVAS_RESERVED_HEIGHT = 240;
 const CANVAS_RESERVED_WIDTH = 32;
 const CANVAS_MIN_SIZE = 200;
 const CANVAS_MAX_SIZE = 900;
@@ -43,12 +71,16 @@ const PEN_STROKE_WIDTH_MIN = 4;
 const PEN_STROKE_WIDTH_MAX = 40;
 const PEN_STROKE_WIDTH_STEP = 2;
 
-// The pen-size slider row (~40dp) + its marginBottom (8dp) only renders in
-// pen mode, so it must only be reserved then too — otherwise switching to
-// pen mode would make the real footer taller than CANVAS_RESERVED_HEIGHT
-// budgeted for, pushing the footer down past what the canvas's fixed
-// height already assumed instead of shrinking the canvas to make room.
-const PEN_SIZE_ROW_RESERVED_HEIGHT = 48;
+// The pen-size slider row only renders in pen mode, so it must only be
+// reserved then too — otherwise switching to pen mode would make the real
+// footer taller than CANVAS_RESERVED_HEIGHT budgeted for, pushing the
+// footer down past what the canvas's fixed height already assumed instead
+// of shrinking the canvas to make room. Recomputed for this iteration's
+// raised chrome panel around the slider (the Slider itself is untouched):
+// the panel's own vertical padding (spacing.xs, 8dp top + bottom) + the
+// ~40dp-tall Slider row + the row's marginBottom (spacing.sm, 12dp) comes
+// out to ~68dp.
+const PEN_SIZE_ROW_RESERVED_HEIGHT = 68;
 
 type ToolMode = 'fill' | 'pen';
 
@@ -440,7 +472,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.background,
+        backgroundColor: colors.canvas,
         paddingLeft: insets.left,
         paddingRight: insets.right,
       }}
@@ -450,8 +482,8 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           <View testID="coloring-image-load-error" style={{ alignItems: 'center' }}>
             <Text
               style={{
-                fontSize: 22,
-                fontWeight: 'bold',
+                fontSize: typography.h3.fontSize,
+                fontWeight: typography.h3.fontWeight,
                 color: colors.ink,
                 textAlign: 'center',
                 marginBottom: spacing.md,
@@ -459,24 +491,13 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             >
               {t('coloringImageLoadError')}
             </Text>
-            <Pressable
+            <RaisedPrimaryButton
               testID="coloring-retry"
+              label={t('retry')}
               onPress={() => setRetryToken((n) => n + 1)}
-              accessibilityRole="button"
-              accessibilityLabel={t('retry')}
-              style={{
-                backgroundColor: colors.coral,
-                borderColor: colors.coralDark,
-                borderWidth: 2,
-                borderRadius: radii.xl,
-                paddingVertical: spacing.sm,
-                paddingHorizontal: spacing.xl,
-                ...shadow,
-                elevation: 4,
-              }}
-            >
-              <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.white }}>{t('retry')}</Text>
-            </Pressable>
+              color={coloringAccent.accent}
+              size="compact"
+            />
           </View>
         ) : (
         <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
@@ -549,26 +570,28 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             onPress={() => setToolMode('fill')}
             onPressIn={() => animateToolbarButton('tool-fill', 0.94)}
             onPressOut={() => animateToolbarButton('tool-fill', 1)}
+            accessibilityRole="button"
+            accessibilityLabel={t('toolFill')}
           >
             {/* This inner Animated.View ("button face") is what presses down —
                 the outer Pressable's own layout box/hit area never changes,
                 the same separation HomeScreen's cardFace/Pressable split
-                uses. */}
+                uses. Restyled onto the shared design-system's raised-button
+                look (touchTarget.minimum height, elevation, the activity's
+                own accent when active) — the press-in/out spring itself
+                (toolbarScales, 0.94/1) is untouched. */}
             <Animated.View
               testID="tool-fill-face"
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: spacing.xs,
-                paddingHorizontal: spacing.md,
-                borderRadius: radii.md,
-                backgroundColor: toolMode === 'fill' ? colors.sky : colors.white,
-                borderWidth: 2,
-                borderColor: toolMode === 'fill' ? colors.skyDark : colors.disabledBorder,
-                transform: [{ scale: toolbarScales['tool-fill'] }],
-              }}
+              style={[
+                styles.toolbarButtonFace,
+                toolMode === 'fill' ? styles.toolbarButtonFaceActive : styles.toolbarButtonFaceNeutral,
+                elevation.level2,
+                { transform: [{ scale: toolbarScales['tool-fill'] }] },
+              ]}
             >
-              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'\u{1FAA3} '}{t('toolFill')}</Text>
+              <Text style={[styles.toolbarButtonText, toolMode === 'fill' && styles.toolbarButtonTextActive]}>
+                {'\u{1FAA3} '}{t('toolFill')}
+              </Text>
             </Animated.View>
           </Pressable>
           <Pressable
@@ -576,22 +599,21 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             onPress={() => setToolMode('pen')}
             onPressIn={() => animateToolbarButton('tool-pen', 0.94)}
             onPressOut={() => animateToolbarButton('tool-pen', 1)}
+            accessibilityRole="button"
+            accessibilityLabel={t('toolPen')}
           >
             <Animated.View
               testID="tool-pen-face"
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: spacing.xs,
-                paddingHorizontal: spacing.md,
-                borderRadius: radii.md,
-                backgroundColor: toolMode === 'pen' ? colors.sky : colors.white,
-                borderWidth: 2,
-                borderColor: toolMode === 'pen' ? colors.skyDark : colors.disabledBorder,
-                transform: [{ scale: toolbarScales['tool-pen'] }],
-              }}
+              style={[
+                styles.toolbarButtonFace,
+                toolMode === 'pen' ? styles.toolbarButtonFaceActive : styles.toolbarButtonFaceNeutral,
+                elevation.level2,
+                { transform: [{ scale: toolbarScales['tool-pen'] }] },
+              ]}
             >
-              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'✏️ '}{t('toolPen')}</Text>
+              <Text style={[styles.toolbarButtonText, toolMode === 'pen' && styles.toolbarButtonTextActive]}>
+                {'✏️ '}{t('toolPen')}
+              </Text>
             </Animated.View>
           </Pressable>
           {canUndoFill && (
@@ -605,17 +627,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             >
               <Animated.View
                 testID="undo-fill-face"
-                style={{
-                  paddingVertical: spacing.xs,
-                  paddingHorizontal: spacing.md,
-                  borderRadius: radii.md,
-                  backgroundColor: colors.white,
-                  borderWidth: 2,
-                  borderColor: colors.disabledBorder,
-                  transform: [{ scale: toolbarScales['undo-fill'] }],
-                }}
+                style={[
+                  styles.toolbarButtonFace,
+                  styles.toolbarButtonFaceNeutral,
+                  elevation.level2,
+                  { transform: [{ scale: toolbarScales['undo-fill'] }] },
+                ]}
               >
-                <Text style={{ color: colors.ink, fontWeight: '600' }}>{'↩️ '}{t('undoFill')}</Text>
+                <Text style={styles.toolbarButtonText}>{'↩️ '}{t('undoFill')}</Text>
               </Animated.View>
             </Pressable>
           )}
@@ -647,20 +666,19 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               }
               onPressIn={() => animateToolbarButton('clear-drawing', 0.94)}
               onPressOut={() => animateToolbarButton('clear-drawing', 1)}
+              accessibilityRole="button"
+              accessibilityLabel={t('clearDrawing')}
             >
               <Animated.View
                 testID="clear-drawing-face"
-                style={{
-                  paddingVertical: spacing.xs,
-                  paddingHorizontal: spacing.md,
-                  borderRadius: radii.md,
-                  backgroundColor: colors.white,
-                  borderWidth: 2,
-                  borderColor: colors.disabledBorder,
-                  transform: [{ scale: toolbarScales['clear-drawing'] }],
-                }}
+                style={[
+                  styles.toolbarButtonFace,
+                  styles.toolbarButtonFaceDanger,
+                  elevation.level2,
+                  { transform: [{ scale: toolbarScales['clear-drawing'] }] },
+                ]}
               >
-                <Text style={{ color: colors.ink, fontWeight: '600' }}>{t('clearDrawing')}</Text>
+                <Text style={[styles.toolbarButtonText, styles.toolbarButtonTextDanger]}>{t('clearDrawing')}</Text>
               </Animated.View>
             </Pressable>
           )}
@@ -669,12 +687,13 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         {toolMode === 'pen' && (
           // Only shown in pen mode — fill mode has no use for a stroke
           // width, and showing it unconditionally would permanently cost
-          // this already-tight footer extra height for no benefit.
-          <View
-            testID="pen-size-row"
-            style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}
-          >
-            <Text style={{ color: colors.ink, fontWeight: '600' }}>{t('penSizeLabel')}</Text>
+          // this already-tight footer extra height for no benefit. The
+          // Slider component itself (and its onValueChange wiring) is
+          // untouched — only this surrounding chrome (the raised panel and
+          // label/value text) is restyled, plus the Slider's own tint
+          // colors so it matches the new bubblegum accent.
+          <View testID="pen-size-row" style={[styles.penSizeRow, elevation.level1]}>
+            <Text style={styles.penSizeLabel}>{t('penSizeLabel')}</Text>
             <Slider
               testID="pen-size-slider"
               style={{ flex: 1, height: 40 }}
@@ -683,12 +702,12 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               step={PEN_STROKE_WIDTH_STEP}
               value={penWidth}
               onValueChange={setPenWidth}
-              minimumTrackTintColor={colors.skyDark}
-              maximumTrackTintColor={colors.disabledBorder}
-              thumbTintColor={colors.sky}
+              minimumTrackTintColor={coloringAccent.accentDark}
+              maximumTrackTintColor={colors.line}
+              thumbTintColor={coloringAccent.accent}
               accessibilityLabel={t('penSizeLabel')}
             />
-            <Text testID="pen-size-value" style={{ color: colors.ink, fontWeight: '600', minWidth: 28 }}>
+            <Text testID="pen-size-value" style={styles.penSizeValue}>
               {penWidth}
             </Text>
           </View>
@@ -712,16 +731,16 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                   setSelectedColor(paletteColor.fill);
                   setSelectedDisplayColor(paletteColor.display);
                 }}
-                // The visual swatch is 44x44; this extends the tappable
-                // (not visible) area by 2px on every edge so the effective
-                // tap target meets the ~48x48 logical-pixel guideline.
-                // Swatches sit `spacing.sm` (8px) apart, so 2px of hitSlop
-                // on each side still leaves a 4px gap between neighboring
-                // hit zones — no overlap.
+                // The visual swatch is SWATCH_SIZE (56x56, already at/above
+                // the ~48x48 guideline on its own); this hitSlop is a small
+                // extra margin of safety, not a requirement. Swatches sit
+                // `spacing.sm` (8px) apart, so 2px of hitSlop on each side
+                // still leaves a 4px gap between neighboring hit zones — no
+                // overlap.
                 hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
                 style={{
-                  width: 44,
-                  height: 44,
+                  width: SWATCH_SIZE,
+                  height: SWATCH_SIZE,
                   marginRight: spacing.sm,
                   marginTop: spacing.xs,
                   marginBottom: spacing.xs,
@@ -731,25 +750,29 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                     color/border and the animated selected-state scale — the
                     outer Pressable above stays a fixed-size hit target so
                     the scale pop never disturbs this row's layout, the same
-                    Pressable/inner-face split HomeScreen's cards use. */}
+                    Pressable/inner-face split HomeScreen's cards use.
+                    Restyled with a bigger, richer circular swatch and a
+                    strong raised selection ring (the activity accent's dark
+                    border shade + its own elevated shadow when selected) —
+                    the pop-on-select scale animation itself (1.12/1, via
+                    getSwatchScale/swatchScalesRef above) is untouched. */}
                 <Animated.View
                   testID={`palette-color-${i}-swatch`}
-                  style={{
-                    width: 44,
-                    height: 44,
-                    backgroundColor: paletteColor.display,
-                    // Fully circular (radius = half the side) rather than a
-                    // rounded square, matching the large circular swatches
-                    // used across children's coloring apps.
-                    borderRadius: 22,
-                    borderWidth: isSelected ? 3 : 1,
-                    borderColor: isSelected ? colors.ink : colors.disabledBorder,
-                    // Slight scale-up on the selected swatch, on top of the
-                    // existing border-ring change, so the "currently loaded"
-                    // color is unmistakable at a glance — now animated into
-                    // a light spring "pop" rather than snapping instantly.
-                    transform: [{ scale: getSwatchScale(i, isSelected) }],
-                  }}
+                  style={[
+                    {
+                      width: SWATCH_SIZE,
+                      height: SWATCH_SIZE,
+                      backgroundColor: paletteColor.display,
+                      // Fully circular (radius = half the side) rather than a
+                      // rounded square, matching the large circular swatches
+                      // used across children's coloring apps.
+                      borderRadius: SWATCH_SIZE / 2,
+                      borderWidth: isSelected ? 4 : 2,
+                      borderColor: isSelected ? coloringAccent.accentDark : colors.line,
+                      transform: [{ scale: getSwatchScale(i, isSelected) }],
+                    },
+                    isSelected ? elevation.level3 : elevation.level1,
+                  ]}
                 />
               </Pressable>
             );
@@ -759,3 +782,63 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  toolbarButtonFace: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: touchTarget.minimum,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 2,
+  },
+  toolbarButtonFaceNeutral: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+  },
+  toolbarButtonFaceActive: {
+    backgroundColor: coloringAccent.accent,
+    borderColor: coloringAccent.accentDark,
+  },
+  toolbarButtonFaceDanger: {
+    backgroundColor: colors.berrySoft,
+    borderColor: colors.berryDark,
+  },
+  toolbarButtonText: {
+    fontSize: typography.buttonSmall.fontSize,
+    fontWeight: typography.buttonSmall.fontWeight,
+    color: colors.ink,
+  },
+  toolbarButtonTextActive: {
+    color: colors.white,
+  },
+  toolbarButtonTextDanger: {
+    color: colors.berryDark,
+  },
+  penSizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  penSizeLabel: {
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
+    color: colors.ink,
+  },
+  penSizeValue: {
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
+    color: colors.ink,
+    minWidth: 28,
+    textAlign: 'right',
+  },
+});

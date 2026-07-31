@@ -52,6 +52,11 @@ export const UI_STRINGS = {
   emptyPictures: { en: 'No pictures yet — add some to the pictures folder!', de: 'Noch keine Bilder — füge welche zum Bilderordner hinzu!' },
   emptyVideos: { en: 'No videos yet — add some to the videos folder!', de: 'Noch keine Videos — füge welche zum Videoordner hinzu!' },
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },
+  // Title for ColoringGallery's redesigned EmptyStatePanel (design-system);
+  // `emptyColoring` above is reused unchanged as the panel's `message`, so
+  // this is purely an ADDITIONAL headline, not a replacement/rename of that
+  // existing key (which other code/tests may still rely on verbatim).
+  emptyColoringTitle: { en: 'No pictures yet', de: 'Noch keine Bilder' },
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   // Screen-reader-only accessible name for the progress-dots row in
