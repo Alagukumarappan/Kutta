@@ -123,6 +123,47 @@ describe('TicTacToeScreen', () => {
     });
   });
 
+  // Regression tests for the premium-polish accessibility pass: cells
+  // previously had no accessibilityRole/Label at all (empty cells were a
+  // total screen-reader dead end; filled cells were only semi-usable via
+  // RN's implicit Text-child naming, with no row/column context).
+  describe('cell accessibility', () => {
+    it('gives every empty cell a role and a distinct row/column label', async () => {
+      const { getByTestId } = await renderGame({ mode: 'friend' });
+
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityRole).toBe('button');
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityLabel).toBe('Row 1, column 1, empty');
+      expect(getByTestId('tictactoe-cell-4').props.accessibilityLabel).toBe('Row 2, column 2, empty');
+      expect(getByTestId('tictactoe-cell-8').props.accessibilityLabel).toBe('Row 3, column 3, empty');
+    });
+
+    it('updates a cell\'s label to include its mark once filled, and marks it disabled', async () => {
+      const { getByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityLabel).toBe('Row 1, column 1, X');
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityState).toEqual({ disabled: true });
+      // An untouched cell remains enabled and unlabeled-as-filled.
+      expect(getByTestId('tictactoe-cell-1').props.accessibilityState).toEqual({ disabled: false });
+    });
+
+    it('marks every cell disabled once the game is over, even ones that were never played', async () => {
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-3')); // O
+      await fireEvent.press(getByTestId('tictactoe-cell-1')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-4')); // O
+      await fireEvent.press(getByTestId('tictactoe-cell-2')); // X wins
+      await findByTestId('tictactoe-complete');
+
+      // Cells 5-8 were never tapped, but the game is over — none should
+      // read as tappable to a screen-reader user any more.
+      expect(getByTestId('tictactoe-cell-8').props.accessibilityState).toEqual({ disabled: true });
+    });
+  });
+
   describe('computer mode', () => {
     it('lets the human (X) move first, then triggers a computer (O) move automatically', async () => {
       jest.useFakeTimers();

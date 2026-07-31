@@ -126,6 +126,8 @@ export const UI_STRINGS = {
   tictactoeDraw: { en: "It's a draw!", de: 'Unentschieden!' },
   tictactoePlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
   tictactoeChangeSetup: { en: 'Menu', de: 'Menü' },
+  tictactoeCellEmptyLabel: { en: 'Row {row}, column {column}, empty', de: 'Reihe {row}, Spalte {column}, leer' },
+  tictactoeCellFilledLabel: { en: 'Row {row}, column {column}, {mark}', de: 'Reihe {row}, Spalte {column}, {mark}' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
   coloringImageLoadError: {
     en: 'This picture could not be loaded for coloring.',

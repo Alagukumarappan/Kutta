@@ -83,6 +83,25 @@ sighted selected-border cue `PuzzlePiece` already draws.
 distinct label, and pressing a slot marks only that slot selected (505
 total tests passing, up from 503).
 
+### Iteration 5 — Accessibility role/label/state for Tic-Tac-Toe board cells
+**Screen:** Tic-Tac-Toe (the board screen).
+**Problem:** Board cell Pressables had no `accessibilityRole` or
+`accessibilityLabel` at all. Empty cells were a total screen-reader dead
+end (a screen-reader user couldn't tell which of the 9 squares they were
+about to tap); filled cells were only semi-usable via RN's implicit
+Text-child naming ("X"/"O") with no row/column context.
+**Fix:** Same fix shape as iteration 4's puzzle-slot fix. Added
+`accessibilityRole="button"`, a row/column positional label ("Row 2,
+column 2, empty" / "Row 2, column 2, X") via two new i18n keys
+(`tictactoeCellEmptyLabel`, `tictactoeCellFilledLabel`), and
+`accessibilityState={{ disabled: ... }}` mirroring the exact same
+conditions `handleCellPress` already uses to silently ignore a tap (game
+over, cell already filled, or the computer is "thinking") — so what's
+announced as disabled can never drift from what's actually un-tappable.
+**Tests:** Three new regression tests covering empty-cell labels, a
+filled cell's updated label + disabled state, and every cell becoming
+disabled once the game ends (508 total tests passing, up from 505).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -93,6 +112,8 @@ total tests passing, up from 503).
   in iteration 3.
 - Puzzle-piece slots had no accessibility role/label/state at all — fixed
   in iteration 4.
+- Tic-Tac-Toe board cells had no accessibility role/label/state at all —
+  fixed in iteration 5.
 
 ## Performance improvements
 _(none yet)_
@@ -104,14 +125,9 @@ _(none yet)_
 - Puzzle board screen (loading state deduplicated + unified; piece slots
   now accessible)
 - Quiz (accessibility label for image-only options)
+- Tic-Tac-Toe board screen (cells now accessible)
 
 ## Remaining polish opportunities (not yet done)
-- `TicTacToeScreen.tsx`'s board cell Pressables (~line 158) have no
-  `accessibilityRole`/label — filled cells are semi-usable (RN reads the
-  "X"/"O" Text child as an implicit name) but EMPTY cells have no label, so
-  a screen-reader user can't tell which of the 9 squares they're about to
-  tap. Same fix shape as this iteration's puzzle-slot fix; good next
-  candidate.
 - OnboardingScreen's "saving" overlay is a full-screen dark scrim + spinner
   + text — visually distinct from the new lighter gallery `LoadingPanel`;
   worth a future pass to decide if that's intentional (blocking modal

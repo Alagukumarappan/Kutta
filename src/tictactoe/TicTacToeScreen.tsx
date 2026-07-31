@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 import {
   createEmptyBoard,
   getGameStatus,
@@ -42,7 +43,7 @@ export function TicTacToeScreen({
   difficulty: Difficulty | null;
   onMenu: () => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -154,11 +155,28 @@ export function TicTacToeScreen({
       <View style={[styles.board, { width: boardSize, height: boardSize }, elevation.level4]}>
         {board.map((cell, index) => {
           const isWinningCell = winningLine?.includes(index) ?? false;
+          // Empty cells previously had no accessibilityRole/Label at all —
+          // a screen-reader user had no way to tell which of the 9 squares
+          // they were about to tap (occupied cells were only semi-usable,
+          // since RN implicitly reads the "X"/"O" Text child as a name with
+          // no row/column context). Both cases now get an explicit,
+          // positional label; accessibilityState communicates when a cell
+          // genuinely can't be tapped right now (game over, already filled,
+          // or the computer is "thinking"), mirroring handleCellPress's own
+          // guard below.
+          const row = Math.floor(index / 3) + 1;
+          const column = (index % 3) + 1;
+          const cellLabel = cell
+            ? tFormat('tictactoeCellFilledLabel', language, { row, column, mark: cell })
+            : tFormat('tictactoeCellEmptyLabel', language, { row, column });
           return (
             <Pressable
               key={index}
               testID={`tictactoe-cell-${index}`}
               onPress={() => handleCellPress(index)}
+              accessibilityRole="button"
+              accessibilityLabel={cellLabel}
+              accessibilityState={{ disabled: isGameOver || cell !== null || isComputersTurn }}
               style={[
                 styles.cell,
                 { width: cellSize, height: cellSize },
