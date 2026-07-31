@@ -1,13 +1,40 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, Alert, StyleSheet, ScrollView } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import { AgePicker } from '../components/AgePicker';
 import type { Language } from '../types/profile';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import {
+  colors,
+  radii,
+  spacing,
+  typography,
+  RaisedCard,
+  RaisedPrimaryButton,
+  AnimatedPressable,
+} from '../design-system';
 
+// This first-launch screen is where a parent sets a child's profile up —
+// redesigned onto the new design-system (RaisedCard/RaisedPrimaryButton/
+// AnimatedPressable) per REDESIGN_PROGRESS.md's iteration for Onboarding.
+// All behavior (validation, folder picker invocation, language switching,
+// save flow, error alerts) is unchanged from the original screen — only the
+// visual presentation moved from flat bordered boxes to layered, "lifted
+// paper" cards with the new candy/aurora palette.
+//
+// The language pills and the folder-picker button deliberately stay as
+// AnimatedPressable (not the Paper-backed RaisedPrimaryButton/
+// RaisedSecondaryButton) rather than converting every control to a Paper
+// button: AnimatedPressable exposes a raw `hitSlop` prop, which these two
+// controls need to comfortably clear the 48dp touch-target guideline given
+// their compact chip sizing, matching the touch-target-audit precedent
+// already established for these two controls (and SettingsScreen's
+// identically-styled pair). The Save button, this screen's single biggest
+// and most consequential action, uses the full RaisedPrimaryButton instead —
+// its size='large' preset already clears touchTarget.primaryCTA (64dp) on
+// its own, no hitSlop trick required.
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
   const [name, setName] = useState('');
@@ -51,105 +78,126 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
       contentContainerStyle={styles.screen}
       showsVerticalScrollIndicator={false}
     >
+      <Text style={styles.brandBadge}>🐾</Text>
       <Text style={styles.title}>{t('onboardingTitle')}</Text>
+      <Text style={styles.subtitle}>{t('onboardingSubtitle')}</Text>
 
       <View style={styles.row}>
-        <View style={[styles.card, styles.halfCard]}>
-          <Text style={styles.label}>{t('onboardingName')}</Text>
-          <TextInput
-            testID="onboarding-name-input"
-            value={name}
-            onChangeText={setName}
-            style={styles.textInput}
-            placeholder="Name"
-          />
-          {!nameValid && (
-            <Text testID="onboarding-name-error" style={styles.fieldError}>
-              {t('onboardingNameMissing')}
-            </Text>
-          )}
-        </View>
-
-        <View style={[styles.card, styles.halfCard]}>
-          <Text style={styles.label}>{t('onboardingAge')}</Text>
-          <AgePicker
-            value={age}
-            onChange={setAge}
-            visible={ageModalVisible}
-            onOpen={() => setAgeModalVisible(true)}
-            onClose={() => setAgeModalVisible(false)}
-            placeholder={t('onboardingSelectAge')}
-            testIDPrefix="onboarding-age"
-          />
-          {!ageValid && (
-            <Text testID="onboarding-age-error" style={styles.fieldError}>
-              {t('onboardingAgeMissing')}
-            </Text>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.row}>
-        <View style={[styles.card, styles.halfCard]}>
-          <Text style={styles.label}>{t('onboardingLanguage')}</Text>
-          <View style={styles.languageRow}>
-            <Pressable
-              testID="onboarding-lang-en"
-              onPress={() => setLanguage('en' as Language)}
-              style={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
-              hitSlop={{ top: 6, bottom: 6 }}
-            >
-              <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
-                English
+        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
+          <View style={styles.cardContent}>
+            <Text style={styles.label}>{t('onboardingName')}</Text>
+            <TextInput
+              testID="onboarding-name-input"
+              value={name}
+              onChangeText={setName}
+              style={[styles.textInput, nameValid ? styles.textInputFilled : styles.textInputEmpty]}
+              placeholder="Name"
+              placeholderTextColor={colors.inkMuted}
+            />
+            {!nameValid && (
+              <Text testID="onboarding-name-error" style={styles.fieldError}>
+                ⚠ {t('onboardingNameMissing')}
               </Text>
-            </Pressable>
-            <Pressable
-              testID="onboarding-lang-de"
-              onPress={() => setLanguage('de' as Language)}
-              style={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
-              hitSlop={{ top: 6, bottom: 6 }}
-            >
-              <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
-                Deutsch
-              </Text>
-            </Pressable>
+            )}
           </View>
-        </View>
+        </RaisedCard>
 
-        <View style={[styles.card, styles.halfCard]}>
-          <Pressable
-            testID="onboarding-folder-picker"
-            onPress={handlePickFolder}
-            style={styles.folderButton}
-            hitSlop={{ top: 6, bottom: 6 }}
-          >
-            <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
-          </Pressable>
-          {folderUri && (
-            <View style={styles.folderConfirm}>
-              <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
-                {toReadableFolderPath(folderUri)}
+        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
+          <View style={styles.cardContent}>
+            <Text style={styles.label}>{t('onboardingAge')}</Text>
+            <AgePicker
+              value={age}
+              onChange={setAge}
+              visible={ageModalVisible}
+              onOpen={() => setAgeModalVisible(true)}
+              onClose={() => setAgeModalVisible(false)}
+              placeholder={t('onboardingSelectAge')}
+              testIDPrefix="onboarding-age"
+              variant="playful"
+            />
+            {!ageValid && (
+              <Text testID="onboarding-age-error" style={styles.fieldError}>
+                ⚠ {t('onboardingAgeMissing')}
               </Text>
-            </View>
-          )}
-          {!folderValid && (
-            <Text testID="onboarding-folder-error" style={styles.fieldError}>
-              {t('onboardingFolderMissing')}
-            </Text>
-          )}
-        </View>
+            )}
+          </View>
+        </RaisedCard>
       </View>
 
-      <Pressable
-        testID="onboarding-save-button"
-        onPress={handleSave}
-        disabled={saveDisabled}
-        style={[styles.saveButton, saveDisabled ? styles.saveButtonDisabled : styles.saveButtonEnabled]}
-      >
-        <Text style={[styles.saveButtonText, saveDisabled ? styles.saveButtonTextDisabled : styles.saveButtonTextEnabled]}>
-          {t('onboardingSave')}
-        </Text>
-      </Pressable>
+      <View style={styles.row}>
+        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
+          <View style={styles.cardContent}>
+            <Text style={styles.label}>{t('onboardingLanguage')}</Text>
+            <View style={styles.languageRow}>
+              <AnimatedPressable
+                testID="onboarding-lang-en"
+                onPress={() => setLanguage('en' as Language)}
+                tilt="compact"
+                hitSlop={{ top: 6, bottom: 6 }}
+                style={styles.langPillOuter}
+                innerStyle={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+                accessibilityLabel="English"
+              >
+                <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
+                  English
+                </Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                testID="onboarding-lang-de"
+                onPress={() => setLanguage('de' as Language)}
+                tilt="compact"
+                hitSlop={{ top: 6, bottom: 6 }}
+                style={styles.langPillOuter}
+                innerStyle={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+                accessibilityLabel="Deutsch"
+              >
+                <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
+                  Deutsch
+                </Text>
+              </AnimatedPressable>
+            </View>
+          </View>
+        </RaisedCard>
+
+        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
+          <View style={styles.cardContent}>
+            <AnimatedPressable
+              testID="onboarding-folder-picker"
+              onPress={handlePickFolder}
+              tilt="compact"
+              hitSlop={{ top: 6, bottom: 6 }}
+              style={styles.folderButtonOuter}
+              innerStyle={styles.folderButton}
+            >
+              <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
+            </AnimatedPressable>
+            {folderUri && (
+              <View style={styles.folderConfirm}>
+                <Text style={styles.folderConfirmCheck}>✓</Text>
+                <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
+                  {toReadableFolderPath(folderUri)}
+                </Text>
+              </View>
+            )}
+            {!folderValid && (
+              <Text testID="onboarding-folder-error" style={styles.fieldError}>
+                ⚠ {t('onboardingFolderMissing')}
+              </Text>
+            )}
+          </View>
+        </RaisedCard>
+      </View>
+
+      <View style={styles.saveWrapper}>
+        <RaisedPrimaryButton
+          testID="onboarding-save-button"
+          label={t('onboardingSave')}
+          onPress={handleSave}
+          disabled={saveDisabled}
+          size="large"
+          style={styles.saveButton}
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -157,18 +205,32 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvas,
   },
   screen: {
     flexGrow: 1,
-    padding: spacing.md,
+    padding: spacing.sm,
+    alignItems: 'stretch',
+  },
+  brandBadge: {
+    fontSize: 22,
+    textAlign: 'center',
+    marginTop: spacing.xxs,
+    marginBottom: 0,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.ink,
     textAlign: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.xxs,
+    marginBottom: spacing.xxs,
+  },
+  subtitle: {
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
+    color: colors.inkMuted,
+    textAlign: 'center',
     marginBottom: spacing.sm,
   },
   row: {
@@ -180,51 +242,55 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: 0,
   },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
+  cardContent: {
     padding: spacing.sm,
-    marginBottom: spacing.sm,
-    ...shadow,
-    elevation: 2,
   },
   label: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: '800',
     color: colors.ink,
     marginBottom: spacing.xs,
   },
   textInput: {
     borderWidth: 2,
-    borderColor: colors.disabledBorder,
     borderRadius: radii.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
-    fontSize: 18,
+    fontSize: 17,
     color: colors.ink,
+    backgroundColor: colors.surfaceSunk,
+  },
+  textInputEmpty: {
+    borderColor: colors.line,
+  },
+  textInputFilled: {
+    borderColor: colors.bubblegumDark,
+    backgroundColor: colors.bubblegumSoft,
   },
   languageRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  langPillOuter: {
+    flex: 1,
   },
   langPill: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.xl,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
     alignItems: 'center',
     borderWidth: 2,
   },
   langPillSelected: {
-    backgroundColor: colors.sky,
-    borderColor: colors.skyDark,
+    backgroundColor: colors.jade,
+    borderColor: colors.jadeDark,
   },
   langPillUnselected: {
-    backgroundColor: colors.white,
-    borderColor: colors.disabledBorder,
+    backgroundColor: colors.surfaceSunk,
+    borderColor: colors.line,
   },
   langPillText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
   },
   langPillTextSelected: {
     color: colors.white,
@@ -232,65 +298,54 @@ const styles = StyleSheet.create({
   langPillTextUnselected: {
     color: colors.ink,
   },
+  folderButtonOuter: {
+    alignSelf: 'stretch',
+  },
   folderButton: {
-    backgroundColor: colors.sky,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
+    backgroundColor: colors.marigold,
+    borderWidth: 2,
+    borderColor: colors.marigoldDark,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xs,
     alignItems: 'center',
-    ...shadow,
-    elevation: 2,
   },
   folderButtonText: {
     color: colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
   },
   folderConfirm: {
-    marginTop: spacing.sm,
-    backgroundColor: colors.mint,
+    marginTop: spacing.xs,
+    backgroundColor: colors.jadeSoft,
     borderRadius: radii.md,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    paddingHorizontal: spacing.xs,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+  },
+  folderConfirmCheck: {
+    color: colors.jadeDark,
+    fontWeight: '800',
+    fontSize: 14,
   },
   folderConfirmText: {
-    color: colors.white,
-    fontWeight: 'bold',
-    fontSize: 15,
+    color: colors.jadeDark,
+    fontWeight: '700',
+    fontSize: 13,
   },
   fieldError: {
     marginTop: spacing.xs,
-    color: colors.coralDark,
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.berryDark,
+    fontSize: 13,
+    fontWeight: '700',
   },
-  saveButton: {
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
+  saveWrapper: {
     alignItems: 'center',
     marginTop: spacing.xs,
-    borderWidth: 2,
   },
-  saveButtonEnabled: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
-    ...shadow,
-    elevation: 4,
-  },
-  saveButtonDisabled: {
-    backgroundColor: colors.disabledBg,
-    borderColor: colors.disabledBorder,
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  saveButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  saveButtonTextEnabled: {
-    color: colors.white,
-  },
-  saveButtonTextDisabled: {
-    color: colors.disabledText,
+  saveButton: {
+    minWidth: 220,
   },
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { colors as dsColors, radii as dsRadii, elevation as dsElevation } from '../design-system/tokens';
 
 const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -9,6 +10,14 @@ const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 // entered. `testIDPrefix` lets each screen keep its own testID namespace,
 // e.g. "onboarding-age" -> "onboarding-age-picker" / "onboarding-age-option-4",
 // "settings-age" -> "settings-age-picker" / "settings-age-option-4".
+//
+// `variant` ("default" by default) is a purely visual switch: "playful"
+// layers the new design-system palette/elevation on top of this SAME
+// structure (same testIDs, same hitSlop, same option minHeight) for the
+// redesigned OnboardingScreen, while Settings (not redesigned this
+// iteration) keeps rendering with the untouched "default" look by simply
+// never passing the prop — see REDESIGN_PROGRESS.md's reasoning for why a
+// shared component gets a variant switch instead of two forks.
 export function AgePicker({
   value,
   onChange,
@@ -17,6 +26,7 @@ export function AgePicker({
   onClose,
   placeholder,
   testIDPrefix,
+  variant = 'default',
 }: {
   value: number | null;
   onChange: (age: number) => void;
@@ -25,23 +35,30 @@ export function AgePicker({
   onClose: () => void;
   placeholder: string;
   testIDPrefix: string;
+  variant?: 'default' | 'playful';
 }) {
+  const playful = variant === 'playful';
   return (
     <>
       <Pressable
         testID={`${testIDPrefix}-picker`}
         onPress={onOpen}
-        style={styles.field}
+        style={[styles.field, playful && (value === null ? playfulStyles.fieldEmpty : playfulStyles.fieldFilled)]}
         hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
       >
-        <Text style={value === null ? styles.placeholder : styles.value}>
+        <Text
+          style={[
+            value === null ? styles.placeholder : styles.value,
+            playful && (value === null ? playfulStyles.placeholder : playfulStyles.value),
+          ]}
+        >
           {value === null ? placeholder : String(value)}
         </Text>
       </Pressable>
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <Pressable style={styles.modalOverlay} onPress={onClose}>
-          <View style={styles.modalCard}>
+        <Pressable style={[styles.modalOverlay, playful && playfulStyles.modalOverlay]} onPress={onClose}>
+          <View style={[styles.modalCard, playful && playfulStyles.modalCard]}>
             {AGE_OPTIONS.map((option) => (
               <Pressable
                 key={option}
@@ -50,9 +67,11 @@ export function AgePicker({
                   onChange(option);
                   onClose();
                 }}
-                style={styles.optionRow}
+                style={[styles.optionRow, playful && value === option && playfulStyles.optionRowSelected]}
               >
-                <Text style={styles.optionText}>{option}</Text>
+                <Text style={[styles.optionText, playful && value === option && playfulStyles.optionTextSelected]}>
+                  {option}
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -108,5 +127,41 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: colors.ink,
+  },
+});
+
+// "playful" variant overrides — colors/elevation only, layered on top of the
+// structural `styles` above via a style array (see each usage site), so
+// sizing/spacing/touch-targets never drift between the two variants.
+const playfulStyles = StyleSheet.create({
+  fieldEmpty: {
+    borderColor: dsColors.line,
+    borderRadius: dsRadii.lg,
+    backgroundColor: dsColors.surfaceSunk,
+  },
+  fieldFilled: {
+    borderColor: dsColors.violetDark,
+    borderRadius: dsRadii.lg,
+    backgroundColor: dsColors.violetSoft,
+  },
+  placeholder: {
+    color: dsColors.inkMuted,
+  },
+  value: {
+    color: dsColors.violetDark,
+  },
+  modalOverlay: {
+    backgroundColor: dsColors.overlayScrim,
+  },
+  modalCard: {
+    backgroundColor: dsColors.surface,
+    borderRadius: dsRadii.xl,
+    ...dsElevation.level4,
+  },
+  optionRowSelected: {
+    backgroundColor: dsColors.violetSoft,
+  },
+  optionTextSelected: {
+    color: dsColors.violetDark,
   },
 });

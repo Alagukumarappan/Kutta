@@ -11,6 +11,12 @@ export const UI_STRINGS = {
   onboardingNameMissing: { en: 'Please enter a name', de: 'Bitte gib einen Namen ein' },
   onboardingAgeMissing: { en: 'Please select an age', de: 'Bitte wähle ein Alter aus' },
   onboardingFolderMissing: { en: 'Please choose a content folder', de: 'Bitte wähle einen Inhaltsordner' },
+  // Short welcoming line under the onboarding title (see OnboardingScreen's
+  // redesigned header) — purely introductory copy, not a validation message.
+  onboardingSubtitle: {
+    en: "Let's set up your child's profile",
+    de: 'Richten wir das Profil deines Kindes ein',
+  },
   homeColoring: { en: 'Coloring', de: 'Malen' },
   homeQuiz: { en: 'Quiz', de: 'Quiz' },
   homePuzzle: { en: 'Photo Puzzle', de: 'Fotopuzzle' },
