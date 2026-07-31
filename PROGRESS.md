@@ -1,8 +1,79 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 14
-- Latest completed improvement (iteration 14, one commit): Phase 2 item 3
+- Phase: 1 (baseline verification + inventory), Iteration: 15
+- Latest completed improvement (iteration 15, one commit): Phase 2 item 3
+  (palette-color-swatch accessibility labels, deferred from iteration 14's
+  `Next` item 1). `src/coloring/ColoringScreen.tsx`'s 12 palette swatches
+  (`palette-color-${i}`, ~lines 401-431) were plain colored circles with no
+  children/text/label at all — genuinely icon-only and screen-reader-silent.
+  Read `src/coloring/palette.ts` first: the `PaletteColor` type only had
+  `display`/`fill`, no existing name/id field, confirming a small additive
+  field was needed (not a restructuring). The 12 actual hex colors (read
+  from the file, not guessed) are red, orange, yellow, green, blue, purple,
+  pink, brown, black, white, teal, and gray — one more than the `Next` note's
+  example list assumed (teal was not previously named in that note).
+  - Data-shape change: added `nameKey: StringKey` to the `PaletteColor`
+    interface in `palette.ts` (additive only — `display`/`fill` untouched)
+    and set it on all 12 array entries to a new per-color i18n key
+    (`paletteColorRed` ... `paletteColorGray`), matching the existing
+    `// red`/`// orange`/etc. trailing comments already in the file.
+  - i18n: added all 12 new keys to `src/i18n/strings.ts` in both languages
+    (24 new strings) — en: Red, Orange, Yellow, Green, Blue, Purple, Pink,
+    Brown, Black, White, Teal, Gray; de: Rot, Orange, Gelb, Grün, Blau, Lila,
+    Pink, Braun, Schwarz, Weiß, Türkis, Grau. "Orange" and "Pink" are
+    identical in both languages — both are fully naturalized loanwords in
+    German (not left untranslated by mistake; a code-review subagent
+    specifically checked and confirmed this is idiomatic, not an oversight).
+  - Accessibility: added `accessibilityRole="button"`,
+    `accessibilityLabel={t(paletteColor.nameKey)}`, and
+    `accessibilityState={{ selected: isSelected }}` to each swatch's
+    `Pressable`. `isSelected` was already a pre-existing local variable
+    driving the existing visual selected-indicator (a thicker dark border +
+    1.12x scale on the selected swatch, ~lines 421-427) — the "indicate
+    selection using more than color alone" requirement was already met
+    visually before this iteration, so no new visual indicator was added;
+    `accessibilityState` only wires the same existing selection fact through
+    to screen readers (TalkBack/VoiceOver announce "selected"/"not
+    selected" alongside the "button" role).
+  - German word-length check: all 12 German names are the same length or
+    shorter than their English counterparts except "Schwarz" (7 vs "Black"'s
+    5) and "Türkis" (6 vs "Teal"'s 4) — neither is rendered as visible text
+    anywhere (swatches remain plain colored circles; the name is
+    `accessibilityLabel`-only), so there is no layout risk in either
+    language. Noted here per the iteration brief's instruction even though
+    no actual layout concern exists.
+  - TDD: added 2 tests to `__tests__/coloring/ColoringScreen.test.tsx` —
+    one asserting (in English) that `findByLabelText('Red')` and
+    `findByLabelText('Blue')` resolve, that each has
+    `accessibilityRole: 'button'`, that the initially-selected swatch (Red,
+    `PALETTE[0]`) has `accessibilityState.selected === true` while Blue has
+    `false`, and that pressing Blue flips both swatches'
+    `accessibilityState.selected` correctly; a second test asserting three
+    German labels ("Rot"/"Grün"/"Grau") resolve. Confirmed both failed for
+    the right reason first (`Unable to find an element with accessibility
+    label: Rot` / `Red`) before implementing.
+  - Verified `npx tsc --noEmit` clean, full suite 24/24 suites and
+    169/169 tests passing (167 baseline + 2 new). No existing test touched,
+    skipped, or renamed.
+  - A code-review subagent independently reviewed the diff: confirmed
+    `t(paletteColor.nameKey)` resolves correctly by reading
+    `LanguageContext.tsx`'s `t()` closure and `strings.ts`'s `UI_STRINGS`
+    lookup, confirmed all 12 colors have complete non-empty en/de keys,
+    confirmed "Pink"/"Türkis" are natural, child-appropriate German (not
+    awkward literalism), confirmed `accessibilityState={{ selected }}`
+    alongside `accessibilityRole="button"` is the standard correct RN
+    pattern with no TalkBack/VoiceOver conflict, confirmed the new tests are
+    non-tautological (query by accessible label, assert role and selection
+    state before/after a real press, re-query to confirm the flip) and not
+    order-dependent, confirmed `git diff --stat` touched only the 4 intended
+    files with no `any`/`ts-ignore`/dependency changes, and confirmed the
+    diff stayed tightly scoped (additive `nameKey` field only, no
+    restructuring of `palette.ts`/`ColoringScreen.tsx`). Approved with no
+    required or optional changes.
+  - Commit: `136d42f` — `loop: label ColoringScreen's palette swatches for
+    screen readers`.
+- Previous iteration's completed improvement (iteration 14, one commit): Phase 2 item 3
   (icon-only-controls accessibility audit, deferred from iteration 13's
   `Next` item 1). Grepped every `Pressable`/`TouchableOpacity`/
   `TouchableWithoutFeedback` in `src/` (14 files) and, for each one, read its
@@ -357,7 +428,11 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 24/24 suites passing, 167/167 tests passing (up from
+- Test status: 24/24 suites passing, 169/169 tests passing (up from
+  24/24 suites, 167/167 tests — iteration 15 added 2 new tests to
+  `ColoringScreen.test.tsx`, covering palette-swatch labels/selection state
+  in English and German).
+- Previous test status: 24/24 suites passing, 167/167 tests passing (up from
   24/24 suites, 166/166 tests — iteration 14 added 1 new test,
   `HomeScreen`'s settings-icon accessible-name test).
 - Previous test status: 24/24 suites passing, 166/166 tests passing (up from
@@ -860,6 +935,18 @@
     - Commit: `<see git log — loop: add an accessibilityLabel to the home
       screen's settings icon button>`.
 
+18. **loop: label ColoringScreen's palette swatches for screen readers**
+    (iteration 15, Phase 2 item 3, `Next` item 1 from iteration 14)
+    - Files: `src/coloring/palette.ts` (production, additive `nameKey`
+      field), `src/i18n/strings.ts` (production, 12 new keys x 2 languages),
+      `src/coloring/ColoringScreen.tsx` (production, 3 accessibility props
+      added to the existing swatch `Pressable`), and
+      `__tests__/coloring/ColoringScreen.test.tsx` (2 new tests)
+    - See the full write-up under Current Status above for the audit
+      method, data-shape decision, i18n choices, TDD trace, and code-review
+      outcome — not duplicated here to avoid drift.
+    - Commit: `136d42f`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -867,7 +954,7 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 |---|---|---|---|
 | `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (10 tests as of iteration 9) — now also covers out-of-range seed coordinates, the tolerance-exact-boundary case, and the 1x1-image case | no further named gaps identified; a "fully-filled image, no border at all" case would be redundant with the existing no-op/re-tap tests (same code path) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
-| `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
+| `src/coloring/palette.ts` | Static color palette data (`display`/`fill`/`nameKey` per entry) | indirectly covered via `__tests__/coloring/ColoringScreen.test.tsx`'s palette-label tests (iteration 15) | could still add a smoke test asserting no duplicate `fill` values, valid RGBA ranges, and that every `nameKey` resolves to a non-empty string in both languages |
 | `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (34 tests as of iteration 6) — now also covers `groupPiecesIntoRows`'s ragged-final-row and shorter-than-`cols` cases | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. No further known gaps in this module as of iteration 6. |
 | `src/quiz/filterQuestions.ts` | Age-range filter | `__tests__/quiz/filterQuestions.test.ts` | already well covered (in-range, boundary-inclusive, empty-result) |
 | `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | duplicate option IDs (partially covered per `isValidQuestion`'s Set-size check — verify test exists); `minAge > maxAge` rejection; question with neither `text` nor `image`; option `text` present but missing one language key |
@@ -890,29 +977,23 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 15 priority: the accessibility-label pass on every retry button
-(all 7, iterations 12-13) and the app's one unambiguous icon-only-control
-gap (the home settings-icon button, iteration 14) are now complete. Remaining
-options, in priority order:
-1. **Palette-color-swatch accessibility labels (deferred from iteration
-   14).** `src/coloring/ColoringScreen.tsx`'s 12 palette swatches
-   (`palette-color-${i}`, ~lines 404-429, mapped from the 12-entry
-   `PALETTE` array in `src/coloring/palette.ts`) are plain colored circles
-   with zero children/text/label — genuinely icon-only, screen-reader-silent
-   today. Fixing this properly needs: (a) 12 new per-color name i18n keys in
-   `src/i18n/strings.ts` (en/de each, so 24 new strings — e.g.
-   `paletteColorRed`/`paletteColorOrange`/.../`paletteColorGray`, matching
-   the existing `// red`/`// orange`/etc. comments already in
-   `palette.ts` as a naming reference), (b) wiring each `PaletteColor` entry
-   in `palette.ts` to its name key (either add a `nameKey` field to the
-   `PaletteColor` type, or a parallel array/lookup by index — either is a
-   small, safe, additive change), and (c) an `accessibilityLabel`/
-   `accessibilityRole="button"` on each swatch `Pressable` plus a test
-   asserting at least one swatch's `findByLabelText` (e.g. "Red") selects
-   the right fill color. This is materially larger than iteration 14's
-   single-button fix (12 colors x 2 languages vs. 1 button, plus a
-   naming/data-shape decision) but is still well-scoped and a real,
-   worthwhile screen-reader win — a good next Phase 2 item 3 task.
+Iteration 16 priority: the accessibility-label pass on every retry button
+(all 7, iterations 12-13), the app's one unambiguous icon-only-control gap
+(the home settings-icon button, iteration 14), and the palette-swatch
+accessibility labels (iteration 15) are now all complete. Remaining options,
+in priority order:
+1. **`palette.ts` smoke test (small, optional fast-follow from iteration
+   15).** No dedicated test file exists for `src/coloring/palette.ts`
+   itself — its `nameKey`/`display`/`fill` correctness is currently only
+   exercised indirectly through `ColoringScreen.test.tsx`'s two palette
+   tests (which check 4 of the 12 colors' labels, not all 12, and don't
+   check for accidental duplicate `fill`/`display` values or malformed RGBA
+   tuples). A small `__tests__/coloring/palette.test.ts` asserting, for all
+   12 entries: `fill`/`display` correspond to the same color, no duplicate
+   `fill` values, every RGBA channel in `[0,255]`, and every `nameKey`
+   resolves to a non-empty string in both `en`/`de` via `t()` — would close
+   this out cheaply (pure data validation, no production code change
+   expected).
 2. **Optional smaller follow-up (unchanged from iteration 10)**: the
    `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
    `HomeScreen.tsx` remain untyped against `RootStackParamList` because
@@ -935,6 +1016,17 @@ under BLOCKED below is a related but separate test-hygiene item, not itself
 part of the error-state audit.)
 
 ## Visual Review Required
+- Iteration 15's `ColoringScreen` palette-swatch accessibility changes
+  (`accessibilityLabel`/`accessibilityRole`/`accessibilityState`) are
+  invisible on-screen — no new visual indicator was added or changed; the
+  pre-existing border/scale "selected" styling is unchanged. No visual
+  review needed for this iteration's change. Recommended (not required)
+  real-device check: with TalkBack/VoiceOver enabled on the Galaxy S22,
+  swipe through the palette strip in both English and German and confirm
+  each swatch announces its color name and selected/not-selected state
+  correctly — this iteration could only verify the underlying props via
+  Jest's accessibility-prop assertions, not real screen-reader announcement
+  behavior end-to-end.
 - **`VideoPlayerScreen`'s new Retry button** (iteration 12): appears only
   when `expo-video` reports a `statusChange` event with `status: 'error'`
   (e.g. a corrupted/unsupported video file, or the SAF grant to the videos
@@ -975,6 +1067,17 @@ None found that affect correctness. Notes:
   with no device/emulator available in this environment.
 
 ## Technical Decisions
+- Iteration 15: kept "Orange" and "Pink" identical in English and German
+  rather than substituting a "more German" alternative (e.g. "Rosa" for
+  pink) — both are fully naturalized loanwords in everyday German
+  (including children's usage) and a code-review subagent independently
+  confirmed this reads as intentional/idiomatic, not an untranslated
+  oversight. Also chose to wire `accessibilityState={{ selected }}` onto the
+  existing swatch `Pressable` rather than adding any new visual
+  selected-indicator, since `ColoringScreen.tsx` already had a correct
+  visual indicator (thicker border + 1.12x scale) satisfying the "more than
+  color alone" requirement before this iteration — only the screen-reader
+  gap was open.
 - Iteration 14: chose to fix only the home settings-icon button and defer the
   12 `ColoringScreen` palette swatches rather than doing both in one
   iteration, and rather than doing neither. The task brief's scoping rule
