@@ -173,6 +173,47 @@ export function QuestionRenderer({
     // that reset contract ever changes elsewhere.
   }, [isCorrect, question.id, scaleAnim, opacityAnim]);
 
+  // Brief pop-in entrance for the feedback CARD ITSELF (the whole modal
+  // "arriving"), kept entirely separate from scaleAnim/opacityAnim above
+  // (the celebration bubble's own independent timeline) — different
+  // Animated.Values, different effect, so neither can interfere with or
+  // accidentally restart the other. Starts from a slightly shrunk/invisible
+  // state (0.85/0) and springs to rest (1/1) — a couple hundred ms, well
+  // under the celebration bubble's own pacing, since this fires on every
+  // single answer (right or wrong) and must never feel showy.
+  const cardScaleAnim = React.useRef(new Animated.Value(0.85)).current;
+  const cardOpacityAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (!hasAnswered) {
+      // Reset to the pre-entrance state while the modal is unmounted, so
+      // the NEXT time hasAnswered flips true (a fresh answer, or an answer
+      // after Retry) the pop-in plays again from scratch instead of
+      // silently starting from wherever the last animation left off.
+      cardScaleAnim.setValue(0.85);
+      cardOpacityAnim.setValue(0);
+      return;
+    }
+
+    const animation = Animated.parallel([
+      Animated.spring(cardScaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+      Animated.timing(cardOpacityAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]);
+    animation.start();
+
+    // Mirrors the celebration effect's own cleanup: stop (don't leave
+    // running) if the answer is retried, the question changes, or this
+    // component unmounts mid-animation.
+    return () => {
+      animation.stop();
+    };
+  }, [hasAnswered, question.id, cardScaleAnim, cardOpacityAnim]);
+
+  const feedbackCardEntranceStyle = {
+    opacity: cardOpacityAnim,
+    transform: [{ scale: cardScaleAnim }],
+  };
+
   const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
 
   const rows: [ [typeof question.options[number], typeof question.options[number]], [typeof question.options[number], typeof question.options[number]] ] = [
@@ -407,85 +448,118 @@ export function QuestionRenderer({
           // `hasAnswered &&` guard).
           <Modal visible transparent animationType="fade">
             <View style={styles.feedbackBackdrop}>
-              <View testID="quiz-feedback" style={styles.feedbackCard}>
-                {showCelebration && (
-                  // Decorative only: pointerEvents="none" so it can never
-                  // intercept a tap meant for Retry/Next underneath, and
-                  // hidden from assistive tech since the feedbackText below
-                  // ("Correct!"/quizCorrect) already announces the result —
-                  // this is purely a visual flourish layered on top, not new
-                  // information. "Overlay inside the overlay": this brief,
-                  // auto-fading bubble lives inside the same card as the
-                  // persistent message/buttons below, instead of floating
-                  // separately over the question card.
-                  <Animated.View
-                    testID="quiz-celebration"
-                    pointerEvents="none"
-                    accessibilityElementsHidden
-                    importantForAccessibility="no-hide-descendants"
-                    style={[
-                      styles.celebrationBubble,
-                      { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
-                    ]}
-                  >
-                    <Text style={styles.celebrationEmoji}>🎉</Text>
-                    <Text style={styles.celebrationText} numberOfLines={1}>
-                      {t('quizCelebration', language)}
-                    </Text>
-                  </Animated.View>
-                )}
+              {/* Outer Animated.View carries ONLY the pop-in transform/opacity
+                  + the border/shadow (never overflow:'hidden' — same
+                  shadow-vs-clipping split HomeScreen's cardFace/cardClip and
+                  this file's questionCard/questionCardClip already use).
+                  The two-tone wash + rounded-corner clipping live one level
+                  deeper, in feedbackCardClip. */}
+              <Animated.View testID="quiz-feedback" style={[styles.feedbackCard, feedbackCardEntranceStyle]}>
+                <View style={styles.feedbackCardClip}>
+                  <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                    {/* Minty wash when correct, warm coral-adjacent wash when
+                        incorrect — same light-wash/dark-wash proportions as
+                        questionCardHighlight/Shadow above, just recolored per
+                        result, so the card itself reinforces the outcome at a
+                        glance (not just feedbackText's color). */}
+                    <View
+                      testID="feedback-wash-highlight"
+                      style={[
+                        styles.feedbackCardHighlight,
+                        { backgroundColor: isCorrect ? colors.mint : colors.coral },
+                      ]}
+                    />
+                    <View
+                      testID="feedback-wash-shadow"
+                      style={[
+                        styles.feedbackCardShadow,
+                        { backgroundColor: isCorrect ? colors.mintDark : colors.coralDark },
+                      ]}
+                    />
+                  </View>
 
-                <View style={styles.feedbackMessageRow}>
-                  {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
-                  <Text
-                    style={[
-                      styles.feedbackText,
-                      isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText,
-                    ]}
-                    numberOfLines={2}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                  >
-                    {isCorrect ? t('quizCorrect', language) : t(incorrectTextKey, language)}
-                  </Text>
-                </View>
+                  {showCelebration && (
+                    // Decorative only: pointerEvents="none" so it can never
+                    // intercept a tap meant for Retry/Next underneath, and
+                    // hidden from assistive tech since the feedbackText below
+                    // ("Correct!"/quizCorrect) already announces the result —
+                    // this is purely a visual flourish layered on top, not new
+                    // information. "Overlay inside the overlay": this brief,
+                    // auto-fading bubble lives inside the same card as the
+                    // persistent message/buttons below, instead of floating
+                    // separately over the question card. Its own
+                    // scaleAnim/opacityAnim timeline is untouched by the new
+                    // card-level pop-in above — two independent Animated
+                    // drivers, never shared.
+                    <Animated.View
+                      testID="quiz-celebration"
+                      pointerEvents="none"
+                      accessibilityElementsHidden
+                      importantForAccessibility="no-hide-descendants"
+                      style={[
+                        styles.celebrationBubble,
+                        { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+                      ]}
+                    >
+                      <Text style={styles.celebrationEmoji}>🎉</Text>
+                      <Text style={styles.celebrationText} numberOfLines={1}>
+                        {t('quizCelebration', language)}
+                      </Text>
+                    </Animated.View>
+                  )}
 
-                {/* Retry + Next together, whether correct or wrong: Retry
-                    (calls onRetry — clears the selection only, never
-                    scores, see the onRetry prop doc above) lets the child
-                    replay this same question even after answering
-                    correctly, purely for fun; Next always advances via the
-                    single onNext/answerCurrentQuestion path, so a correct
-                    Retry can never double-score. */}
-                <View style={styles.feedbackButtonGroup}>
-                  <Pressable
-                    testID="quiz-retry-answer"
-                    onPress={onRetry}
-                    style={styles.tryAgainButton}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('retry', language)}
-                  >
+                  <View style={styles.feedbackMessageRow}>
+                    {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
                     <Text
-                      style={styles.tryAgainButtonText}
-                      numberOfLines={1}
+                      style={[
+                        styles.feedbackText,
+                        isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText,
+                      ]}
+                      numberOfLines={2}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.8}
+                      minimumFontScale={0.75}
                     >
-                      {t('retry', language)}
+                      {isCorrect ? t('quizCorrect', language) : t(incorrectTextKey, language)}
                     </Text>
-                  </Pressable>
-                  <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButtonSmall}>
-                    <Text
-                      style={styles.nextButtonText}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.8}
+                  </View>
+
+                  {/* Retry + Next together, whether correct or wrong: Retry
+                      (calls onRetry — clears the selection only, never
+                      scores, see the onRetry prop doc above) lets the child
+                      replay this same question even after answering
+                      correctly, purely for fun; Next always advances via the
+                      single onNext/answerCurrentQuestion path, so a correct
+                      Retry can never double-score. */}
+                  <View style={styles.feedbackButtonGroup}>
+                    <Pressable
+                      testID="quiz-retry-answer"
+                      onPress={onRetry}
+                      style={styles.tryAgainButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('retry', language)}
                     >
-                      {t('quizNext', language)}
-                    </Text>
-                  </Pressable>
+                      <Text
+                        style={styles.tryAgainButtonText}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.8}
+                      >
+                        {t('retry', language)}
+                      </Text>
+                    </Pressable>
+                    <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButtonSmall}>
+                      <Text
+                        style={styles.nextButtonText}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.8}
+                      >
+                        {t('quizNext', language)}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
+              </Animated.View>
             </View>
           </Modal>
         )}
@@ -692,15 +766,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
+  // Outer wrapper: pop-in transform/opacity + border/shadow only — no
+  // overflow:'hidden' here (same shadow-vs-clipping split as this file's
+  // questionCard/questionCardClip and HomeScreen's cardFace/cardClip).
   feedbackCard: {
-    backgroundColor: colors.white,
     borderRadius: radii.xl,
-    padding: spacing.lg,
-    alignItems: 'center',
     maxWidth: 420,
     width: '100%',
     ...shadow,
     elevation: 8,
+  },
+  // Holds the actual content + the two-tone wash, clipped to the card's
+  // rounded corners.
+  feedbackCardClip: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  // Light wash over the top ~55%, darker wash under the bottom ~45% — same
+  // proportions as questionCardHighlight/Shadow above and HomeScreen's
+  // cardBackgroundHighlight/Shadow, just recolored per-result (mint for
+  // correct, coral for incorrect) inline where these are used, since the
+  // color itself carries meaning here rather than being a fixed brand tint.
+  feedbackCardHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    opacity: 0.16,
+  },
+  feedbackCardShadow: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    opacity: 0.1,
   },
   feedbackMessageRow: {
     flexDirection: 'row',

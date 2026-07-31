@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, within } from '@testing-library/react-native';
 import { QuestionRenderer } from '../../src/quiz/QuestionRenderer';
 import type { Question } from '../../src/types/quiz';
+import { colors } from '../../src/theme/tokens';
 
 const imageQuestion: Question = {
   id: 'q1',
@@ -509,6 +510,109 @@ describe('QuestionRenderer', () => {
       // Still exactly one celebration node, not one appended per re-render.
       expect(getAllByTestId('quiz-celebration', { includeHiddenElements: true })).toHaveLength(1);
     });
+  });
+
+  describe('feedback card pop-in + wash', () => {
+    it('gives the feedback card its own animated opacity/scale entrance style, distinct from the celebration bubble', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // Jest's react-native mock resolves Animated.Value nodes to their
+      // current plain numeric value when styles are flattened (rather than
+      // keeping the Animated.Value wrapper), so what's checked here is that
+      // the card was given its OWN opacity/scale entrance keys at all
+      // (structurally distinct from a plain static style), starting from
+      // the pre-pop-in resting values (0 / 0.85) at mount, before the
+      // spring/timing calls have had a chance to advance them.
+      const { StyleSheet } = require('react-native');
+      const card = getByTestId('quiz-feedback');
+      const flattened = StyleSheet.flatten(card.props.style);
+
+      expect(typeof flattened.opacity).toBe('number');
+      expect(flattened.opacity).toBeCloseTo(0);
+      expect(Array.isArray(flattened.transform)).toBe(true);
+      const scaleEntry = flattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry);
+      expect(scaleEntry.scale).toBeCloseTo(0.85);
+
+      // Distinct driver from the celebration bubble's own scaleAnim/
+      // opacityAnim (see the "correct-answer celebration" describe block
+      // above) — this test doesn't touch that bubble's animation at all.
+      // The celebration bubble starts from scale 0 (not 0.85), which is
+      // itself evidence the two are independent Animated.Values rather than
+      // one shared driver.
+      const celebration = getByTestId('quiz-celebration', { includeHiddenElements: true });
+      const celebrationFlattened = StyleSheet.flatten(celebration.props.style);
+      const celebrationScaleEntry = celebrationFlattened.transform.find(
+        (entry: Record<string, unknown>) => 'scale' in entry
+      );
+      expect(celebrationScaleEntry.scale).toBeCloseTo(0);
+      expect(celebrationScaleEntry.scale).not.toBeCloseTo(scaleEntry.scale);
+    });
+
+    it('gives the feedback card a minty wash when the answer is correct', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const highlight = StyleSheet.flatten(getByTestId('feedback-wash-highlight').props.style);
+      const shadow = StyleSheet.flatten(getByTestId('feedback-wash-shadow').props.style);
+      expect(highlight.backgroundColor).toBe(colors.mint);
+      expect(shadow.backgroundColor).toBe(colors.mintDark);
+    });
+
+    it('gives the feedback card a warm coral-adjacent wash when the answer is incorrect', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const highlight = StyleSheet.flatten(getByTestId('feedback-wash-highlight').props.style);
+      const shadow = StyleSheet.flatten(getByTestId('feedback-wash-shadow').props.style);
+      expect(highlight.backgroundColor).toBe(colors.coral);
+      expect(shadow.backgroundColor).toBe(colors.coralDark);
+    });
+
+    // No test here drives the card pop-in's cleanup by rerendering across a
+    // hasAnswered true -> false -> true cycle (retry, then answer again):
+    // doing so was tried, and — even with console.error mocked so the test
+    // itself reported green — it left the test RENDERER corrupted for every
+    // later test in this file (the "progress indicator" tests below started
+    // failing to find elements that unquestionably render, once this test
+    // ran first). That's the same class of problem this file's earlier
+    // comment (see "wrong-answer retry action" section, above the
+    // "does not call onSelect again..." test) already documents for raw
+    // pressIn/pressOut events: driving multiple real Animated
+    // mounts/rerenders with no unmount in between exercises native-driver
+    // machinery Jest has no native module backing for, and corrupts
+    // subsequent tests' render trees.
+    //
+    // The cleanup logic itself (the `if (!hasAnswered)` branch resetting
+    // cardScaleAnim/cardOpacityAnim to 0.85/0 and the effect's `return () =>
+    // animation.stop()`) is a small, direct mirror of the celebration
+    // effect's own already-covered cleanup pattern just above in this file
+    // (see "cleans up its animation on unmount without warning or
+    // throwing"), so it's verified by code reading rather than by driving
+    // it here.
   });
 
   describe('progress indicator', () => {
