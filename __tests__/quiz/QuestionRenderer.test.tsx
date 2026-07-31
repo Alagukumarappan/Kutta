@@ -372,6 +372,99 @@ describe('QuestionRenderer', () => {
     expect(getByTestId('option-mark-b')).toBeTruthy(); // wrongly selected option
   });
 
+  describe('mark badge pop-in', () => {
+    it('gives each mark badge its own animated opacity/scale entrance style, starting from a shrunk/invisible state', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={combinedQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // Same technique the "feedback card pop-in + wash" tests above rely
+      // on: Jest's react-native mock resolves an Animated.Value node to its
+      // current plain numeric value when styles are flattened, and no
+      // animation frame has been flushed yet at this point, so what's
+      // checked is the entrance style's STARTING values (0 opacity / 0.3
+      // scale) rather than the settled target (1/1).
+      const { StyleSheet } = require('react-native');
+
+      for (const testId of ['option-mark-a', 'option-mark-b']) {
+        const flattened = StyleSheet.flatten(getByTestId(testId).props.style);
+        expect(typeof flattened.opacity).toBe('number');
+        expect(flattened.opacity).toBeCloseTo(0);
+        expect(Array.isArray(flattened.transform)).toBe(true);
+        const scaleEntry = flattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry);
+        expect(scaleEntry.scale).toBeCloseTo(0.3);
+      }
+    });
+
+    it('starts a mark badge revealed for the first time on a brand new question from the same shrunk/invisible entrance values, not some other state', async () => {
+      // A single awaited rerender — mirroring this file's established safe
+      // pattern for driving Animated wiring (see the progress indicator
+      // "animates the newly-current dot..." test) — going straight from an
+      // unanswered first question to an answered SECOND question, rather
+      // than a multi-step press/replay sequence, per this file's repeated
+      // note that those have corrupted the RNTL renderer for later tests.
+      //
+      // What this test can and can't prove: Jest's Animated mock never
+      // advances a running spring/timing past its starting value without an
+      // explicit fake-timer tick (see the "feedback card pop-in + wash"
+      // tests' own comment on this), and this file doesn't use fake timers.
+      // So this can't drive the first question's mark to its SETTLED value
+      // (1/1) and then show the second question's mark starting over from
+      // 0.3/0 in contrast — that would need fake-timer machinery this file
+      // deliberately avoids introducing. What it does verify: mounting
+      // straight into an answered, brand-new question renders the badge at
+      // the entrance style's starting values, exercising the effect's
+      // `question.id`-inclusive dependency array on a real question change
+      // (not just a `hasAnswered` flip) without needing multiple renders on
+      // the SAME question. The reset-on-`!hasAnswered` branch itself is a
+      // direct structural mirror of the already-covered cardScaleAnim/
+      // cardOpacityAnim pattern just above, and is verified by code reading
+      // for the same reason that one is (see the comment below).
+      const { getByTestId, rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      await rerender(
+        <QuestionRenderer
+          question={combinedQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const flattened = StyleSheet.flatten(getByTestId('option-mark-a').props.style);
+      expect(flattened.opacity).toBeCloseTo(0);
+      const scaleEntry = flattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry);
+      expect(scaleEntry.scale).toBeCloseTo(0.3);
+    });
+
+    // No test here drives the reset by cycling hasAnswered true -> false ->
+    // true within one test (e.g. simulating Retry then a fresh answer on the
+    // SAME question) for the same reason the "feedback card pop-in + wash"
+    // describe block above skips that for cardScaleAnim/cardOpacityAnim:
+    // multiple real Animated mounts/rerenders with no unmount in between has
+    // repeatedly corrupted this file's RNTL renderer for later tests, even
+    // when the test itself reports green. The reset logic here is a direct
+    // structural mirror of that already-covered cardScaleAnim/cardOpacityAnim
+    // pattern (`if (!hasAnswered) { ...setValue... return; }`), so it's
+    // verified by code reading rather than by driving it here.
+  });
+
   describe('correct-answer celebration', () => {
     it('shows a brief celebration with a localized message when the answer is correct', async () => {
       const { getByTestId, getByText } = await render(

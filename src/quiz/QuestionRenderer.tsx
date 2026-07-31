@@ -214,6 +214,57 @@ export function QuestionRenderer({
     transform: [{ scale: cardScaleAnim }],
   };
 
+  // Brief pop-in for the correct/incorrect MARK BADGES (the ✓/✕ on the
+  // option cards themselves), independent of both the celebration bubble
+  // and the feedback card's own entrance above — those live inside the
+  // Modal, this lives on the answer grid, and all three should be able to
+  // animate without any of them restarting another. Both badges (the
+  // correct option's ✓ and, when wrong, the selected option's ✕) always
+  // appear at the exact same instant — the moment hasAnswered flips true —
+  // so one shared scale/opacity driver pair is enough; there's never a case
+  // where one badge needs to be mid-pop while the other is still hidden.
+  // Mirrors cardScaleAnim/cardOpacityAnim's own reset-on-`!hasAnswered` +
+  // animate-on-true shape exactly, so a badge on question 2 (or after a
+  // Retry + re-answer) always replays from scratch instead of silently
+  // sitting at its question-1 resting value.
+  const markScaleAnim = React.useRef(new Animated.Value(0.3)).current;
+  const markOpacityAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (!hasAnswered) {
+      // Reset to the pre-entrance state while no mark is shown, so the next
+      // reveal (a fresh answer, or an answer after Retry, or a new question)
+      // pops in again from scratch rather than resuming from rest.
+      markScaleAnim.setValue(0.3);
+      markOpacityAnim.setValue(0);
+      return;
+    }
+
+    // Same recipe as the feedback card's own pop-in above (speed/bounciness
+    // 20/6 spring for scale), just a touch shorter on the opacity timing
+    // (150ms vs 220ms) since this badge is a much smaller accent riding
+    // alongside — not replacing — the instant color highlight on the option
+    // card itself (see optionCorrect/optionIncorrect below, deliberately
+    // left uneased per iteration 4's precedent).
+    const animation = Animated.parallel([
+      Animated.spring(markScaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+      Animated.timing(markOpacityAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]);
+    animation.start();
+
+    // Mirrors the feedback card effect's own cleanup: stop (don't leave
+    // running) if the answer is retried, the question changes, or this
+    // component unmounts mid-animation.
+    return () => {
+      animation.stop();
+    };
+  }, [hasAnswered, question.id, markScaleAnim, markOpacityAnim]);
+
+  const markEntranceStyle = {
+    opacity: markOpacityAnim,
+    transform: [{ scale: markScaleAnim }],
+  };
+
   const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
 
   // Progress dot transition animations: when the CURRENT dot advances by one
@@ -424,14 +475,14 @@ export function QuestionRenderer({
             </Text>
           )}
           {highlight === 'correct' && (
-            <View testID={`option-mark-${option.id}`} style={styles.correctMark}>
+            <Animated.View testID={`option-mark-${option.id}`} style={[styles.correctMark, markEntranceStyle]}>
               <Text style={styles.markText}>✓</Text>
-            </View>
+            </Animated.View>
           )}
           {highlight === 'incorrect' && (
-            <View testID={`option-mark-${option.id}`} style={styles.incorrectMark}>
+            <Animated.View testID={`option-mark-${option.id}`} style={[styles.incorrectMark, markEntranceStyle]}>
               <Text style={styles.markText}>✕</Text>
-            </View>
+            </Animated.View>
           )}
         </Animated.View>
       </Pressable>
