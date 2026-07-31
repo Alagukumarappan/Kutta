@@ -1,9 +1,22 @@
 import React from 'react';
-import { View, Text, Image, Pressable, StyleSheet, ScrollView, Animated, Modal } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, Animated, Modal } from 'react-native';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t, tFormat } from '../i18n/strings';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import {
+  colors,
+  radii,
+  spacing,
+  elevation,
+  typography,
+  touchTarget,
+  surfaceWash,
+  getActivityPalette,
+  AnimatedPressable,
+  SurfaceWash,
+  RaisedPrimaryButton,
+  RaisedSecondaryButton,
+} from '../design-system';
 
 // This screen rebuilds the quiz UI as a single-question, STACKED layout
 // (progress row on top, question card, then a 2x2 answer grid below it,
@@ -34,6 +47,29 @@ import { colors, radii, spacing, shadow } from '../theme/tokens';
 // comparisons, and fractional dp values (routine on real devices) can cause
 // an early/late wrap. An explicit "exactly 2 per row" structure can't wrap
 // unpredictably because there is no wrapping decision to make.
+//
+// REDESIGN (iteration 2, onto src/design-system/): the question card and
+// answer options now reuse the new design system's visual language (violet
+// "quiz" accent via getActivityPalette, elevation presets, SurfaceWash's
+// two-tone wash) and its shared AnimatedPressable tilt/lift primitive for
+// the options, rather than each hand-rolling its own Animated.Value + spring
+// + interpolate wiring. Deliberately NOT built on design-system's own
+// `RaisedCard`, though: RaisedCard's static (no-onPress) render path wraps
+// its bordered/shadowed "face" in a plain, non-flexed View, so it can't be
+// asked to fill an exact flex-ratio share of the remaining screen height —
+// exactly what this file's whole layout strategy (see the flex-ratio
+// comment above) depends on for the question card, and for each option
+// filling its grid cell. AnimatedPressable, by contrast, lets its `style`
+// AND `innerStyle` both be supplied by the caller, so `flex: 1` can be
+// threaded through every level the way the old hand-rolled optionCard did —
+// so it's used directly instead, alongside a plain SurfaceWash for the same
+// two-tone depth RaisedCard would have added. All the shared design-system
+// color/spacing/elevation/typography tokens are used throughout, keeping
+// this screen visually consistent with the rest of the redesign without
+// inheriting a component whose sizing contract doesn't fit this screen's
+// layout.
+
+const quizPalette = getActivityPalette('quiz');
 
 function ImageWithFallback({
   uri,
@@ -143,10 +179,10 @@ export function QuestionRenderer({
   // dependency) is used instead.
   //
   // The effect below only re-runs when `isCorrect` flips from false to
-  // true. Combined with renderOption's existing `!hasAnswered` guard on
-  // onSelect (a few lines below), one answer can never (a) score twice or
-  // (b) replay/stack this celebration twice, even under rapid/repeated
-  // tapping on an option.
+  // true. Combined with each option's own `disabled={hasAnswered}` guard
+  // (further down), one answer can never (a) score twice or (b)
+  // replay/stack this celebration twice, even under rapid/repeated tapping
+  // on an option.
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
   const [showCelebration, setShowCelebration] = React.useState(false);
@@ -199,7 +235,7 @@ export function QuestionRenderer({
     // that reset contract ever changes elsewhere.
   }, [isCorrect, question.id, scaleAnim, opacityAnim]);
 
-  // Brief pop-in entrance for the feedback CARD ITSELF (the whole modal
+  // Brief pop-in entrance for the feedback CARD ITSELF (the whole overlay
   // "arriving"), kept entirely separate from scaleAnim/opacityAnim above
   // (the celebration bubble's own independent timeline) — different
   // Animated.Values, different effect, so neither can interfere with or
@@ -243,7 +279,7 @@ export function QuestionRenderer({
   // Brief pop-in for the correct/incorrect MARK BADGES (the ✓/✕ on the
   // option cards themselves), independent of both the celebration bubble
   // and the feedback card's own entrance above — those live inside the
-  // Modal, this lives on the answer grid, and all three should be able to
+  // overlay, this lives on the answer grid, and all three should be able to
   // animate without any of them restarting another. Both badges (the
   // correct option's ✓ and, when wrong, the selected option's ✕) always
   // appear at the exact same instant — the moment hasAnswered flips true —
@@ -380,81 +416,6 @@ export function QuestionRenderer({
     [question.options[2], question.options[3]],
   ];
 
-  // Same "tilt-and-lift" press feedback HomeScreen's cards use (iteration
-  // 1's cardScales/cardTiltStyle), adapted to this screen's 4 answer
-  // options. Question['options'] is a fixed 4-tuple (see types/quiz.ts), so
-  // (unlike per-id keying) these 4 Animated.Values are created once via
-  // useRef and reused by GRID SLOT INDEX (0-3) across question changes —
-  // they're purely transient per-tap feedback that always rests at 1, so it
-  // doesn't matter that the option occupying slot 0 differs from question to
-  // question.
-  const optionScales = React.useRef(
-    [0, 1, 2, 3].map(() => new Animated.Value(1))
-  ).current;
-
-  // Mirrors HomeScreen's activeAnimationsRef: any in-flight per-slot spring,
-  // stopped on unmount below instead of left running past this screen's
-  // lifetime.
-  const activeOptionAnimationsRef = React.useRef<Array<Animated.CompositeAnimation | null>>([
-    null,
-    null,
-    null,
-    null,
-  ]);
-
-  function animateOption(index: number, toValue: number) {
-    // Native-driven, gentle, no-overshoot spring — only ever touches
-    // `transform`, never layout, so it can't affect this screen's flex-ratio
-    // sizing (see the top-of-file comment) or the S22 screen-fit it protects.
-    const animation = Animated.spring(optionScales[index], {
-      toValue,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 0,
-    });
-    activeOptionAnimationsRef.current[index] = animation;
-    animation.start();
-  }
-
-  // Once the answer is revealed, options must show a clear, STATIC
-  // correct/incorrect state — no residual tilt from whichever option was
-  // mid-press when the answer landed. Stopping + snapping every slot back to
-  // its resting value (1) here, keyed on hasAnswered, guarantees that even if
-  // a press-in and the answer reveal race (pressIn fires, then onSelect's
-  // state update lands before pressOut does), the tilt can't linger into the
-  // highlighted state.
-  React.useEffect(() => {
-    if (!hasAnswered) return;
-    optionScales.forEach((value, index) => {
-      activeOptionAnimationsRef.current[index]?.stop();
-      value.setValue(1);
-    });
-  }, [hasAnswered, optionScales]);
-
-  React.useEffect(() => {
-    return () => {
-      activeOptionAnimationsRef.current.forEach((animation) => animation?.stop());
-    };
-  }, []);
-
-  // Derives the same perspective/rotateX/rotateY/translateY/scale transform
-  // HomeScreen's cardTiltStyle uses, off one slot's driving value. Kept a
-  // touch gentler (5deg/-3deg vs Home's 6/-4) since these 4 cards sit much
-  // closer together than Home's row of 4 — a smaller card reads a slightly
-  // larger rotation more strongly at the same angle.
-  function optionTiltStyle(index: number) {
-    const driver = optionScales[index];
-    return {
-      transform: [
-        { perspective: 900 },
-        { rotateX: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['5deg', '0deg'] }) },
-        { rotateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['-3deg', '0deg'] }) },
-        { translateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: [2, 0] }) },
-        { scale: driver },
-      ],
-    };
-  }
-
   function renderOption(option: Question['options'][number], index: number) {
     const isCorrectOption = option.id === question.correctOptionId;
     const isSelectedOption = option.id === selectedOptionId;
@@ -464,54 +425,51 @@ export function QuestionRenderer({
     const highlight = hasAnswered ? (isCorrectOption ? 'correct' : isSelectedOption ? 'incorrect' : null) : null;
 
     return (
-      <Pressable
+      <AnimatedPressable
         key={option.id}
         testID={`option-${option.id}`}
-        onPress={() => !hasAnswered && onSelect(option.id)}
-        // Gated the same way onPress already is: once hasAnswered, a
-        // press-in/out can't start a new tilt, so the correct/incorrect
-        // highlight below is the only thing the child sees — nothing
-        // animates in front of it or delays it.
-        onPressIn={() => !hasAnswered && animateOption(index, 0.95)}
-        onPressOut={() => !hasAnswered && animateOption(index, 1)}
-        style={styles.optionPressable}
+        onPress={() => onSelect(option.id)}
+        // Disabling the pressable (rather than a manual `!hasAnswered &&`
+        // guard) both stops onPress/onPressIn/onPressOut from firing AND —
+        // via AnimatedPressable's own disabled-transition effect — snaps
+        // any in-flight tilt back to resting immediately, so no residual
+        // tilt can linger into the highlighted correct/incorrect state even
+        // if a press-in and the answer reveal race.
+        disabled={hasAnswered}
+        tilt="regular"
+        style={styles.optionSlot}
+        innerStyle={[
+          styles.optionCard,
+          highlight === 'correct' && styles.optionCorrect,
+          highlight === 'incorrect' && styles.optionIncorrect,
+        ]}
+        accessibilityLabel={option.text ? option.text[language] : undefined}
       >
-        {/* This inner Animated.View ("option face") is what tilts — the
-            outer Pressable's own layout box/hit area never changes, same
-            separation HomeScreen's cardFace/Pressable split uses. */}
-        <Animated.View
-          style={[
-            styles.optionCard,
-            optionTiltStyle(index),
-            highlight === 'correct' && styles.optionCorrect,
-            highlight === 'incorrect' && styles.optionIncorrect,
-          ]}
-        >
-          {option.image && (
-            <ImageWithFallback uri={option.image} testID={`option-image-${option.id}`} style={styles.optionImage} fallbackIconSize={22} />
-          )}
-          {option.text && (
-            <Text
-              style={styles.optionText}
-              numberOfLines={2}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-            >
-              {option.text[language]}
-            </Text>
-          )}
-          {highlight === 'correct' && (
-            <Animated.View testID={`option-mark-${option.id}`} style={[styles.correctMark, markEntranceStyle]}>
-              <Text style={styles.markText}>✓</Text>
-            </Animated.View>
-          )}
-          {highlight === 'incorrect' && (
-            <Animated.View testID={`option-mark-${option.id}`} style={[styles.incorrectMark, markEntranceStyle]}>
-              <Text style={styles.markText}>✕</Text>
-            </Animated.View>
-          )}
-        </Animated.View>
-      </Pressable>
+        <SurfaceWash />
+        {option.image && (
+          <ImageWithFallback uri={option.image} testID={`option-image-${option.id}`} style={styles.optionImage} fallbackIconSize={22} />
+        )}
+        {option.text && (
+          <Text
+            style={styles.optionText}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
+            {option.text[language]}
+          </Text>
+        )}
+        {highlight === 'correct' && (
+          <Animated.View testID={`option-mark-${option.id}`} style={[styles.correctMark, markEntranceStyle]}>
+            <Text style={styles.markText}>✓</Text>
+          </Animated.View>
+        )}
+        {highlight === 'incorrect' && (
+          <Animated.View testID={`option-mark-${option.id}`} style={[styles.incorrectMark, markEntranceStyle]}>
+            <Text style={styles.markText}>✕</Text>
+          </Animated.View>
+        )}
+      </AnimatedPressable>
     );
   }
 
@@ -560,22 +518,16 @@ export function QuestionRenderer({
           </View>
         )}
 
+        {/* The question container's own visual recipe (border + elevation +
+            SurfaceWash two-tone wash + rounded corners) mirrors
+            design-system's RaisedCard exactly, but is built by hand here
+            rather than rendering <RaisedCard> itself — see the top-of-file
+            redesign comment for why (RaisedCard's static-panel path can't be
+            asked to fill an exact flex-ratio share of this screen's height,
+            which this card's flex:2 depends on). */}
         <View style={styles.questionCard}>
-          {/* Same two-tone semi-transparent wash technique as HomeScreen's
-              CardBackground (iteration 1) — two overlapping absolute Views
-              instead of a real gradient library (none is installed) — just
-              recolored to this card's periwinkle scheme and layered under a
-              still-white base rather than a vivid card color, since this
-              card carries body text that needs to stay clearly legible.
-              overflow:'hidden' lives on this inner clip view, not on
-              questionCard itself, so the border/shadow on the outer view
-              isn't clipped away with it (same iOS shadow-clipping reason
-              Home's cardFace/cardClip split exists). */}
           <View style={styles.questionCardClip}>
-            <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <View style={styles.questionCardHighlight} />
-              <View style={styles.questionCardShadow} />
-            </View>
+            <SurfaceWash />
             {question.question.image && (
               <ImageWithFallback uri={question.question.image} testID="question-image" style={styles.questionImage} fallbackIconSize={40} />
             )}
@@ -606,34 +558,39 @@ export function QuestionRenderer({
           // query tree entirely before an answer is given — matches this
           // file's existing convention (the old feedback row used the same
           // `hasAnswered &&` guard).
+          //
+          // Not built on design-system's <CelebrationOverlay>: that
+          // component's `title`/`message` shape has no place for the
+          // separate correct-answer TEXT-AND/OR-IMAGE reveal block this
+          // screen needs on a wrong pick, and its wash/testIDs aren't
+          // pluggable from the outside (both files are read-only). It's
+          // used as the reference for the shape (dimmed backdrop, springing
+          // card, optional celebration bubble, message, 1-2 actions) and its
+          // own building blocks are reused directly (SurfaceWash's
+          // proportions via `surfaceWash` tokens, and the raised
+          // primary/secondary buttons for Retry/Next) instead.
           <Modal visible transparent animationType="fade">
             <View style={styles.feedbackBackdrop}>
-              {/* Outer Animated.View carries ONLY the pop-in transform/opacity
-                  + the border/shadow (never overflow:'hidden' — same
-                  shadow-vs-clipping split HomeScreen's cardFace/cardClip and
-                  this file's questionCard/questionCardClip already use).
-                  The two-tone wash + rounded-corner clipping live one level
-                  deeper, in feedbackCardClip. */}
-              <Animated.View testID="quiz-feedback" style={[styles.feedbackCard, feedbackCardEntranceStyle]}>
+              <Animated.View testID="quiz-feedback" style={[styles.feedbackCard, elevation.level5, feedbackCardEntranceStyle]}>
                 <View style={styles.feedbackCardClip}>
                   <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                    {/* Minty wash when correct, warm coral-adjacent wash when
-                        incorrect — same light-wash/dark-wash proportions as
-                        questionCardHighlight/Shadow above, just recolored per
-                        result, so the card itself reinforces the outcome at a
-                        glance (not just feedbackText's color). */}
+                    {/* Jade wash when correct, berry wash when incorrect —
+                        design-system's error/success hues — using the same
+                        light-wash/dark-wash proportions `surfaceWash` tokens
+                        declare, so the card itself reinforces the outcome at
+                        a glance (not just feedbackText's color). */}
                     <View
                       testID="feedback-wash-highlight"
                       style={[
                         styles.feedbackCardHighlight,
-                        { backgroundColor: isCorrect ? colors.mint : colors.coral },
+                        { backgroundColor: isCorrect ? colors.jade : colors.berry },
                       ]}
                     />
                     <View
                       testID="feedback-wash-shadow"
                       style={[
                         styles.feedbackCardShadow,
-                        { backgroundColor: isCorrect ? colors.mintDark : colors.coralDark },
+                        { backgroundColor: isCorrect ? colors.jadeDark : colors.berryDark },
                       ]}
                     />
                   </View>
@@ -644,13 +601,7 @@ export function QuestionRenderer({
                     // hidden from assistive tech since the feedbackText below
                     // ("Correct!"/quizCorrect) already announces the result —
                     // this is purely a visual flourish layered on top, not new
-                    // information. "Overlay inside the overlay": this brief,
-                    // auto-fading bubble lives inside the same card as the
-                    // persistent message/buttons below, instead of floating
-                    // separately over the question card. Its own
-                    // scaleAnim/opacityAnim timeline is untouched by the new
-                    // card-level pop-in above — two independent Animated
-                    // drivers, never shared.
+                    // information.
                     <Animated.View
                       testID="quiz-celebration"
                       pointerEvents="none"
@@ -722,34 +673,26 @@ export function QuestionRenderer({
                       replay this same question even after answering
                       correctly, purely for fun; Next always advances via the
                       single onNext/answerCurrentQuestion path, so a correct
-                      Retry can never double-score. */}
+                      Retry can never double-score. Built on design-system's
+                      raised buttons (Paper ripple + accessibility + the
+                      shared lift/press feedback) instead of bare Pressables. */}
                   <View style={styles.feedbackButtonGroup}>
-                    <Pressable
+                    <RaisedSecondaryButton
                       testID="quiz-retry-answer"
+                      label={t('retry', language)}
                       onPress={onRetry}
-                      style={styles.tryAgainButton}
-                      accessibilityRole="button"
+                      size="compact"
+                      color={quizPalette.accent}
                       accessibilityLabel={t('retry', language)}
-                    >
-                      <Text
-                        style={styles.tryAgainButtonText}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.8}
-                      >
-                        {t('retry', language)}
-                      </Text>
-                    </Pressable>
-                    <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButtonSmall}>
-                      <Text
-                        style={styles.nextButtonText}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.8}
-                      >
-                        {t('quizNext', language)}
-                      </Text>
-                    </Pressable>
+                    />
+                    <RaisedPrimaryButton
+                      testID="quiz-next"
+                      label={t('quizNext', language)}
+                      onPress={onNext}
+                      size="compact"
+                      color={isCorrect ? colors.jade : quizPalette.accent}
+                      accessibilityLabel={t('quizNext', language)}
+                    />
                   </View>
                 </View>
               </Animated.View>
@@ -764,7 +707,7 @@ export function QuestionRenderer({
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvas,
   },
   scrollContent: {
     flexGrow: 1,
@@ -783,18 +726,18 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    marginHorizontal: spacing.xs / 2,
+    marginHorizontal: spacing.xxs / 2,
     backgroundColor: colors.disabledBg,
     borderWidth: 2,
     borderColor: colors.disabledBorder,
   },
   progressDotDone: {
-    backgroundColor: colors.sun,
-    borderColor: colors.sunDark,
+    backgroundColor: colors.jade,
+    borderColor: colors.jadeDark,
   },
   progressDotCurrent: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
+    backgroundColor: quizPalette.accent,
+    borderColor: quizPalette.accentDark,
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -804,53 +747,33 @@ const styles = StyleSheet.create({
   // minHeight (rather than flexBasis:0's implicit 0) is what actually makes
   // the ScrollView above a real safety net: without it, a flex:2 sibling can
   // shrink toward zero on a very short screen instead of ever exceeding the
-  // viewport and triggering a scroll.
+  // viewport and triggering a scroll. `flex: 2` lives directly on this same
+  // bordered/shadowed view (not one level removed) precisely so its single
+  // flex:1 child (questionCardClip) below can actually fill it — see the
+  // top-of-file redesign comment on why this isn't <RaisedCard>.
   questionCard: {
     flex: 2,
     minHeight: 70,
-    backgroundColor: colors.white,
     borderRadius: radii.xl,
     borderWidth: 4,
-    borderColor: colors.periwinkleDark,
+    borderColor: quizPalette.accentDark,
     marginBottom: spacing.sm,
-    ...shadow,
-    elevation: 4,
+    ...elevation.level3,
   },
   // Holds the actual content + wash layers, clipped to the card's rounded
   // corners — split out from questionCard above purely so overflow:'hidden'
-  // never lands on the same view as the border/shadow.
+  // never lands on the same view as the border/shadow (iOS clips shadows
+  // away if it shares a view with overflow:'hidden').
   questionCardClip: {
     flex: 1,
     flexDirection: 'row',
     borderRadius: radii.xl,
     overflow: 'hidden',
+    backgroundColor: colors.surface,
     padding: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
     columnGap: spacing.sm,
-  },
-  // Light periwinkle wash over the top ~55%, subtle periwinkle-dark wash
-  // under the bottom ~45% — same proportions as HomeScreen's
-  // cardBackgroundHighlight/cardBackgroundShadow, recolored so the flat
-  // white fill reads as gently lit from above rather than perfectly flat,
-  // while staying pale enough that questionText (dark ink) stays legible.
-  questionCardHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-    backgroundColor: colors.periwinkle,
-    opacity: 0.12,
-  },
-  questionCardShadow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '45%',
-    backgroundColor: colors.periwinkleDark,
-    opacity: 0.08,
   },
   questionImage: {
     height: '100%',
@@ -859,8 +782,8 @@ const styles = StyleSheet.create({
   },
   questionText: {
     flexShrink: 1,
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: typography.h2.fontSize,
+    fontWeight: typography.h2.fontWeight,
     color: colors.ink,
     textAlign: 'center',
   },
@@ -874,35 +797,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     columnGap: spacing.xs,
   },
-  // The Pressable's own hit box/layout slot — kept minimal (just flex sizing
-  // + a touch-target minHeight) and separate from optionCard below, same
-  // split HomeScreen uses between its Pressable and the tilting cardFace, so
-  // the tilt transform on optionCard never affects this row's flex layout.
-  optionPressable: {
+  // The Pressable's own hit box/layout slot — flex + a generous touch-target
+  // minHeight, comfortably above the 48dp minimum since these are meant to
+  // be big, confident targets for a 2-8 year old.
+  optionSlot: {
     flex: 1,
-    minHeight: 44,
+    minHeight: touchTarget.comfortable,
   },
+  // The tilting "face" (AnimatedPressable's innerStyle): flex:1 so it fills
+  // optionSlot exactly (see the top-of-file note on why flex is threaded
+  // explicitly at every level here instead of relying on RaisedCard).
   optionCard: {
     flex: 1,
     flexDirection: 'row',
     borderRadius: radii.lg,
     borderWidth: 3,
-    borderColor: colors.disabledBorder,
-    backgroundColor: colors.white,
+    borderColor: colors.violetSoft,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xs,
     columnGap: spacing.xs,
-    ...shadow,
-    elevation: 3,
+    overflow: 'hidden',
+    ...elevation.level2,
   },
   optionCorrect: {
-    borderColor: colors.mintDark,
-    backgroundColor: colors.mint,
+    borderColor: colors.jadeDark,
+    backgroundColor: colors.jadeSoft,
   },
   optionIncorrect: {
-    borderColor: colors.coralDark,
-    backgroundColor: colors.coral,
+    borderColor: colors.berryDark,
+    backgroundColor: colors.berrySoft,
   },
   optionImage: {
     height: '100%',
@@ -911,36 +836,36 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flexShrink: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
     color: colors.ink,
     textAlign: 'center',
   },
   correctMark: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.mintDark,
+    top: spacing.xxs,
+    right: spacing.xxs,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.jadeDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
   incorrectMark: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.coralDark,
+    top: spacing.xxs,
+    right: spacing.xxs,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.berryDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
   markText: {
     color: colors.white,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   imageFallback: {
@@ -950,54 +875,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   image: {},
-  // Dark, non-interactive backdrop (no onPress — a child must use Retry or
-  // Next, not a tap-outside dismiss) behind the centered feedback card.
+  // Dark, plum-tinted, non-interactive backdrop (no onPress — a child must
+  // use Retry or Next, not a tap-outside dismiss) behind the centered
+  // feedback card — design-system's `overlayScrim` instead of flat black.
   feedbackBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: colors.overlayScrim,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
   },
   // Outer wrapper: pop-in transform/opacity + border/shadow only — no
-  // overflow:'hidden' here (same shadow-vs-clipping split as this file's
-  // questionCard/questionCardClip and HomeScreen's cardFace/cardClip).
+  // overflow:'hidden' here (same shadow-vs-clipping split as questionCard/
+  // questionCardClip above).
   feedbackCard: {
     borderRadius: radii.xl,
-    maxWidth: 420,
+    maxWidth: 440,
     width: '100%',
-    ...shadow,
-    elevation: 8,
   },
   // Holds the actual content + the two-tone wash, clipped to the card's
   // rounded corners.
   feedbackCardClip: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radii.xl,
     overflow: 'hidden',
     padding: spacing.lg,
     alignItems: 'center',
   },
-  // Light wash over the top ~55%, darker wash under the bottom ~45% — same
-  // proportions as questionCardHighlight/Shadow above and HomeScreen's
-  // cardBackgroundHighlight/Shadow, just recolored per-result (mint for
-  // correct, coral for incorrect) inline where these are used, since the
-  // color itself carries meaning here rather than being a fixed brand tint.
+  // Light wash over the top ~55%, darker wash under the bottom ~45% — the
+  // same proportions design-system's `surfaceWash` tokens declare, just
+  // recolored per-result (jade for correct, berry for incorrect) inline
+  // where these are used, since the color itself carries meaning here
+  // rather than being a fixed brand tint.
   feedbackCardHighlight: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '55%',
-    opacity: 0.16,
+    height: surfaceWash.highlightHeightPct,
+    opacity: surfaceWash.highlightOpacity,
   },
   feedbackCardShadow: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: '45%',
-    opacity: 0.1,
+    height: surfaceWash.shadowHeightPct,
+    opacity: surfaceWash.shadowOpacity,
   },
   feedbackMessageRow: {
     flexDirection: 'row',
@@ -1011,15 +935,15 @@ const styles = StyleSheet.create({
   },
   feedbackText: {
     flexShrink: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
     textAlign: 'center',
   },
   feedbackCorrectText: {
-    color: colors.mintDark,
+    color: colors.jadeDark,
   },
   feedbackIncorrectText: {
-    color: colors.coralDark,
+    color: colors.berryDark,
   },
   // Wraps the whole correct-answer reveal (wrong-answer path only) —
   // carries the marginBottom before Retry/Next so it's present whether this
@@ -1035,7 +959,7 @@ const styles = StyleSheet.create({
   // information underneath it, not a second competing headline.
   feedbackCorrectAnswerText: {
     flexShrink: 1,
-    fontSize: 16,
+    fontSize: typography.body.fontSize,
     color: colors.ink,
     textAlign: 'center',
   },
@@ -1050,47 +974,18 @@ const styles = StyleSheet.create({
   feedbackButtonGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    columnGap: spacing.xs,
+    columnGap: spacing.sm,
+    marginTop: spacing.xs,
   },
-  tryAgainButton: {
-    backgroundColor: colors.sun,
-    borderColor: colors.sunDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    ...shadow,
-    elevation: 4,
-  },
-  tryAgainButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.ink,
-  },
-  nextButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.white,
-  },
-  nextButtonSmall: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    ...shadow,
-    elevation: 4,
-  },
-  // A normal flex child now (not absolutely positioned) — it lives inside
-  // feedbackCard, above the message/buttons, rather than floating over the
+  // A normal flex child (not absolutely positioned) — it lives inside the
+  // feedback card, above the message/buttons, rather than floating over the
   // question card separately. pointerEvents "none" (set on the component)
   // still means it can never block a tap on Retry/Next below it.
   celebrationBubble: {
-    backgroundColor: colors.sun,
+    backgroundColor: colors.lemon,
     borderRadius: radii.xl,
     borderWidth: 3,
-    borderColor: colors.sunDark,
+    borderColor: colors.lemonDark,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
@@ -1100,8 +995,8 @@ const styles = StyleSheet.create({
     fontSize: 26,
   },
   celebrationText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
     color: colors.ink,
   },
 });

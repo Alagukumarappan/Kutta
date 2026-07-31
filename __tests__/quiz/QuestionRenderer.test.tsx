@@ -2,7 +2,7 @@ import React from 'react';
 import { render, fireEvent, within } from '@testing-library/react-native';
 import { QuestionRenderer } from '../../src/quiz/QuestionRenderer';
 import type { Question } from '../../src/types/quiz';
-import { colors } from '../../src/theme/tokens';
+import { colors } from '../../src/design-system';
 
 const imageQuestion: Question = {
   id: 'q1',
@@ -431,6 +431,62 @@ describe('QuestionRenderer', () => {
     });
   });
 
+  describe('redesigned answer options (design-system visual language)', () => {
+    it('gives every option a comfortable touch target (>= 48dp) on the redesigned buttons', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      for (const id of ['a', 'b', 'c', 'd']) {
+        const style = StyleSheet.flatten(getByTestId(`option-${id}`).props.style);
+        expect(style.minHeight).toBeGreaterThanOrEqual(48);
+      }
+    });
+
+    it('is disabled (no longer respond to a fresh tap) once the question has been answered', async () => {
+      const onSelect = jest.fn();
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={onSelect}
+          onNext={jest.fn()}
+        />
+      );
+
+      const option = getByTestId('option-c');
+      expect(option.props.accessibilityState?.disabled).toBe(true);
+      await fireEvent.press(option);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("uses the design system's jade/berry palette (not the old mint/coral theme) for the correct/incorrect mark badges", async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={combinedQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const correctMark = StyleSheet.flatten(getByTestId('option-mark-a').props.style);
+      const incorrectMark = StyleSheet.flatten(getByTestId('option-mark-b').props.style);
+      expect(correctMark.backgroundColor).toBe(colors.jadeDark);
+      expect(incorrectMark.backgroundColor).toBe(colors.berryDark);
+    });
+  });
+
   it('does not call onSelect again once an option has already been answered', async () => {
     const onSelect = jest.fn();
 
@@ -801,7 +857,7 @@ describe('QuestionRenderer', () => {
       expect(celebrationScaleEntry.scale).not.toBeCloseTo(scaleEntry.scale);
     });
 
-    it('gives the feedback card a minty wash when the answer is correct', async () => {
+    it('gives the feedback card a jade wash when the answer is correct', async () => {
       const { getByTestId } = await render(
         <QuestionRenderer
           question={imageQuestion}
@@ -815,11 +871,11 @@ describe('QuestionRenderer', () => {
       const { StyleSheet } = require('react-native');
       const highlight = StyleSheet.flatten(getByTestId('feedback-wash-highlight').props.style);
       const shadow = StyleSheet.flatten(getByTestId('feedback-wash-shadow').props.style);
-      expect(highlight.backgroundColor).toBe(colors.mint);
-      expect(shadow.backgroundColor).toBe(colors.mintDark);
+      expect(highlight.backgroundColor).toBe(colors.jade);
+      expect(shadow.backgroundColor).toBe(colors.jadeDark);
     });
 
-    it('gives the feedback card a warm coral-adjacent wash when the answer is incorrect', async () => {
+    it('gives the feedback card a berry wash when the answer is incorrect', async () => {
       const { getByTestId } = await render(
         <QuestionRenderer
           question={imageQuestion}
@@ -833,8 +889,8 @@ describe('QuestionRenderer', () => {
       const { StyleSheet } = require('react-native');
       const highlight = StyleSheet.flatten(getByTestId('feedback-wash-highlight').props.style);
       const shadow = StyleSheet.flatten(getByTestId('feedback-wash-shadow').props.style);
-      expect(highlight.backgroundColor).toBe(colors.coral);
-      expect(shadow.backgroundColor).toBe(colors.coralDark);
+      expect(highlight.backgroundColor).toBe(colors.berry);
+      expect(shadow.backgroundColor).toBe(colors.berryDark);
     });
 
     // No test here drives the card pop-in's cleanup by rerendering across a
