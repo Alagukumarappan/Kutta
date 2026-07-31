@@ -498,6 +498,31 @@ shape) rather than the old flat-styled `Pressable`; confirmed via
 `git stash` that it genuinely fails without the fix (536 total tests
 passing, up from 535).
 
+### Iteration 23 — Fix empty-state tone/hierarchy mismatch (Puzzle + Video galleries)
+**Screens:** Puzzle gallery, Video gallery.
+**Problem:** Investigated a suspected async-race candidate first (Settings'
+"Reset everything" possibly causing an unmounted-component state update,
+since `onReset` synchronously unmounts this screen in the real app) —
+could NOT reliably reproduce it in a realistic test simulation (a wrapper
+component conditionally unmounting SettingsScreen, mirroring RootNavigator's
+actual shape), so it was abandoned rather than committed unverified.
+Pivoted to a confirmed, concrete visual-consistency finding instead:
+`ColoringGallery.tsx`'s empty state already splits its `EmptyStatePanel`
+into a warm short bold `title` ("No pictures yet") plus a softer muted
+`message` (the fuller instructional sentence) — but `PuzzleGallery.tsx` and
+`VideoGallery.tsx`'s empty states instead passed their WHOLE instructional
+sentence as a single bold `title` with no `message`, a real tone/hierarchy
+mismatch against Coloring's pairing.
+**Fix:** Added `emptyPicturesTitle`/`emptyVideosTitle` i18n keys and
+updated both galleries to split title+message the same way Coloring does,
+reusing the existing `emptyPictures`/`emptyVideos` keys unchanged as the
+`message` (not renamed, so nothing else depending on them verbatim broke).
+**Tests:** Extended both galleries' existing empty-state tests to assert
+the new title text renders alongside the existing message text; confirmed
+via `git stash` that both genuinely fail without the fix (536 total tests
+passing — same count as iteration 22, since these are new assertions
+inside existing tests, not new test cases).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -565,8 +590,23 @@ passing, up from 535).
 - Global FolderErrorScreen (restyled from bare/unstyled to match every
   other error state's design-system pattern)
 - Quiz (error state restyled onto RaisedCard+RaisedPrimaryButton)
+- Puzzle gallery + Video gallery (empty-state title/message split to match
+  Coloring's tone/hierarchy)
 
 ## Remaining polish opportunities (not yet done)
+- Investigated, not confirmed: SettingsScreen's `performReset` calls
+  `setResetting(false)` in a `finally` block AFTER `onReset?.()`, and in the
+  real app `onReset` is wired to RootNavigator's `setProfile(null)`, which
+  conditionally unmounts this screen — in theory a guaranteed "state update
+  on an unmounted component" warning. Tried to reproduce with a realistic
+  test (a wrapper component conditionally unmounting SettingsScreen on
+  reset, mirroring RootNavigator's actual shape) and could NOT trigger the
+  warning even with the un-fixed code — React's batching may coalesce both
+  updates before any commit, meaning this may not actually be a live bug in
+  practice. Worth a deeper look (e.g. testing against the real
+  RootNavigator integration, not just SettingsScreen in isolation) before
+  committing any fix here, rather than assuming the theoretical race is
+  real.
 - `QuizScreen.tsx`'s loading/empty states still use the OLD
   `theme/tokens.ts` palette (the error state was fixed in iteration 22) —
   self-documented in the file's own header comment as intentionally out of

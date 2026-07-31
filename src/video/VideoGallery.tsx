@@ -239,7 +239,12 @@ export function VideoGallery({
         )}
       </View>
       {videos.length === 0 ? (
-        <EmptyStatePanel testID="video-gallery-empty" emoji="🎥" title={t('emptyVideos')} />
+        <EmptyStatePanel
+          testID="video-gallery-empty"
+          emoji="🎥"
+          title={t('emptyVideosTitle')}
+          message={t('emptyVideos')}
+        />
       ) : (
         <FlatList
           data={videos}

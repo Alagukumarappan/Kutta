@@ -68,11 +68,20 @@ export const UI_STRINGS = {
   emptyPictures: { en: 'No pictures yet — add some to the pictures folder!', de: 'Noch keine Bilder — füge welche zum Bilderordner hinzu!' },
   emptyVideos: { en: 'No videos yet — add some to the videos folder!', de: 'Noch keine Videos — füge welche zum Videoordner hinzu!' },
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },
-  // Title for ColoringGallery's redesigned EmptyStatePanel (design-system);
-  // `emptyColoring` above is reused unchanged as the panel's `message`, so
-  // this is purely an ADDITIONAL headline, not a replacement/rename of that
-  // existing key (which other code/tests may still rely on verbatim).
+  // Titles for the design-system EmptyStatePanel used by all three galleries
+  // (Coloring, Puzzle, Video). `emptyColoringTitle` predates this and was
+  // already applied to Coloring; `emptyPicturesTitle`/`emptyVideosTitle`
+  // extend the same title+message split to Puzzle/Video, which previously
+  // passed their whole instructional sentence as a single bold `title` with
+  // no softer `message` — a real tone/hierarchy mismatch against Coloring's
+  // warm short headline + gentler body pairing. `emptyPictures`/
+  // `emptyVideos` above are reused unchanged as each panel's `message`, so
+  // these are purely ADDITIONAL headlines, not replacements/renames of
+  // those existing keys (which other code/tests may still rely on
+  // verbatim).
   emptyColoringTitle: { en: 'No pictures yet', de: 'Noch keine Bilder' },
+  emptyPicturesTitle: { en: 'No pictures yet', de: 'Noch keine Bilder' },
+  emptyVideosTitle: { en: 'No videos yet', de: 'Noch keine Videos' },
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   // Screen-reader-only accessible name for the progress-dots row in

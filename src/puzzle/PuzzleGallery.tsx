@@ -320,7 +320,12 @@ export function PuzzleGallery({
         </Pressable>
       </Modal>
       {images.length === 0 ? (
-        <EmptyStatePanel testID="puzzle-gallery-empty" emoji="🧩" title={t('emptyPictures')} />
+        <EmptyStatePanel
+          testID="puzzle-gallery-empty"
+          emoji="🧩"
+          title={t('emptyPicturesTitle')}
+          message={t('emptyPictures')}
+        />
       ) : (
         <FlatList
           testID="puzzle-gallery-list"

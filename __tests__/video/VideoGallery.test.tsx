@@ -85,6 +85,12 @@ describe('VideoGallery', () => {
       </LanguageProvider>
     );
 
+    // Regression test for the premium-polish visual-consistency pass: this
+    // empty state used to pass its whole instructional sentence as a single
+    // bold `title`, unlike ColoringGallery's own empty state, which already
+    // splits a warm short headline from a softer explanatory `message` — a
+    // real tone/hierarchy mismatch, now fixed to match.
+    await findByText('No videos yet');
     await findByText('No videos yet — add some to the videos folder!');
   });
 
