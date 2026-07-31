@@ -9,6 +9,11 @@ export const UI_STRINGS = {
   onboardingSave: { en: 'Save', de: 'Speichern' },
   onboardingSavingMessage: { en: 'First time setup can take a little while — please wait...', de: 'Die Ersteinrichtung kann etwas dauern - bitte warten...' },
   onboardingSelectAge: { en: 'Select age', de: 'Alter wählen' },
+  // Accessibility labels for AgePicker (used by both Onboarding and
+  // Settings) — same "positional/value fallback label" idiom as
+  // quizAnswerOptionLabel/puzzlePieceSlotLabel above.
+  ageOptionLabel: { en: '{age} years old', de: '{age} Jahre alt' },
+  ageModalCloseLabel: { en: 'Close age picker', de: 'Altersauswahl schließen' },
   onboardingNameMissing: { en: 'Please enter a name', de: 'Bitte gib einen Namen ein' },
   onboardingAgeMissing: { en: 'Please select an age', de: 'Bitte wähle ein Alter aus' },
   onboardingFolderMissing: { en: 'Please choose a content folder', de: 'Bitte wähle einen Inhaltsordner' },

@@ -257,6 +257,26 @@ answer's state update commits, asserting the second question still shows
 and the session isn't prematurely finished (515 total tests passing, up
 from 514).
 
+### Iteration 12 — Accessibility semantics for AgePicker (Onboarding + Settings)
+**Screens:** Onboarding, Settings.
+**Problem:** Accessibility audit continuing the same sweep as iterations
+3-5. `AgePicker` — a shared component used by both the mandatory first-run
+Onboarding screen and Settings — had zero accessibility semantics anywhere:
+the closed trigger field, the modal-dismiss backdrop, and all 7 age-option
+rows had no `accessibilityRole`, `accessibilityLabel`, or
+`accessibilityState`. A screen-reader user couldn't tell what the field
+showed, what each option represented, or which age was currently selected
+— on a control that's mandatory to complete first-run setup.
+**Fix:** Added `accessibilityRole="button"` to the trigger, the backdrop,
+and every option; a value-or-placeholder label on the trigger and a
+templated "{age} years old" label (new `ageOptionLabel` i18n key) on each
+option; `accessibilityState={{selected}}` on the current age; and a real
+label (new `ageModalCloseLabel` i18n key) plus a `testID` on the previously
+unlabeled modal-dismiss backdrop.
+**Tests:** Five new regression tests covering the trigger's two label
+states, every option's role/label/selected-state, the backdrop's label,
+and German translations (520 total tests passing, up from 515).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -280,6 +300,8 @@ from 514).
 - Quiz's "Next" button had no rapid-double-tap protection, letting a
   double-tap silently skip a question and mis-score it — fixed in
   iteration 11.
+- `AgePicker` (Onboarding + Settings) had zero accessibility semantics on
+  its trigger, backdrop, and all 7 options — fixed in iteration 12.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -301,6 +323,7 @@ from 514).
 - Video player (completion celebration added)
 - Home screen (card text contrast fixed for 3 of 5 activities)
 - Quiz (Next button double-tap/skip bug fixed)
+- AgePicker / Onboarding + Settings (accessibility semantics added)
 
 ## Remaining polish opportunities (not yet done)
 - White-on-bubblegum (Coloring card) is 3.04:1 — technically passes the
@@ -343,11 +366,10 @@ from 514).
 - Accessibility: check color-contrast and font-scaling behavior on the new
   design-system components under Android's large-font accessibility
   setting.
-- `AgePicker` (used in both Onboarding and Settings) has zero accessibility
-  semantics anywhere — the trigger, the modal-dismiss overlay, and all 7
-  age options have no `accessibilityRole`/`accessibilityLabel`/
-  `accessibilityState`, the same class of gap iterations 3-5 already fixed
-  elsewhere. Good candidate for a near-future iteration.
+- `PieceCountPicker` (puzzle difficulty picker, same shared-component shape
+  as `AgePicker` but a separate implementation) has the exact same
+  accessibility gap `AgePicker` had before iteration 12 — trigger, backdrop,
+  and all 4 options are unlabeled. Good next candidate, same fix shape.
 - No screen calls `AccessibilityInfo.isReduceMotionEnabled` — every
   spring/timing animation (celebration bubbles, score-card pop-in, progress
   dots, tilt-press) ignores the OS reduced-motion setting entirely. Real

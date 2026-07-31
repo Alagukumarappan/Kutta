@@ -1,24 +1,30 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { AgePicker } from '../../src/components/AgePicker';
+import { LanguageProvider } from '../../src/i18n/LanguageContext';
 
 // AgePicker previously had no dedicated test file of its own (only indirect
 // coverage via OnboardingScreen.test.tsx / SettingsScreen.test.tsx, which
 // exercise its onOpen/onChange wiring but never its touch-target sizing).
 // This file adds that missing direct coverage, focused specifically on the
 // touch-target-sizing gap flagged (but left unmeasured) since iteration 16.
-function renderPicker(props: Partial<React.ComponentProps<typeof AgePicker>> = {}) {
+function renderPicker(
+  props: Partial<React.ComponentProps<typeof AgePicker>> = {},
+  language: 'en' | 'de' = 'en'
+) {
   return render(
-    <AgePicker
-      value={null}
-      onChange={jest.fn()}
-      visible={true}
-      onOpen={jest.fn()}
-      onClose={jest.fn()}
-      placeholder="Select age"
-      testIDPrefix="test-age"
-      {...props}
-    />
+    <LanguageProvider initialLanguage={language}>
+      <AgePicker
+        value={null}
+        onChange={jest.fn()}
+        visible={true}
+        onOpen={jest.fn()}
+        onClose={jest.fn()}
+        placeholder="Select age"
+        testIDPrefix="test-age"
+        {...props}
+      />
+    </LanguageProvider>
   );
 }
 
@@ -54,5 +60,48 @@ describe('AgePicker touch targets', () => {
       Array.isArray(style) ? Object.assign({}, ...style.map(flattenStyle)) : style || {};
     const style = flattenStyle(option4.props.style);
     expect(style.minHeight).toBeGreaterThanOrEqual(48);
+  });
+});
+
+// Regression tests for the premium-polish accessibility pass: AgePicker had
+// zero accessibility semantics anywhere (trigger, modal-dismiss overlay, and
+// all 7 age options) — the same class of gap already fixed elsewhere (quiz
+// options, puzzle pieces, tic-tac-toe cells), but on a component used in
+// TWO first-run-critical screens (Onboarding and Settings).
+describe('AgePicker accessibility', () => {
+  it('gives the closed field a button role and a placeholder-based label when no age is chosen', async () => {
+    const { getByTestId } = await renderPicker({ value: null });
+    const field = getByTestId('test-age-picker');
+    expect(field.props.accessibilityRole).toBe('button');
+    expect(field.props.accessibilityLabel).toBe('Select age');
+  });
+
+  it("gives the closed field a value-based label once an age is chosen, instead of the placeholder", async () => {
+    const { getByTestId } = await renderPicker({ value: 5 });
+    const field = getByTestId('test-age-picker');
+    expect(field.props.accessibilityLabel).toBe('5 years old');
+  });
+
+  it('gives every modal age option a button role, a distinct value label, and marks only the current age as selected', async () => {
+    const { getByTestId } = await renderPicker({ value: 4 });
+    for (const option of [2, 3, 4, 5, 6, 7, 8]) {
+      const optionEl = getByTestId(`test-age-option-${option}`);
+      expect(optionEl.props.accessibilityRole).toBe('button');
+      expect(optionEl.props.accessibilityLabel).toBe(`${option} years old`);
+      expect(optionEl.props.accessibilityState).toEqual({ selected: option === 4 });
+    }
+  });
+
+  it('gives the modal-dismiss overlay a button role and a real label instead of leaving it unlabeled', async () => {
+    const { getByTestId } = await renderPicker();
+    const overlay = getByTestId('test-age-modal-overlay');
+    expect(overlay.props.accessibilityRole).toBe('button');
+    expect(overlay.props.accessibilityLabel).toBe('Close age picker');
+  });
+
+  it('translates the age option and modal-close labels into German', async () => {
+    const { getByTestId } = await renderPicker({ value: 4 }, 'de');
+    expect(getByTestId('test-age-option-4').props.accessibilityLabel).toBe('4 Jahre alt');
+    expect(getByTestId('test-age-modal-overlay').props.accessibilityLabel).toBe('Altersauswahl schließen');
   });
 });
