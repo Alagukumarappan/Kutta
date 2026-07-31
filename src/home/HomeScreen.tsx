@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radii, spacing, shadow, clamp } from '../theme/tokens';
@@ -41,6 +41,81 @@ export function HomeScreen({
   // screen that has to account for the status bar / notch / gesture-nav bar
   // on all four sides itself.
   const insets = useSafeAreaInsets();
+
+  // One persistent Animated.Value per card, keyed by testID (not array
+  // index) so it stays correctly matched to its card even if CARDS is ever
+  // reordered. Purely a decorative press-feedback transform — created once
+  // via useRef so identity is stable across re-renders, matching the
+  // `scaleAnim`/`opacityAnim` convention QuestionRenderer's celebration
+  // animation already established (iteration 17) rather than re-creating a
+  // fresh Animated.Value on every render.
+  const cardScales = React.useRef(
+    Object.fromEntries(CARDS.map((card) => [card.testID, new Animated.Value(1)])) as Record<string, Animated.Value>
+  ).current;
+
+  // Any in-flight per-card animation, so it can be stopped on unmount below
+  // instead of left running. This can't cause a setState-after-unmount
+  // warning either way (it's a bare Animated.Value, not React state), but an
+  // in-flight spring left to finish on its own keeps its native-driver frame
+  // callbacks alive for a little while after the screen is gone — stopping
+  // it explicitly is the cleaner, fully-self-contained behavior, and (in
+  // Jest specifically) avoids one running test's still-settling spring
+  // spilling stray native-driver ticks into whatever the *next* test renders.
+  const activeAnimationsRef = React.useRef<Record<string, Animated.CompositeAnimation>>({});
+
+  function animateCard(testID: string, toValue: number) {
+    // Brief, native-driven spring — only ever changes `transform`, so it
+    // never touches layout size (no reflow, no S22 screen-fit risk).
+    const animation = Animated.spring(cardScales[testID], {
+      toValue,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 0,
+    });
+    activeAnimationsRef.current[testID] = animation;
+    animation.start();
+  }
+
+  // Home has no navigation-driven unmount to rely on (unlike e.g. the quiz's
+  // "Home" button, which permanently leaves its screen instance) — React
+  // Navigation's native stack keeps HomeScreen mounted underneath whatever
+  // screen it pushes, so a rapid double-tap on the SAME card really could
+  // fire onNavigate twice (and push the same route twice) before the first
+  // navigation completes, same risk category as iteration 21's Play
+  // Again/Home guards. The lock is deliberately keyed PER CARD (not one lock
+  // shared across all four): the app already allows a child to tap several
+  // different cards in quick succession — each is a genuinely separate,
+  // intentional choice, not a duplicate of the same action — so only a
+  // repeated tap on the same still-locked card is blocked. Each card's lock
+  // re-arms itself a short moment later, well past any realistic double-tap
+  // window but far short of any real "browsed a gallery and came back"
+  // return trip, so a later, genuine return visit to Home can still navigate
+  // normally.
+  const navLockRef = React.useRef<Record<string, boolean>>({});
+  // Every re-arm timer this instance has scheduled, so it can be cancelled on
+  // unmount below — without this, a timer from one rendered instance (e.g. a
+  // previous test's) could still fire after that instance is gone, which is
+  // harmless in the app itself (it only flips a plain ref, not React state,
+  // so it can't cause a setState-after-unmount warning) but is exactly the
+  // kind of stray pending timer that's worth not leaving behind regardless.
+  const rearmTimeoutsRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  React.useEffect(() => {
+    return () => {
+      rearmTimeoutsRef.current.forEach(clearTimeout);
+      Object.values(activeAnimationsRef.current).forEach((animation) => animation.stop());
+    };
+  }, []);
+
+  function handleCardPress(card: CardSpec) {
+    if (navLockRef.current[card.testID]) return;
+    navLockRef.current[card.testID] = true;
+    onNavigate(card.destination);
+    const timeoutId = setTimeout(() => {
+      navLockRef.current[card.testID] = false;
+    }, 800);
+    rearmTimeoutsRef.current.push(timeoutId);
+  }
 
   // Landscape gives ample width and limited height, so the 4 cards sit in a
   // single row instead of a 2x2 stack. Size them from the actual window
@@ -90,14 +165,20 @@ export function HomeScreen({
           <Pressable
             key={card.testID}
             testID={card.testID}
-            onPress={() => onNavigate(card.destination)}
+            onPress={() => handleCardPress(card)}
+            onPressIn={() => animateCard(card.testID, 0.95)}
+            onPressOut={() => animateCard(card.testID, 1)}
             style={[
               styles.card,
               { width: cardWidth, height: cardHeight, backgroundColor: card.bg, borderColor: card.border },
             ]}
           >
-            <Text style={styles.cardEmoji}>{card.emoji}</Text>
-            <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+            <Animated.View
+              style={[styles.cardInner, { transform: [{ scale: cardScales[card.testID] }] }]}
+            >
+              <Text style={styles.cardEmoji}>{card.emoji}</Text>
+              <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+            </Animated.View>
           </Pressable>
         ))}
       </View>
@@ -162,6 +243,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     ...shadow,
     elevation: 4,
+  },
+  // Wraps the card's visible content only (not the Pressable itself), so the
+  // press-in/press-out scale transform above never changes the Pressable's
+  // own layout box/hit area — purely a visual "squish" of what's inside it.
+  cardInner: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardEmoji: {
     fontSize: 52,

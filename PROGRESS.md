@@ -1,8 +1,31 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 23
-- Latest completed improvement (iteration 23, one commit): a fresh, honest
+- Phase: 4 (original-spec fast-follow items), Iteration: 24
+- Latest completed improvement (iteration 24, one commit): Phase 4 item 1
+  — a brief scale-down-on-press-in/scale-back-on-press-out animation on
+  `HomeScreen.tsx`'s four feature cards, plus a per-card double-fire
+  navigation guard discovered to be genuinely needed (HomeScreen stays
+  mounted underneath whatever screen React Navigation's native stack
+  pushes). See Completed #21 for full detail, including a real TDD
+  complication (a native-driver `Animated.spring` fired via manually-
+  simulated `pressIn`/`pressOut` events destabilized the RNTL test
+  renderer across unrelated tests in the same file — worked around by
+  testing plain presses + direct code-reading instead, per this
+  iteration's own documented fallback for animation values that aren't
+  practically testable).
+  - Baseline before this iteration: tsc clean, 26/26 suites, 222/222 tests.
+  - After this iteration: tsc clean, 26/26 suites, **225/225 tests** (+3
+    new, all in a new `describe('card press animation / navigation
+    safety', ...)` block in `__tests__/home/HomeScreen.test.tsx`; the one
+    pre-existing HomeScreen test is unchanged, all its original assertions
+    intact).
+  - A code-review subagent independently reviewed the diff and approved
+    with no required changes (two non-blocking nits noted, left as-is —
+    see Completed #21).
+  - Commit: `<see git log — loop: add a subtle press animation to
+    HomeScreen's feature cards>`.
+- Previous iteration's completed improvement (iteration 23, one commit): a fresh, honest
   re-check of both options this iteration's brief suggested, per the brief's
   instruction not to manufacture a fake gap:
   1. **HomeScreen's four feature cards** — checked `src/home/HomeScreen.tsx`'s
@@ -767,7 +790,12 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: **26/26 suites passing, 222/222 tests passing** (up from
+- Test status: **26/26 suites passing, 225/225 tests passing** (up from
+  26/26 suites, 222/222 tests — iteration 24 added 3 new tests, all in a
+  new `describe('card press animation / navigation safety', ...)` block in
+  `__tests__/home/HomeScreen.test.tsx`; no existing test
+  modified/removed/skipped).
+- Previous test status: 26/26 suites passing, 222/222 tests passing (up from
   26/26 suites, 218/218 tests — iteration 23 added 4 new tests, all in a new
   `describe('leafNameOf', ...)` block in
   `__tests__/storage/folderAccess.test.ts`; no existing test
@@ -1551,6 +1579,106 @@
       **203/203 tests** (196 baseline + 7 new, 0 removed/modified).
     - Commit: see `git log` on `overnight-improvements`, message `loop: add
       a screen-reader progress label to the quiz's existing progress dots`.
+21. **loop: add a subtle press animation to HomeScreen's feature cards**
+    (iteration 24, Phase 4 item 1, per iteration 23's `Next` note).
+    - Read `src/home/HomeScreen.tsx` and its existing test file in full
+      first: the 4 cards are `Pressable`s with `onPress={() =>
+      onNavigate(card.destination)}` and no `onPressIn`/`onPressOut` at all
+      before this iteration, and `src/quiz/QuestionRenderer.tsx`'s
+      correct-answer celebration (iteration 17) for the established
+      `Animated.Value` via `useRef`, native-driven `Animated.spring`/
+      `timing`, and unmount-cleanup conventions.
+    - Added one persistent `Animated.Value` per card (keyed by `testID`, not
+      array index, so it can't get mismatched if `CARDS` is ever reordered),
+      and wired `onPressIn`/`onPressOut` to a small `animateCard` helper that
+      springs the value to `0.95`/back to `1` via `Animated.spring(...,
+      { useNativeDriver: true })`. The scale is applied via `transform` on a
+      new `Animated.View` (`cardInner`) that wraps only the card's *visible
+      content* (emoji + label), while the outer `Pressable` keeps its
+      original fixed `width`/`height` style untouched — so the press
+      animation is a pure visual transform with zero layout/size change (no
+      Galaxy S22 screen-fit risk, confirmed by inspection: `transform` never
+      participates in Yoga's layout pass).
+    - Double-fire guard: `onPress` (navigation) was found to be genuinely
+      decoupled from the animation — the two are separate `Pressable` props
+      with no shared await/chaining. But `src/navigation/RootNavigator.tsx`
+      confirms HomeScreen is NOT unmounted when it pushes a card's
+      destination (React Navigation's native stack keeps the previous screen
+      mounted underneath), so a rapid double-tap on the SAME card really
+      could call `onNavigate` twice before the first navigation completes —
+      the same risk category as iteration 21's Play Again/Home guards. Added
+      a `navLockRef` keyed **per card testID** (not one lock shared across
+      all four): the app already allows a child to tap several *different*
+      cards in quick succession (the pre-existing "shows the child name and
+      all four feature cards" test presses all 4 in sequence) — that's a
+      genuinely different action each time, not a duplicate of the same one,
+      so only a repeated tap on the *same*, still-locked card is blocked.
+      Each card's lock re-arms itself 800ms after firing (well past any
+      realistic double-tap, far short of any real "browsed a gallery and
+      came back" return trip), via a `setTimeout` whose ID is tracked in
+      `rearmTimeoutsRef` and cleared on unmount, alongside `.stop()` on any
+      still-running `Animated.CompositeAnimation` tracked in
+      `activeAnimationsRef` — belt-and-braces cleanup, though neither is
+      strictly required for correctness (a bare `Animated.Value` flip after
+      unmount can't cause a setState-after-unmount warning, and a
+      native-driven spring runs on the UI thread, not a JS timer that could
+      outlive the screen).
+    - TDD: added a `describe('card press animation / navigation safety',
+      ...)` block to `__tests__/home/HomeScreen.test.tsx` (3 new tests) —
+      a plain press still calls `onNavigate` exactly once with the right
+      destination; pressing the SAME captured card element twice (the same
+      "stale double-tap" shape as `QuizScreen.test.tsx`'s Play Again guard
+      test) calls `onNavigate` only once; and pressing two *different* cards
+      in sequence still calls `onNavigate` for both (proving the guard is
+      per-card, not an over-broad shared lock that would silently break a
+      child who taps the wrong card and immediately taps the right one).
+    - A real complication surfaced during TDD, documented in a code comment
+      in the test file: a first attempt manually fired raw `'pressIn'`/
+      `'pressOut'` events via `fireEvent(card, 'pressIn'/'pressOut')` to
+      simulate a real touch's full press sequence and directly exercise the
+      animation start. This started a real native-driver `Animated.spring`
+      with no actual native module behind it under Jest, which left the
+      RNTL test renderer in a corrupted state (`render()` on the *next* test
+      returned a null tree, `console.error`'d "overlapping act() calls",
+      and unrelated later tests failed to find elements that were
+      definitely being rendered) — a known category of RN-testing pitfall.
+      Confirmed via inspection that `fireEvent.press` alone never
+      synthesizes `pressIn`/`pressOut` in this testing library anyway, so
+      the tests were rewritten to use plain presses only, relying on that
+      plus direct code-reading (`onPress`/`onPressIn`/`onPressOut` are
+      separate props with no shared logic) to verify navigation-timing
+      correctness — per this iteration's own instructions, this is the
+      documented "not practically testable without excessive mocking,
+      rely on the navigation-correctness tests" fallback, not a gap.
+      Separately, all `fireEvent.press` calls in the new tests were changed
+      to `await fireEvent.press(...)` (matching the pre-existing test's
+      style) after discovering un-awaited presses caused the same kind of
+      act()-scope leakage across tests even without any animation involved.
+    - Verified `npx tsc --noEmit` clean, full suite **26/26 suites, 225/225
+      tests** (222 baseline + 3 new; no existing test modified, skipped, or
+      renamed).
+    - A code-review subagent independently reviewed the diff: confirmed
+      `activeAnimationsRef`'s per-testID overwrite-on-each-press pattern
+      can't leak (RN's `Animated.Value` only tracks one active animation at
+      a time; starting a new spring implicitly interrupts the previous one,
+      and `.stop()` on an already-finished animation is a safe no-op),
+      confirmed the per-card (not shared) lock granularity is correct and
+      race-free (RN's press dispatch is synchronous on the JS thread, so the
+      ref read/write in `handleCardPress` can't be torn), confirmed the
+      800ms re-arm window can't realistically drop a legitimate tap,
+      confirmed `onPress`/`onPressIn`/`onPressOut` are genuinely decoupled
+      so navigation timing is unaffected, confirmed no hard-limit
+      violations (no new deps, no `any`/`ts-ignore`, no native/config files
+      touched, no test weakened), and confirmed the tests are
+      non-tautological and the test file's documented pressIn/pressOut
+      workaround is a reasonable, honestly-labeled engineering tradeoff
+      rather than a false claim of animation coverage. Two non-blocking
+      nits raised (unbounded `rearmTimeoutsRef` growth until unmount at 4
+      cards max — harmless; the `as Record<string, Animated.Value>` cast on
+      `Object.fromEntries` is a mild type-assertion smell, not unsafe) —
+      left as-is, not required. **Approved.**
+    - Commit: see `git log` on `overnight-improvements`, message `loop: add
+      a subtle press animation to HomeScreen's feature cards`.
 
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
@@ -1582,6 +1710,26 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
+Iteration 24 closed out Phase 4 item 1 (home card press animations) — see
+Current Status / Completed #21 for full detail. It should not be re-treaded
+without new evidence.
+
+**Iteration 25 should pick up Phase 4 item 3/4 (color palette
+exhaustiveness)**, per iteration 23's own fallback ordering (still valid,
+untouched by this iteration): verify the current 12-color `PALETTE` in
+`src/coloring/palette.ts` against the spec's exhaustive category list
+(basic/light/dark/warm/cool/skin-tone-friendly/neutral) rather than assuming
+12 is enough; only add colors if a category is genuinely missing (remember
+any new color needs both an EN+DE `nameKey` per iteration 15's established
+`PaletteColor.nameKey` pattern, and the color-swatch accessibility/selection
+wiring iteration 15 already built will pick up any new entries automatically
+via the array map — no separate wiring needed). If that turns out to need no
+code change (12 already covers every category), fall through to Phase 4
+item 5 (optional child profile picture) per the same ordering iteration 23
+laid out — only start it if a safe first slice can be fully scoped AND
+completed in one iteration, otherwise write a scoped plan into this section
+instead of half-building it.
+
 Iteration 20 closed out the progress-dots overflow question definitively
 (see Technical Decisions: NOT a genuine risk, given the app's landscape-only
 lock — no code change needed, one documenting test added). It should not be
@@ -1626,20 +1774,12 @@ a full iteration on their own without checking for something better first):
   null }` is trivially correct by inspection.
 
 Given both remaining pure-logic gaps are now small and low-marginal-value,
-iteration 24 should **switch focus to the ORIGINAL SPEC's Phase 4 items**
-per this iteration's brief's fallback ordering:
-1. **Phase 4 item 1 (home card press animations)** is the best-scoped next
-   pick — a brief `Animated`/`Pressable` press-state scale/opacity pulse on
-   `HomeScreen.tsx`'s 4 cards (`src/home/HomeScreen.tsx`, the `Pressable`
-   wrapping each `card` style, ~testIDs `home-card-*`). No new dependency
-   needed (RN's built-in `Animated` API, already used for the quiz
-   correct-answer celebration since iteration 17 — follow that same
-   pattern: `useRef(new Animated.Value(...)).current`,
-   `Animated.spring`/`timing` on `onPressIn`/`onPressOut`, cleanup via
-   `.stop()` in a `useEffect`/unmount cleanup if a `useEffect`-driven timing
-   is used, must not block/delay `onPress`'s navigation). Keep it purely
-   visual/instant-feeling (scale down slightly on press-in, back on
-   press-out) — do NOT gate navigation on animation completion.
+iteration 24 was directed to **switch focus to the ORIGINAL SPEC's Phase 4
+items** per this iteration's brief's fallback ordering — item 1 below is now
+DONE (iteration 24, see Completed #21 / Current Status); items 2-3 are the
+still-open fallback ordering for iteration 25+ (see the iteration-25 pointer
+at the top of this section, which restates item 2 as the next pick):
+1. ~~Phase 4 item 1 (home card press animations)~~ — **done, iteration 24.**
 2. **Phase 4 item 3/4 (color palette exhaustiveness)** — verify the
    current 12-color `PALETTE` in `src/coloring/palette.ts` against the
    spec's exhaustive category list (basic/light/dark/warm/cool/
@@ -1775,6 +1915,41 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 24's home-card press animation** (new interaction feedback,
+  no layout change — needs a real-device feel-check for animation timing,
+  which source inspection alone can't confirm):
+  - **Screen**: Home (the very first screen after onboarding, `home-card-*`
+    testIDs on the 4 feature cards — Coloring/Quiz/Photo Puzzle/Videos).
+  - **Expected behavior**: pressing down on any card should make it
+    visually "squish" inward slightly (scale to ~0.95) almost instantly,
+    then spring back to full size the moment the finger lifts (or the
+    press is released/cancelled by dragging off the card) — a quick,
+    springy, non-jarring feel, not a slow/mushy shrink-and-grow. The card's
+    outer size/position must NOT visibly shift or reflow at any point
+    (only the emoji+label inside appears to scale) and no flashing/
+    flickering should be visible. Tapping (not holding) a card should
+    navigate to its screen immediately — there should be no perceptible
+    delay waiting for the squish animation to finish before the next
+    screen appears.
+  - **Interaction steps**: from Home, press and hold a finger down on each
+    of the 4 cards one at a time (don't release immediately) to see the
+    press-in squish and confirm it looks smooth/springy rather than
+    stuttery; then do a normal quick tap on a card and confirm the
+    destination screen appears without any felt delay; then try a rapid
+    double-tap on the same card and confirm only one navigation happens
+    (not two screens stacking, and not a confusing double-flicker).
+  - **Ages affected**: all ages 2-8 — this is the very first interactive
+    screen after onboarding, so first-impression feel matters across the
+    whole age range; younger children (2-4) are more likely to press-and-
+    hold or double-tap uncertainly, which is exactly the guarded double-tap
+    scenario above.
+  - **Small-screen check**: purely a `transform: scale` on existing content
+    with no size/layout change, so no new Galaxy S22 screen-fit risk is
+    expected (confirmed by source inspection — `transform` doesn't
+    participate in Yoga's layout pass) — but the animation's real-device
+    *feel* (spring stiffness/duration, whether 0.95 reads as "subtle" vs.
+    "too much"/"too little" at actual screen density) genuinely cannot be
+    verified from source alone and needs a real device or simulator check.
 - **Iteration 22's touch-target sizing changes** (mostly invisible
   `hitSlop`-only changes, but two spots grow real, visible layout — worth a
   quick look, lower priority than the iteration 21 item below since the
