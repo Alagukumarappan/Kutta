@@ -35,7 +35,7 @@ describe('withAlpha', () => {
 
 describe('getActivityPalette', () => {
   it('gives each activity a distinct accent from the others', () => {
-    const activities = ['coloring', 'quiz', 'puzzle', 'video'] as const;
+    const activities = ['coloring', 'quiz', 'puzzle', 'video', 'tictactoe'] as const;
     const accents = activities.map((activity) => getActivityPalette(activity).accent);
     expect(new Set(accents).size).toBe(activities.length);
   });
@@ -58,6 +58,10 @@ describe('getActivityPalette', () => {
 
   it('maps video to the marigold family', () => {
     expect(getActivityPalette('video').accent).toBe(colors.marigold);
+  });
+
+  it('maps tictactoe to the sky family', () => {
+    expect(getActivityPalette('tictactoe').accent).toBe(colors.sky);
   });
 });
 

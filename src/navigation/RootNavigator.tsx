@@ -20,6 +20,9 @@ import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { VideoGallery } from '../video/VideoGallery';
 import { VideoPlayerScreen } from '../video/VideoPlayerScreen';
 import { SplashScreen } from '../splash/SplashScreen';
+import { TicTacToeSetupScreen, type TicTacToeMode } from '../tictactoe/TicTacToeSetupScreen';
+import { TicTacToeScreen } from '../tictactoe/TicTacToeScreen';
+import type { Difficulty as TicTacToeDifficulty } from '../tictactoe/ticTacToeEngine';
 
 // Everything past the very first launch moment (onboarding, home, settings,
 // quiz, coloring, puzzle, video) is landscape-designed, so app.json's
@@ -63,6 +66,8 @@ type RootStackParamList = {
   'puzzle-detail': { imageUri: string; pieceCount: PuzzleDifficulty };
   video: undefined;
   'video-detail': { videoUri: string };
+  tictactoe: undefined;
+  'tictactoe-game': { mode: TicTacToeMode; difficulty: TicTacToeDifficulty | null };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -211,6 +216,22 @@ function AppStack({
       </Stack.Screen>
       <Stack.Screen name="video-detail" options={{ title: titleFor('videoDetailTitle') }}>
         {({ route }) => <VideoPlayerScreen videoUri={route.params.videoUri} />}
+      </Stack.Screen>
+      <Stack.Screen name="tictactoe" options={{ title: titleFor('tictactoeSetupTitle') }}>
+        {({ navigation }) => (
+          <TicTacToeSetupScreen
+            onStart={(mode, difficulty) => navigation.navigate('tictactoe-game', { mode, difficulty })}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="tictactoe-game" options={{ title: titleFor('tictactoeDetailTitle') }}>
+        {({ navigation, route }) => (
+          <TicTacToeScreen
+            mode={route.params.mode}
+            difficulty={route.params.difficulty}
+            onMenu={() => navigation.navigate('tictactoe')}
+          />
+        )}
       </Stack.Screen>
     </Stack.Navigator>
   );

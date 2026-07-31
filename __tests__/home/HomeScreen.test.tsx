@@ -17,7 +17,7 @@ describe('HomeScreen', () => {
     (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue(null);
   });
 
-  it('shows the child name and all four feature cards', async () => {
+  it('shows the child name and all five feature cards', async () => {
     const onNavigate = jest.fn();
     const { getByText } = await render(
       <LanguageProvider initialLanguage="en">
@@ -38,6 +38,9 @@ describe('HomeScreen', () => {
 
     await fireEvent.press(getByText('Videos'));
     expect(onNavigate).toHaveBeenCalledWith('video');
+
+    await fireEvent.press(getByText('Tic-Tac-Toe'));
+    expect(onNavigate).toHaveBeenCalledWith('tictactoe');
   });
 
   it('exposes the settings icon button to screen readers with an accessible name', async () => {
@@ -128,7 +131,7 @@ describe('HomeScreen', () => {
   });
 
   describe('redesigned layout (horizontal scrolling carousel, design-system cards)', () => {
-    it('lays out all four cards at the same fixed width, inside a horizontally-scrolling row', async () => {
+    it('lays out all five cards at the same fixed width, inside a horizontally-scrolling row', async () => {
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
           <HomeScreen childName="Sam" onNavigate={jest.fn()} />
@@ -140,17 +143,19 @@ describe('HomeScreen', () => {
       // RaisedCard fills a fixed-size wrapper via flex:1) — a static style
       // check, not an animation replay, matching this file's existing
       // convention of reading rendered style rather than driving/asserting
-      // on Animated values directly. All four cards now share one constant
+      // on Animated values directly. All five cards now share one constant
       // width so the row can grow to fit more cards later without ever
       // needing to shrink the existing ones.
       const coloringWidth = getByTestId('home-card-coloring').parent?.props.style.width;
       const quizWidth = getByTestId('home-card-quiz').parent?.props.style.width;
       const puzzleWidth = getByTestId('home-card-puzzle').parent?.props.style.width;
       const videoWidth = getByTestId('home-card-video').parent?.props.style.width;
+      const tictactoeWidth = getByTestId('home-card-tictactoe').parent?.props.style.width;
 
       expect(coloringWidth).toBeCloseTo(quizWidth, 5);
       expect(quizWidth).toBeCloseTo(puzzleWidth, 5);
       expect(quizWidth).toBeCloseTo(videoWidth, 5);
+      expect(quizWidth).toBeCloseTo(tictactoeWidth, 5);
 
       const scrollRow = getByTestId('home-card-row');
       expect(scrollRow.props.horizontal).toBe(true);
@@ -167,9 +172,10 @@ describe('HomeScreen', () => {
       expect(getByText('Test your smarts')).toBeTruthy();
       expect(getByText('Piece it together')).toBeTruthy();
       expect(getByText('Watch & learn')).toBeTruthy();
+      expect(getByText('Outsmart the computer!')).toBeTruthy();
     });
 
-    it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video each distinct)', async () => {
+    it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video/TicTacToe each distinct)', async () => {
       const { toJSON } = await render(
         <LanguageProvider initialLanguage="en">
           <HomeScreen childName="Sam" onNavigate={jest.fn()} />
@@ -180,14 +186,15 @@ describe('HomeScreen', () => {
       // somewhere in its inner tree — rather than depend on RaisedCard's own
       // internal DOM shape, just confirm each activity's expected accent hex
       // (from design-system's getActivityPalette, per REDESIGN_PROGRESS.md's
-      // Coloring->bubblegum/Quiz->violet/Puzzle->jade/Video->marigold mapping)
-      // appears in the rendered tree — i.e. this is a real four-color grid,
-      // not four identical rectangles.
+      // Coloring->bubblegum/Quiz->violet/Puzzle->jade/Video->marigold/
+      // TicTacToe->sky mapping) appears in the rendered tree — i.e. this is a
+      // real five-color row, not five identical rectangles.
       const rendered = JSON.stringify(toJSON());
       expect(rendered).toContain(getActivityPalette('coloring').accent);
       expect(rendered).toContain(getActivityPalette('quiz').accent);
       expect(rendered).toContain(getActivityPalette('puzzle').accent);
       expect(rendered).toContain(getActivityPalette('video').accent);
+      expect(rendered).toContain(getActivityPalette('tictactoe').accent);
     });
 
     it('gives the settings icon button a touch target that meets the design system\'s 48dp minimum', async () => {

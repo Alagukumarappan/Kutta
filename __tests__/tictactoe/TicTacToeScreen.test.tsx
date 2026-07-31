@@ -1,0 +1,195 @@
+import React from 'react';
+import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
+import { TicTacToeScreen } from '../../src/tictactoe/TicTacToeScreen';
+import { LanguageProvider } from '../../src/i18n/LanguageContext';
+
+function renderGame(props: Partial<React.ComponentProps<typeof TicTacToeScreen>> = {}) {
+  const onMenu = props.onMenu ?? jest.fn();
+  return render(
+    <LanguageProvider initialLanguage="en">
+      <TicTacToeScreen mode={props.mode ?? 'friend'} difficulty={props.difficulty ?? null} onMenu={onMenu} />
+    </LanguageProvider>
+  );
+}
+
+// Each filled cell's mark has its own dedicated testID (see
+// TicTacToeScreen.tsx) rather than reading it off the surrounding
+// Pressable's `.props.children` — Pressable always renders an extra
+// PressabilityDebugView alongside its real children in this RN version, so
+// `.props.children` on the Pressable itself is never a simple
+// falsy-when-empty value.
+function cellValue(queryByTestId: (id: string) => any, index: number): string | null {
+  const mark = queryByTestId(`tictactoe-cell-${index}-mark`);
+  return mark ? mark.props.children : null;
+}
+
+describe('TicTacToeScreen', () => {
+  describe('friend mode (no computer involved)', () => {
+    it('starts with an empty board and X to move first', async () => {
+      const { queryByTestId, getByTestId } = await renderGame({ mode: 'friend' });
+
+      for (let i = 0; i < 9; i++) {
+        expect(cellValue(queryByTestId, i)).toBeNull();
+      }
+      expect(getByTestId('tictactoe-status').props.children).toBe('Your turn');
+    });
+
+    it('alternates X and O as cells are tapped', async () => {
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(getByTestId('tictactoe-status').props.children).toBe("Friend's turn");
+
+      await fireEvent.press(getByTestId('tictactoe-cell-1'));
+      expect(cellValue(queryByTestId, 1)).toBe('O');
+      expect(getByTestId('tictactoe-status').props.children).toBe('Your turn');
+    });
+
+    it('does not let a player overwrite an already-filled cell', async () => {
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-0')); // still X's cell, O tries and fails
+
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(getByTestId('tictactoe-status').props.children).toBe("Friend's turn");
+    });
+
+    it('declares the winner and shows Play Again / Menu once a line is completed', async () => {
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'friend' });
+
+      // X: 0, 1, 2 (top row) with O taking 3, 4 in between.
+      await fireEvent.press(getByTestId('tictactoe-cell-0')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-3')); // O
+      await fireEvent.press(getByTestId('tictactoe-cell-1')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-4')); // O
+      await fireEvent.press(getByTestId('tictactoe-cell-2')); // X wins
+
+      const overlay = await findByTestId('tictactoe-complete');
+      expect(within(overlay).getByText('Player X wins! 🎉')).toBeTruthy();
+      expect(await findByTestId('tictactoe-retry')).toBeTruthy();
+      expect(await findByTestId('tictactoe-menu')).toBeTruthy();
+    });
+
+    it('Play Again resets the board to a fresh, empty game', async () => {
+      const { getByTestId, findByTestId, queryByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+      await fireEvent.press(getByTestId('tictactoe-cell-3'));
+      await fireEvent.press(getByTestId('tictactoe-cell-1'));
+      await fireEvent.press(getByTestId('tictactoe-cell-4'));
+      await fireEvent.press(getByTestId('tictactoe-cell-2'));
+      await findByTestId('tictactoe-complete');
+
+      await fireEvent.press(getByTestId('tictactoe-retry'));
+
+      await waitFor(() => expect(queryByTestId('tictactoe-complete')).toBeNull());
+      for (let i = 0; i < 9; i++) {
+        expect(cellValue(queryByTestId, i)).toBeNull();
+      }
+    });
+
+    it('Menu calls onMenu', async () => {
+      const onMenu = jest.fn();
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'friend', onMenu });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+      await fireEvent.press(getByTestId('tictactoe-cell-3'));
+      await fireEvent.press(getByTestId('tictactoe-cell-1'));
+      await fireEvent.press(getByTestId('tictactoe-cell-4'));
+      await fireEvent.press(getByTestId('tictactoe-cell-2'));
+      await findByTestId('tictactoe-complete');
+
+      await fireEvent.press(getByTestId('tictactoe-menu'));
+      expect(onMenu).toHaveBeenCalledTimes(1);
+    });
+
+    it('declares a draw when the board fills with no winner', async () => {
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'friend' });
+
+      // A known non-winning fill (verified by hand against every winning
+      // combination):
+      // X O X
+      // X O O
+      // O X X
+      const order = [0, 1, 2, 4, 3, 5, 7, 6, 8];
+      for (const index of order) {
+        await fireEvent.press(getByTestId(`tictactoe-cell-${index}`));
+      }
+
+      const overlay = await findByTestId('tictactoe-complete');
+      expect(within(overlay).getByText("It's a draw!")).toBeTruthy();
+    });
+  });
+
+  describe('computer mode', () => {
+    it('lets the human (X) move first, then triggers a computer (O) move automatically', async () => {
+      jest.useFakeTimers();
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      await act(async () => {
+        fireEvent.press(getByTestId('tictactoe-cell-0'));
+      });
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(getByTestId('tictactoe-status').props.children).toBe('Computer is thinking...');
+
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      const filledCount = Array.from({ length: 9 }, (_, i) => cellValue(queryByTestId, i)).filter(Boolean).length;
+      expect(filledCount).toBe(2);
+      expect(getByTestId('tictactoe-status').props.children).toBe('Your turn');
+
+      jest.useRealTimers();
+    });
+
+    it("blocks a tap during the computer's thinking delay", async () => {
+      jest.useFakeTimers();
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      await act(async () => {
+        fireEvent.press(getByTestId('tictactoe-cell-0'));
+      });
+      // Attempt to tap another cell while the computer "thinks" — must be ignored.
+      await act(async () => {
+        fireEvent.press(getByTestId('tictactoe-cell-1'));
+      });
+
+      const filledBeforeTimer = Array.from({ length: 9 }, (_, i) => cellValue(queryByTestId, i)).filter(
+        Boolean
+      ).length;
+      expect(filledBeforeTimer).toBe(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+      jest.useRealTimers();
+    });
+
+    it('an unbeatable ("hard") computer never loses a full game', async () => {
+      jest.useFakeTimers();
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      // Play a fixed, deliberately non-optimal human sequence and let the
+      // computer respond after each move; the hard AI (ported minimax) must
+      // never end up with a human ('X') win.
+      const humanMoves = [4, 0, 2, 6, 8];
+      for (const index of humanMoves) {
+        if (queryByTestId('tictactoe-complete')) break;
+        if (cellValue(queryByTestId, index) !== null) continue;
+        await act(async () => {
+          fireEvent.press(getByTestId(`tictactoe-cell-${index}`));
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(600);
+        });
+      }
+
+      const status = getByTestId('tictactoe-status').props.children as string;
+      expect(status).not.toBe('You win! 🎉');
+      jest.useRealTimers();
+    });
+  });
+});

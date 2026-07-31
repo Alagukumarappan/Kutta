@@ -93,7 +93,7 @@ export const colors = {
 // Per-activity identity: one accent family per major activity so each card,
 // gallery header, and in-activity chrome can carry a consistent, recognizable
 // color without every screen re-picking hues by hand.
-export type ActivityId = 'coloring' | 'quiz' | 'puzzle' | 'video';
+export type ActivityId = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'tictactoe';
 
 export interface ActivityPalette {
   accent: string;
@@ -106,6 +106,9 @@ const ACTIVITY_PALETTES: Record<ActivityId, ActivityPalette> = {
   quiz: { accent: colors.violet, accentDark: colors.violetDark, accentSoft: colors.violetSoft },
   puzzle: { accent: colors.jade, accentDark: colors.jadeDark, accentSoft: colors.jadeSoft },
   video: { accent: colors.marigold, accentDark: colors.marigoldDark, accentSoft: colors.marigoldSoft },
+  // `sky` was the one brand hue not yet claimed by an activity — a natural
+  // fit for the newest card added after Video.
+  tictactoe: { accent: colors.sky, accentDark: colors.skyDark, accentSoft: colors.skySoft },
 };
 
 // Pure lookup, unit-tested like the rest of this file's helpers — kept as a
