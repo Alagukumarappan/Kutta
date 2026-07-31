@@ -753,6 +753,90 @@ describe('QuestionRenderer', () => {
       expect(totalWidth).toBeLessThan(500);
     });
 
+    it('rests each dot at its resting scale (1) on initial mount, before any advance has happened', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={4}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      // Jest's react-native mock resolves Animated.Value nodes to their
+      // current plain numeric value when styles are flattened (same
+      // technique the "feedback card pop-in + wash" tests above already
+      // rely on) — so this confirms no pop is queued/mid-flight purely from
+      // mounting with a given currentIndex; the transition only fires on a
+      // genuine advance, never on first render.
+      for (const i of [0, 1, 2, 3]) {
+        const flattened = StyleSheet.flatten(getByTestId(`quiz-progress-dot-${i}`).props.style);
+        const scaleEntry = flattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry);
+        expect(scaleEntry.scale).toBeCloseTo(1);
+      }
+    });
+
+    it('animates the newly-current dot growing in and the just-finished dot shrinking back, on a real question advance', async () => {
+      // A single rerender with an updated currentIndex — mirroring this
+      // file's existing safe pattern for driving Animated wiring (see the
+      // "does not re-render into a repeated celebration..." test above) —
+      // rather than a press/replay gesture sequence, per this file's
+      // established note that those have repeatedly corrupted the RNTL
+      // renderer for later tests.
+      const { getByTestId, rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={5}
+        />
+      );
+
+      // Awaited (unlike the double-fire guard test above, which only checks
+      // tree structure): this test reads an Animated.Value's live numeric
+      // state, which only updates once the effect that calls .setValue() has
+      // actually run — and that effect is a passive effect, flushed only
+      // once this rerender's returned act() promise resolves, not
+      // synchronously when rerender() is merely called.
+      await rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={3}
+          totalQuestions={5}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const newCurrentFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-3').props.style);
+      const newCurrentScale = newCurrentFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      const justDoneFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-2').props.style);
+      const justDoneScale = justDoneFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+
+      // Right after the advance, the spring has just been re-armed from its
+      // start ratio (it hasn't yet had a chance to settle back to 1) — the
+      // newly-current dot starts small-relative-to-its-new-size (14/18) and
+      // the just-finished dot starts large-relative-to-its-new-size (18/14),
+      // rather than both snapping straight to 1.
+      expect(newCurrentScale).toBeCloseTo(14 / 18);
+      expect(justDoneScale).toBeCloseTo(18 / 14);
+
+      // Untouched dots keep resting at scale 1.
+      const untouchedFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-0').props.style);
+      const untouchedScale = untouchedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(untouchedScale).toBeCloseTo(1);
+    });
+
     it('does not render a progress row at all when currentIndex/totalQuestions are not provided', async () => {
       const { queryByTestId } = await render(
         <QuestionRenderer

@@ -216,6 +216,88 @@ export function QuestionRenderer({
 
   const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
 
+  // Progress dot transition animations: when the CURRENT dot advances by one
+  // question, the newly-current dot springs from its "not-yet" size ratio up
+  // to its full current-dot size (14px -> 18px) instead of snapping, and the
+  // dot that just stopped being current (now "done") springs back down from
+  // that current-dot size to its resting done-dot size (18px -> 14px)
+  // instead of snapping. Colors (backgroundColor/borderColor) are left as
+  // instant style swaps deliberately: RN's built-in Animated API has no
+  // interpolateColor (only react-native-reanimated does, and that isn't
+  // wired into this app — see the scaleAnim/opacityAnim comment above), and
+  // cross-fading two stacked color layers per dot — times up to 20 dots — is
+  // a lot of added complexity/nodes for a transition on something this
+  // small (14-18px) that a 2-8 year old glances at rather than studies. So
+  // only the SIZE transition (the part that actually reads as "something
+  // changed here") is animated; the color settles instantly alongside it.
+  //
+  // Implemented as a transform:scale on each dot's own fixed-size View
+  // (never width/height — those aren't supported on the native driver and
+  // would also disturb this row's layout, which the 20-dot screen-fit test
+  // below pins down), so the dot's literal style.width/height stay exactly
+  // 14 or 18 the whole time; only how it's drawn on screen eases between
+  // sizes. One Animated.Value per dot, created lazily and cached by index in
+  // a Map (not a fixed-size array, since totalQuestions varies per session)
+  // — cheap even at the real 20-dot maximum, since idle dots simply sit at
+  // rest (scale 1) with no animation running.
+  const dotScalesRef = React.useRef<Map<number, Animated.Value>>(new Map());
+  function getDotScale(index: number): Animated.Value {
+    let value = dotScalesRef.current.get(index);
+    if (!value) {
+      value = new Animated.Value(1);
+      dotScalesRef.current.set(index, value);
+    }
+    return value;
+  }
+
+  // Tracks the previous currentIndex purely to detect a real question
+  // ADVANCE (as opposed to the initial mount, or a Retry — which never
+  // changes currentIndex, see the onRetry prop doc above) so this can't fire
+  // an unwanted pop on first render or on Try Again.
+  const prevCurrentIndexRef = React.useRef<number | undefined>(currentIndex);
+  const activeDotAnimationsRef = React.useRef<Map<number, Animated.CompositeAnimation>>(new Map());
+
+  React.useEffect(() => {
+    const prevIndex = prevCurrentIndexRef.current;
+    prevCurrentIndexRef.current = currentIndex;
+
+    if (!showProgress || prevIndex === currentIndex) return;
+
+    const NOT_CURRENT_TO_CURRENT_RATIO = 14 / 18;
+    const CURRENT_TO_DONE_RATIO = 18 / 14;
+
+    function pop(index: number, fromRatio: number) {
+      const scale = getDotScale(index);
+      activeDotAnimationsRef.current.get(index)?.stop();
+      scale.setValue(fromRatio);
+      // Quick, light spring — well under 300ms — matching this file's other
+      // small transient feedback springs (e.g. the feedback card's own
+      // pop-in above) rather than the bouncier celebration bubble, since
+      // this can fire up to 20 times per session and must never feel showy.
+      const animation = Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 6,
+      });
+      activeDotAnimationsRef.current.set(index, animation);
+      animation.start();
+    }
+
+    if (typeof currentIndex === 'number') {
+      pop(currentIndex, NOT_CURRENT_TO_CURRENT_RATIO);
+    }
+    if (typeof prevIndex === 'number') {
+      pop(prevIndex, CURRENT_TO_DONE_RATIO);
+    }
+  }, [currentIndex, showProgress]);
+
+  React.useEffect(() => {
+    return () => {
+      activeDotAnimationsRef.current.forEach((animation) => animation.stop());
+    };
+  }, []);
+
   const rows: [ [typeof question.options[number], typeof question.options[number]], [typeof question.options[number], typeof question.options[number]] ] = [
     [question.options[0], question.options[1]],
     [question.options[2], question.options[3]],
@@ -387,13 +469,14 @@ export function QuestionRenderer({
             })}
           >
             {Array.from({ length: totalQuestions as number }).map((_, i) => (
-              <View
+              <Animated.View
                 key={i}
                 testID={`quiz-progress-dot-${i}`}
                 style={[
                   styles.progressDot,
                   i < (currentIndex as number) && styles.progressDotDone,
                   i === currentIndex && styles.progressDotCurrent,
+                  { transform: [{ scale: getDotScale(i) }] },
                 ]}
               />
             ))}
