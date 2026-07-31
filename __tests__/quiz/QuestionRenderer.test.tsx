@@ -1,4 +1,5 @@
 import React from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { render, fireEvent, within } from '@testing-library/react-native';
 import { QuestionRenderer } from '../../src/quiz/QuestionRenderer';
 import type { Question } from '../../src/types/quiz';
@@ -1177,6 +1178,64 @@ describe('QuestionRenderer', () => {
       const untouchedFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-0').props.style);
       const untouchedScale = untouchedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
       expect(untouchedScale).toBeCloseTo(1);
+    });
+
+    // Regression test for the premium-polish accessibility pass: this dot
+    // pop always sprang from a smaller/larger starting ratio up to scale 1,
+    // ignoring the OS reduce-motion setting, and can fire up to 20 times per
+    // session. With the setting on, both dots should already be at their
+    // resting scale immediately — no bounce to settle from.
+    it('skips the dot-pop spring when the OS reduce-motion setting is on, landing both dots directly on their resting scale', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+
+      const { getByTestId, rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={5}
+        />
+      );
+      // Let the async reduce-motion check resolve before the real advance
+      // below — same reasoning as this codebase's other reduce-motion
+      // tests (e.g. CelebrationOverlay's own).
+      await rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={5}
+        />
+      );
+
+      await rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={3}
+          totalQuestions={5}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const newCurrentFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-3').props.style);
+      const newCurrentScale = newCurrentFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      const justDoneFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-2').props.style);
+      const justDoneScale = justDoneFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+
+      expect(newCurrentScale).toBeCloseTo(1);
+      expect(justDoneScale).toBeCloseTo(1);
+
+      jest.restoreAllMocks();
     });
 
     it('does not render a progress row at all when currentIndex/totalQuestions are not provided', async () => {

@@ -559,6 +559,32 @@ toggle), since `useReducedMotion` subscribes live to that change.
 tests, up from 536) run and passing, deliberately including every
 consumer's own test file given the shared hook's wide reach.
 
+### Iteration 25 — Extend reduce-motion support to Quiz's progress dots
+**Screen:** Quiz.
+**Problem:** Completes the reduce-motion sweep started in iterations 14
+(CelebrationOverlay), 16 (score card), and 24 (useTiltPress, app-wide).
+`QuestionRenderer.tsx`'s progress-dots row has a small "pop" animation:
+whenever the current question advances, the newly-current dot springs
+from a smaller ratio up to scale 1, and the just-finished dot springs from
+a larger ratio down to scale 1 — via `Animated.spring`, ignoring the OS
+reduce-motion setting, and reachable up to 20 times in a single session
+(the real maximum question count).
+**Fix:** Added `useReducedMotion()`; when enabled, the `pop()` helper
+jumps straight to `scale.setValue(1)` and returns, skipping the
+`setValue(fromRatio)` + spring that follows — landing on the resting scale
+immediately, with the dot's width/height style swap (done/current) still
+conveying progress on its own.
+**Verified as a real bug, not a hypothetical:** confirmed the new
+regression test genuinely fails (reads `0.778`, still mid-spring) without
+the fix. Self-review specifically traced the effect's dependency array
+(now includes `reducedMotion`) for a toggle-mid-quiz edge case — confirmed
+harmless, since the early-return guard (`prevIndex === currentIndex`)
+still fires correctly when only `reducedMotion` changes.
+**Tests:** New regression test reading the dots' actual `Animated.Value`
+transform (same idiom as the pre-existing "animates the newly-current
+dot..." test just above it) with reduce-motion mocked on, asserting both
+dots land directly on scale 1 (538 total tests passing, up from 537).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -630,6 +656,7 @@ consumer's own test file given the shared hook's wide reach.
   Coloring's tone/hierarchy)
 - useTiltPress / app-wide (every raised button/card/pressable now respects
   reduce-motion for its press feedback)
+- Quiz (progress-dots pop animation now also respects reduce-motion)
 
 ## Remaining polish opportunities (not yet done)
 - Investigated, not confirmed: SettingsScreen's `performReset` calls
@@ -710,11 +737,13 @@ consumer's own test file given the shared hook's wide reach.
   next accessibility candidate, but iteration 13 found it's actually dead
   code (never imported anywhere) — the live component fixed instead was
   `PuzzleGallery.tsx`'s inline difficulty modal. See iteration 13's entry.
-- Reduce-motion support: iterations 14, 16, and 24 covered
-  `CelebrationOverlay`, Quiz's score-card pop-in, and `useTiltPress`
-  (app-wide press feedback) respectively — the progress-dots row is the
-  one remaining spring/timing animation still ignoring the OS setting.
-  Small, same fix shape (`useReducedMotion()` + skip the spring).
+- Reduce-motion support: iterations 14, 16, 24, and 25 covered
+  `CelebrationOverlay`, Quiz's score-card pop-in, `useTiltPress` (app-wide
+  press feedback), and the progress-dots pop, respectively — this appears
+  to complete the sweep across every spring/timing animation currently in
+  the app. Worth a final confirmation pass in a future iteration (grep for
+  any remaining un-audited `Animated.spring`/`Animated.timing` call site)
+  before considering this fully closed.
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a
