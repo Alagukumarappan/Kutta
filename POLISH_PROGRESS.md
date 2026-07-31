@@ -28,10 +28,33 @@ branch, which was missing `flex: 1` on its wrapper.
 message renders instead of a blank screen (502 total tests passing, up
 from 499).
 
+### Iteration 2 — Deduplicate PuzzleScreen's loading state, unify on shared LoadingPanel
+**Screen:** Puzzle (the board screen, not the gallery).
+**Problem:** `PuzzleScreen.tsx` had two separate early-return branches
+(`order.length === 0` and `!isImageSizeReady`) with byte-for-byte identical
+markup — a leftover from an earlier refactor that duplicated the block
+instead of merging the conditions. It also hand-rolled its own
+`<ActivityIndicator>` block instead of using the new shared `LoadingPanel`
+component from iteration 1, so the same "puzzle is getting ready" moment
+looked subtly different in code (though visually similar) from every
+gallery's loading state.
+**Fix:** Merged both conditions into one `if (order.length === 0 ||
+!isImageSizeReady)` branch, rendering the shared `LoadingPanel` (tinted
+with `PUZZLE_PALETTE.accentDark`, same as before). Removed the now-dead
+`ActivityIndicator` import and `loadingContainer` style.
+**Why this matters:** consistency is a real premium signal — every loading
+moment in the app now goes through the exact same component, so any future
+loading-state improvement (e.g. a subtle fade-in) benefits every screen at
+once instead of needing to be re-applied by hand in N places.
+**Tests:** No behavior change — all 23 existing PuzzleScreen tests still
+pass unmodified (502 total tests passing).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
   part of iteration 1.
+- `PuzzleScreen.tsx` had two byte-for-byte duplicated loading-state
+  branches (dead code smell, not a user-visible bug) — fixed in iteration 2.
 
 ## Performance improvements
 _(none yet)_
@@ -40,12 +63,9 @@ _(none yet)_
 - Coloring gallery (loading state)
 - Puzzle gallery (loading state)
 - Video gallery (loading state)
+- Puzzle board screen (loading state deduplicated + unified)
 
 ## Remaining polish opportunities (not yet done)
-- PuzzleScreen's own "loading real photo size" state already has a
-  spinner — check it uses the new shared `LoadingPanel` for consistency
-  instead of its own hand-rolled `ActivityIndicator` block, once a broader
-  consistency pass is warranted.
 - OnboardingScreen's "saving" overlay is a full-screen dark scrim + spinner
   + text — visually distinct from the new lighter gallery `LoadingPanel`;
   worth a future pass to decide if that's intentional (blocking modal

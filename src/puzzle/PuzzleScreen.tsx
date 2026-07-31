@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +21,7 @@ import {
   getActivityPalette,
   RaisedCard,
   CelebrationOverlay,
+  LoadingPanel,
 } from '../design-system';
 import {
   computeGridDimensions,
@@ -291,21 +291,17 @@ export function PuzzleScreen({
     onNext();
   }
 
-  if (order.length === 0) {
-    // Briefly true only between mount and the shuffle effect above running —
-    // matches the loading spinner shown below while the photo's real size
-    // is still resolving.
+  // Two independent reasons the board isn't ready yet: `order` is briefly
+  // empty between mount and the shuffle effect running, and the photo's
+  // real width/height may still be resolving — either way, the same single
+  // spinner covers both (previously duplicated as two near-identical
+  // branches). Uses the same shared LoadingPanel every gallery's own
+  // loading state now uses, so this reads as the same "the app is working
+  // on it" moment everywhere rather than a screen-specific one-off.
+  if (order.length === 0 || !isImageSizeReady) {
     return (
-      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
-        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
-      </View>
-    );
-  }
-
-  if (!isImageSizeReady) {
-    return (
-      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
-        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
+      <View testID="puzzle-loading" style={styles.screen}>
+        <LoadingPanel color={PUZZLE_PALETTE.accentDark} />
       </View>
     );
   }
@@ -413,10 +409,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.canvas,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   row: {
     flexDirection: 'row',
