@@ -67,6 +67,8 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
         <Pressable
           testID="video-player-retry"
           onPress={handleRetry}
+          accessibilityRole="button"
+          accessibilityLabel={t('retry')}
           style={{
             backgroundColor: colors.coral,
             borderColor: colors.coralDark,

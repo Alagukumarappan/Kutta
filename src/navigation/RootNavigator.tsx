@@ -110,7 +110,12 @@ function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
   return (
     <View testID="folder-resolve-error">
       <Text>{t('folderResolveError')}</Text>
-      <Pressable testID="folder-resolve-retry" onPress={onRetry}>
+      <Pressable
+        testID="folder-resolve-retry"
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel={t('retry')}
+      >
         <Text>{t('retry')}</Text>
       </Pressable>
     </View>

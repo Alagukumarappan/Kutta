@@ -65,7 +65,12 @@ export function VideoGallery({
     return (
       <View testID="video-gallery-error" style={insetStyle}>
         <Text>{t('loadError')}</Text>
-        <Pressable testID="video-gallery-retry" onPress={() => setRetryToken((n) => n + 1)}>
+        <Pressable
+          testID="video-gallery-retry"
+          onPress={() => setRetryToken((n) => n + 1)}
+          accessibilityRole="button"
+          accessibilityLabel={t('retry')}
+        >
           <Text>{t('retry')}</Text>
         </Pressable>
       </View>

@@ -60,7 +60,12 @@ export function PuzzleGallery({
     return (
       <View testID="puzzle-gallery-error" style={insetStyle}>
         <Text>{t('loadError')}</Text>
-        <Pressable testID="puzzle-gallery-retry" onPress={() => setRetryToken((n) => n + 1)}>
+        <Pressable
+          testID="puzzle-gallery-retry"
+          onPress={() => setRetryToken((n) => n + 1)}
+          accessibilityRole="button"
+          accessibilityLabel={t('retry')}
+        >
           <Text>{t('retry')}</Text>
         </Pressable>
       </View>

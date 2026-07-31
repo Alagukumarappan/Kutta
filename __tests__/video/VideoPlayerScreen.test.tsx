@@ -89,7 +89,7 @@ describe('VideoPlayerScreen', () => {
   });
 
   it('offers a retry action that recovers from a transient playback failure, matching the retry pattern used elsewhere for the same failure category', async () => {
-    const { findByText, findByTestId, queryByTestId } = await render(
+    const { findByText, findByTestId, findByLabelText, queryByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <VideoPlayerScreen videoUri={VIDEO_URI} />
       </LanguageProvider>
@@ -100,7 +100,7 @@ describe('VideoPlayerScreen', () => {
     });
     await findByText('This video could not be played.');
 
-    await fireEvent.press(await findByTestId('video-player-retry'));
+    await fireEvent.press(await findByLabelText('Retry'));
 
     // Retrying should attempt to reload the same source and resume playback
     // rather than leaving the child on a permanent dead end.

@@ -43,14 +43,14 @@ describe('VideoGallery', () => {
       .mockRejectedValueOnce(new Error('SAF grant revoked'))
       .mockResolvedValueOnce(['content://tree/videos/party.mp4']);
 
-    const { findByTestId, findByText } = await render(
+    const { findByTestId, findByText, findByLabelText } = await render(
       <LanguageProvider initialLanguage="en">
         <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
       </LanguageProvider>
     );
 
     await findByText('Something went wrong loading this content.');
-    await fireEvent.press(await findByTestId('video-gallery-retry'));
+    await fireEvent.press(await findByLabelText('Retry'));
 
     await findByTestId('video-item-content://tree/videos/party.mp4');
   });

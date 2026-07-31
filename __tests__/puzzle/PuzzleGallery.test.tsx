@@ -47,14 +47,14 @@ describe('PuzzleGallery', () => {
       .mockRejectedValueOnce(new Error('SAF grant revoked'))
       .mockResolvedValueOnce(['content://tree/pictures/beach.jpg']);
 
-    const { findByTestId, findByText } = await render(
+    const { findByTestId, findByText, findByLabelText } = await render(
       <LanguageProvider initialLanguage="en">
         <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
       </LanguageProvider>
     );
 
     await findByText('Something went wrong loading this content.');
-    await fireEvent.press(await findByTestId('puzzle-gallery-retry'));
+    await fireEvent.press(await findByLabelText('Retry'));
 
     await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
   });
