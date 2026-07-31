@@ -1,8 +1,154 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 4 (original-spec fast-follow items), Iteration: 27
-- Latest completed improvement (iteration 27, one commit): Phase 4 item 4's
+- Phase: 4 (original-spec fast-follow items), Iteration: 28
+- Latest completed improvement (iteration 28, two commits): a two-part
+  iteration per this iteration's own brief ordering.
+  - **Part A (`a1af79a`) — coloring toolbar row screen-fit.** Read
+    `ColoringScreen.tsx`'s toolbar row (Fill/Pen/conditional Undo/conditional
+    Clear drawing, a plain `flexDirection: 'row'` with no wrap/scroll, above
+    the horizontally-scrolling palette) and hand-computed a worst case: up
+    to 4 buttons can be visible together (after both a flood-fill tap and a
+    pen stroke — confirmed independent triggers from iteration 27's own
+    tests), and German text runs noticeably longer than English
+    (`clearDrawing`'s "Zeichnung löschen" is the longest string, no emoji).
+    Estimating character width at ~8.5px/char (bold ~14pt default RN Text)
+    plus each button's real `paddingHorizontal: spacing.md` (16px/side),
+    `borderWidth: 2` (2px/side), and inter-button `spacing.sm` (8px) gaps,
+    the worst-case row needs roughly **565-600px** of content width, plus
+    the footer's own `paddingHorizontal: spacing.md` (32px total) on top.
+    Confirmed `RootNavigator.tsx` still locks orientation to `LANDSCAPE` via
+    `expo-screen-orientation` before revealing the app shell, so — exactly
+    as iteration 20 established for the quiz progress-dots row — the
+    binding width is the device's landscape width, typically 600-900dp for
+    a normal phone. Unlike iteration 20's dots row (a confidently-huge
+    200-500px margin against 600-900px), this toolbar's ~565-600px need
+    against a 600-900px range leaves only a **moderate, estimation-sensitive
+    margin** — real safe-area insets on notched devices (up to ~40-50px
+    combined) and the roughness of a hand-estimated character width (RN
+    Text width can't be measured precisely without real device font
+    metrics, unlike the dots row's exact numeric dot sizes) mean a genuine
+    overflow is plausible on some real narrow-landscape devices, not
+    confidently ruled out the way iteration 20's case was. Per this
+    iteration's brief ("if the math shows a genuine overflow/wrap risk,
+    apply the smallest safe layout fix"), applied `flexWrap: 'wrap'` +
+    `gap: spacing.sm` (replacing the old per-button `marginRight:
+    spacing.sm`) to the toolbar row — RN 0.86.2 supports `gap`/`rowGap`,
+    already used elsewhere in this codebase (`QuizScreen.tsx`,
+    `SettingsScreen.tsx`, `PieceCountPicker.tsx`, etc.). This costs nothing
+    visually in the common one-row case (all 4 buttons still render on one
+    line whenever they fit) and eliminates the overflow risk entirely on
+    any device where they don't, by dropping excess buttons to a second
+    line rather than clipping them off-screen. Added `testID="coloring-
+    toolbar-row"` for testability.
+    - **Test** (`describe('toolbar row screen-fit', ...)` in
+      `ColoringScreen.test.tsx`): triggers both a flood-fill tap and a pen
+      stroke to get all 4 buttons rendered together, then asserts the row's
+      flattened style has `flexWrap: 'wrap'`. Verified via `git stash` that
+      this test fails (`coloring-toolbar-row` not found) against the
+      pre-change source and passes after the fix — confirmed non-tautological.
+    - A code-review subagent independently reviewed: confirmed `flexWrap` +
+      `gap` is standard, RN-0.86-compatible, and introduces no visual
+      regression in the common case; confirmed removing per-button
+      `marginRight` in favor of container `gap` is a spacing improvement,
+      not a behavior change, for the non-wrapped case; confirmed the test
+      is non-tautological and not flaky; confirmed the risk assessment is
+      sound (not an overreaction given the app's landscape lock); confirmed
+      no hard-limit violations; confirmed no negative accessibility/touch-
+      target impact. Approved with no required changes.
+  - **Part B (`a7c905a`) — closed out the empty-state check and scoped a
+    profile-picture data-layer first slice.** Read `ColoringScreen.tsx`'s
+    render logic explicitly (not just inferred, per this iteration's
+    brief): `displayImage = filledImage ?? image`. Traced every path that
+    can set `image`/`imageLoadFailed` in the `[imageUri, retryToken]`-keyed
+    load effect — decode success sets `image`; decode returning falsy sets
+    `imageLoadFailed`; any thrown error (including the initial
+    `readAsStringAsync` read) also sets `imageLoadFailed`. There is no path
+    that leaves `image` permanently `null` without also setting
+    `imageLoadFailed` true — the only window where `displayImage` is `null`
+    is the brief transient moment between mount and the async decode
+    resolving, not a stuck/error state. Every real "no photo could be
+    loaded" case is therefore already covered by iteration 11's friendly
+    localized error + retry flow; there is no separate, distinct empty
+    state gap to close. This closes out Phase 4 item 4 for good (see
+    Technical Decisions for the full write-up) — no code change needed for
+    this half, matching the brief's instruction not to manufacture a fix.
+    Fell through to Phase 4 item 5 (optional child profile picture) per the
+    established fallback ordering.
+    - Read `src/storage/profileStore.ts` (`getProfile`/`saveProfile` over
+      `AsyncStorage`, with a `try { JSON.parse } catch { return null }`
+      guard already noted safe in iteration 23), `src/types/profile.ts`
+      (the `Profile` interface), and `SettingsScreen.tsx`/
+      `OnboardingScreen.tsx`'s existing folder-picker patterns (both use
+      Android's Storage Access Framework via `expo-file-system`'s
+      `StorageAccessFramework`, not any image/camera picker — there is no
+      existing image-picker pattern in this codebase to reuse, confirming a
+      picker UI is genuinely new work, not a copy of an existing one).
+    - Per the brief's explicit fallback guidance ("only build a full
+      picker+display flow if it safely fits in one iteration; otherwise a
+      safe first slice is a purely additive, optional `pictureUri` field...
+      with NO UI wiring yet"), implemented exactly the safe first slice:
+      - `src/types/profile.ts`: added `pictureUri?: string` (optional, not
+        `| null`, unlike `rootFolderUri: string | null`) so every existing
+        saved profile — which never had this field — still round-trips via
+        `JSON.parse` with no migration step; a genuinely-set picture is
+        always a local `file://`/`content://` URI, never a remote URL (no
+        upload of any kind, matching this app's offline-first/no-tracking
+        constraints; no camera access added).
+      - New `src/storage/profilePicture.ts`,
+        `resolveProfilePictureUri(uri: string | null | undefined):
+        Promise<string | null>` — returns `null` immediately for
+        null/undefined/empty input (no filesystem call at all), otherwise
+        checks the file's actual existence via `expo-file-system/legacy`'s
+        `getInfoAsync` (already a dependency, used elsewhere in this
+        codebase — no new dependency) and returns the uri only if it still
+        exists, falling back to `null` on a missing file OR any thrown
+        error (e.g. a revoked SAF grant) — never throws. This mirrors the
+        exact same "local file/URI can go stale after being set" failure
+        class this app already handles for coloring/puzzle/video photos
+        (`ColoringScreen.tsx`'s `imageLoadFailed`, `VideoGallery`'s
+        `retryToken`), so a future `<Image>` render backed by this field
+        won't show a broken-image icon a young child can't make sense of.
+      - Deliberately NO picker UI, NO HomeScreen display wiring this
+        iteration — a picker with nothing yet reachable to set would look
+        broken, and the brief explicitly called this out as acceptable
+        ("no user-visible effect until a future iteration adds the picker
+        UI"). See Next for the concrete iteration 29 plan.
+    - **Tests**: `__tests__/storage/profilePicture.test.ts` (new file, 4
+      tests) — null/undefined/empty-string input short-circuits without
+      touching the filesystem; an existing file resolves to its own uri;
+      a missing file resolves to `null`; a rejected `getInfoAsync` call
+      also resolves to `null`, never throwing. Verified non-tautological by
+      temporarily making the implementation return the uri unconditionally
+      and confirming the "missing file" test failed for the right reason,
+      then restoring it. `__tests__/storage/profileStore.test.ts` got one
+      new test (existing tests untouched) asserting a profile with
+      `pictureUri` round-trips correctly through `AsyncStorage`, and a
+      profile without it round-trips with the key entirely absent
+      (`'pictureUri' in loaded === false`) rather than serialized as a
+      literal `undefined` — confirming `JSON.stringify` genuinely drops
+      `undefined`-valued object keys rather than assuming it.
+    - A code-review subagent independently reviewed: confirmed
+      `pictureUri?: string` (optional, not nullable) is the right shape
+      given there's no "explicitly no picture, as opposed to never set"
+      distinction needed yet; confirmed `resolveProfilePictureUri`'s
+      fail-safe design is appropriate for a children's app and is a
+      reasonable, non-dead-code "safe first slice" (a real pure unit with
+      its own tests, ready for a future caller, not speculative unused
+      code); confirmed test quality (non-tautological, no flakiness);
+      confirmed no hard-limit violations (no new deps, no unsafe casts, no
+      camera/cloud/network APIs, no unnecessary personal metadata, no
+      existing test weakened); and confirmed the `JSON.stringify` claim
+      about absent-vs-undefined keys is technically correct, not just
+      plausible. Approved with no required changes.
+  - Baseline before this iteration: tsc clean, 26/26 suites, 238/238 tests.
+  - After this iteration: tsc clean, **27/27 suites** (new
+    `__tests__/storage/profilePicture.test.ts`), **244/244 tests** (+6 new:
+    1 toolbar-wrap test, 4 `resolveProfilePictureUri` tests, 1
+    `profileStore` pictureUri round-trip test). No existing test modified,
+    weakened, skipped, or renamed.
+  - Commits: `a1af79a` (Part A), `a7c905a` (Part B).
+- Previous iteration's completed improvement (iteration 27, one commit): Phase 4's
   remaining flood-fill sub-item — a single-level "undo last flood fill".
   Iteration 26 deliberately left this open, unsure whether even one level
   of undo was small enough for one iteration (a full undo/redo history
@@ -1932,7 +2078,8 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/storage/folderAccess.ts` | SAF folder helpers: `leafNameOf`, `findChildUri`, `ensureContentStructure` | `__tests__/storage/folderAccess.test.ts` (10 tests as of iteration 23) — now includes a dedicated `describe('leafNameOf', ...)` block covering unencoded/partially-encoded URIs, no-slash input, and the trailing-slash case (documented: returns `''`, not the segment before it) | well covered now; no further gaps identified in this module |
 | `src/storage/folderMigration.ts` | Copy+verify+delete folder migration, `isSameOrNestedWithin` same/nested detection | `__tests__/storage/folderMigration.test.ts` (10 tests as of iteration 4) — covers same-folder, real nesting both directions, the `primary:` volume-root boundary, and (as of iteration 4) the sibling-prefix-name non-nested case | well covered now; no further gaps identified in this module |
 | `src/storage/folderPathDisplay.ts` | SAF URI → human-readable path | `__tests__/storage/folderPathDisplay.test.ts` (7 tests, added iteration 2) — covers primary/non-primary volumes, malformed encoding, missing `/tree/` marker, empty path after volume, fully empty input, doubled-slash collapsing | well covered now; could add a Windows-style/UNC-ish edge case if one is ever reported, but not a known real-world SAF shape |
-| `src/storage/profileStore.ts` | AsyncStorage get/save profile with JSON parse guard | `__tests__/storage/profileStore.test.ts` | corrupted/non-JSON stored value (should return `null`, not throw) — verify covered |
+| `src/storage/profileStore.ts` | AsyncStorage get/save profile with JSON parse guard | `__tests__/storage/profileStore.test.ts` — now also covers the optional `pictureUri` field round-tripping both when set and when absent (iteration 28) | corrupted/non-JSON stored value (should return `null`, not throw) — verify covered |
+| `src/storage/profilePicture.ts` | `resolveProfilePictureUri`: graceful existence check for an optional local profile-picture URI, never throws | `__tests__/storage/profilePicture.test.ts` (4 tests, added iteration 28) — null/undefined/empty input, existing file, missing file, rejected filesystem check | new module, fully covered on introduction; no known gaps |
 | `src/types/*.ts` | Type-only, no runtime logic | n/a | n/a |
 | `src/i18n/strings.ts` | Bilingual string dictionary | `__tests__/i18n/strings.test.ts` | probably fine as-is; could check every key has both `en`/`de` present if not already asserted |
 
@@ -1946,34 +2093,71 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-**Iteration 28 priority**: iteration 27 closed the flood-fill undo slice of
-Phase 4 item 4 (see Current Status for full detail — a single-level "undo
-last fill" via a cheap ref snapshot, since `floodFill` already never
-mutates its input). That leaves one small sub-item still open from
-iteration 26's list, plus the existing Phase 4 item 5 fallback:
-1. **Friendly empty-state check (still not re-verified explicitly)** —
-   carried forward unchanged from iteration 26: a quick look at
-   `ColoringScreen.tsx`'s render logic suggests the source photo itself is
-   always visible immediately once loaded (no blank/empty canvas state
-   exists at all — `displayImage = filledImage ?? image`), so there is
-   likely nothing to fix here, but this should be confirmed explicitly
-   (not just inferred) before closing out item 4 for good. This is a
-   quick check, not a full iteration's worth of work on its own — pair it
-   with something else or fall through quickly if it's a non-issue.
-2. **Phase 4 item 5 (optional child profile picture)** — the next real
-   fallback if item 4 is now fully closed out. This is a bigger feature;
-   read `src/storage/profileStore.ts` (the current profile persistence
-   module — see the Pure-Logic Module Inventory below) and
-   `SettingsScreen.tsx`/`OnboardingScreen.tsx`'s existing folder-picker
-   patterns before scoping anything. Only build a full picker+display flow
-   if it safely fits in one iteration; otherwise a safe first slice is a
-   purely additive, optional `pictureUri` field on the profile data type,
-   persisted via the existing store with a test for graceful fallback when
-   the file is missing — deliberately with NO UI wiring yet if a picker
-   can't also be finished in the same pass, since a picker with nothing to
-   set would look broken. No camera access, no cloud/network upload —
-   local file only, matching this app's offline-first/no-tracking
-   constraints.
+**Iteration 29 priority**: iteration 28 closed the empty-state check for
+good (see Current Status/Technical Decisions — `displayImage = filledImage
+?? image` has no genuine gap distinct from iteration 11's already-fixed
+retry flow) and landed the profile-picture data-layer first slice
+(`pictureUri?: string` on `Profile` + `resolveProfilePictureUri()`, no UI
+yet). The concrete next step is the picker UI + HomeScreen display wiring:
+1. **No image-picker library is installed** (confirmed via `grep -i
+   "image-picker\|document-picker\|media-library" package.json` — nothing
+   found), and the hard limits forbid adding a new dependency or any camera
+   access. So the picker UI must NOT try to add `expo-image-picker` or
+   similar. Instead, reuse the exact pattern already established for
+   `ColoringGallery.tsx`/`PuzzleGallery.tsx`: both already list image files
+   out of the child's SAF-granted content folder (via
+   `folderAccess.ts`/`StorageAccessFramework.readDirectoryAsync`) and let
+   the child tap one to open it. A profile-picture picker can be a small
+   new screen (or a modal reusing `ColoringGallery`'s existing
+   grid-of-thumbnails rendering, parameterized with an `onSelect(uri)`
+   callback instead of navigating into a coloring session) that lists the
+   same already-granted folder's photos and, on tap, calls `saveProfile({
+   ...profile, pictureUri: uri })` then navigates back. This needs zero new
+   permissions (the SAF grant already exists post-onboarding) and zero new
+   dependencies.
+2. **Where to launch it from**: `SettingsScreen.tsx` is the natural entry
+   point (it already edits the rest of the profile — name/age/language/
+   folder) — add a new row/button ("Change picture" style, new EN+DE i18n
+   key) that opens the picker screen described above. `OnboardingScreen.tsx`
+   is explicitly OUT of scope for this — onboarding should stay focused on
+   the required fields (name/age/language/folder), not add an optional
+   extra step for a first-time flow.
+3. **HomeScreen display wiring**: `HomeScreen.tsx` doesn't currently render
+   anything profile-identifying at all (read it fresh before assuming a
+   specific spot — no avatar/greeting exists today per iteration 23's own
+   card-only description). A small avatar/greeting area (e.g. top-left,
+   away from the settings gear icon and the 4 feature cards) could call
+   `resolveProfilePictureUri(profile.pictureUri)` on mount/profile-change
+   and render an `<Image>` only if it resolves non-null — falling back to
+   the existing no-picture state (whatever HomeScreen currently shows, e.g.
+   nothing or an initial/emoji placeholder — decide based on what's least
+   jarring) when it resolves `null`, exactly matching this iteration's
+   graceful-fallback contract. Must not push the 4 feature cards into
+   requiring scroll (re-run the same "no scrolling on child-facing screens"
+   screen-fit check this codebase already applies elsewhere) and must have
+   an `accessibilityLabel` if it becomes a tappable shortcut to Settings
+   (it should not be tappable unless that's explicitly designed and tested
+   — a plain decorative avatar is the safer default for one iteration).
+4. Both new EN+DE strings (e.g. "Change picture"/appropriate German) needed
+   for step 2. No strings needed for step 3 if the avatar is decorative
+   only.
+5. If this turns out too large to safely land as one clean iteration, split
+   it: Settings picker screen + persistence as one commit/iteration,
+   HomeScreen display wiring as a following one — do not half-wire the
+   HomeScreen side without the picker being reachable, and vice versa,
+   without at minimum documenting the split clearly here (an unreachable
+   "Change picture" button with no picker behind it, or an avatar with no
+   way to ever set one, would both be confusing half-states).
+
+Iteration 28 closed out both of its own brief's parts — see Current Status
+for full detail (Part A: `flexWrap` fix for the coloring toolbar row,
+commit `a1af79a`; Part B: empty-state confirmation, no fix needed, plus the
+profile-picture data-layer slice, commit `a7c905a`). Neither should be
+re-treaded without new evidence — Part A's toolbar-wrap fix specifically
+should not be revisited unless a real device review finds an actual visual
+problem with 2-row wrapping (see Visual Review Required), and Part B's
+empty-state conclusion should not be re-investigated without new evidence
+per the same standard iteration 20/22/etc. have all used.
 
 Iteration 27 closed out the flood-fill-undo slice of Phase 4 item 4 — see
 Current Status for full detail (one commit, single-level undo, no
@@ -2206,6 +2390,34 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 28's coloring toolbar `flexWrap` fix** (layout change to the
+  same toolbar row iteration 27's Undo button lives in — source-verified,
+  math-checked, but never seen rendered on a real device by this loop):
+  - **Screen**: Coloring (`coloring-toolbar-row` testID, the row containing
+    Fill/Pen/conditional Undo/conditional Clear drawing above the palette
+    strip).
+  - **Expected behavior**: on any normal/typical landscape phone width, all
+    visible buttons (2 in the common case, up to 4 after both a flood-fill
+    tap and a pen stroke) should still fit on one line exactly as before —
+    `flexWrap: 'wrap'` should have zero visible effect in this case. On a
+    narrow-landscape device (or with German selected, since its button text
+    runs longer), if 4 buttons genuinely can't fit on one line, they should
+    now cleanly drop the overflowing button(s) to a second line rather than
+    clipping off-screen or making any button unreachable/untappable.
+    Confirm the wrapped second line (if one ever occurs on the test device)
+    doesn't visually collide with the palette strip directly below it.
+  - **Why flagged**: the underlying overflow risk was judged genuine but
+    estimation-sensitive (hand-computed text-width math, not a measured
+    pixel count — see Technical Decisions) — a real device is the only way
+    to confirm both that the common case is visually unchanged and that
+    wrapping (if it ever triggers) looks acceptable rather than merely
+    "not broken."
+  - **EN+DE check**: German is the more overflow-prone case (longer button
+    text) — specifically worth checking on the narrowest available test
+    device.
+  - **Ages affected**: all ages 2-8 using the coloring screen — this is a
+    layout-safety fix, not a new feature; nothing changes about what the
+    buttons do.
 - **Iteration 27's flood-fill Undo button** (new toolbar button, new toolbar
   row layout — source-verified but never seen rendered on a real device by
   this loop):
@@ -2597,6 +2809,91 @@ None found that affect correctness. Notes:
   with no device/emulator available in this environment.
 
 ## Technical Decisions
+- **Iteration 28 Part A: coloring toolbar row screen-fit — investigated and
+  closed with a defensive `flexWrap` fix (unlike iteration 20's dots row,
+  which needed no fix at all).** Full investigation (definitive; do not
+  re-investigate without new evidence — e.g. a real device review actually
+  finding wrapped buttons in practice):
+  - Applied the same method iteration 20 used for the quiz progress-dots
+    row: compute a real worst-case content width, compare it against this
+    landscape-locked app's realistic landscape-width range, and only fix if
+    the math shows genuine risk.
+  - Worst case: up to 4 toolbar buttons visible together (Fill, Pen,
+    conditional Undo — reachable any time after a flood-fill tap per
+    iteration 27 — and conditional Clear drawing — reachable any time a pen
+    stroke exists per iteration 26; the two are independent, confirmed by
+    an existing test, so both together is a real reachable state, not a
+    theoretical one). German strings run longest (`clearDrawing`:
+    "Zeichnung löschen", no emoji, longest of the four). Estimated ~8.5px
+    per character at the default ~14pt bold RN `Text` size, plus each
+    button's real `paddingHorizontal: spacing.md` (16px/side),
+    `borderWidth: 2` (2px/side), and `spacing.sm` (8px) inter-button gaps:
+    roughly **565-600px** of row content, plus the footer container's own
+    `paddingHorizontal: spacing.md` (32px) — call it **~600-630px** total
+    against the window width.
+  - Confirmed `RootNavigator.tsx` still locks orientation to `LANDSCAPE`
+    (unchanged since iteration 20's investigation), so the binding
+    dimension is landscape width, typically 600-900dp for a normal phone —
+    the same range iteration 20 used.
+  - **Why this is a genuinely different conclusion from iteration 20's**:
+    iteration 20's dots row needed a known, exact 364px against a
+    600-900px range — a 240-500+px margin, comfortably safe with no
+    realistic failure mode. This toolbar row's ~600-630px need against the
+    same 600-900px range is a much tighter, estimation-sensitive margin:
+    (a) RN `Text` width can't be measured precisely without real device
+    font metrics — unlike the dots row's fixed numeric `width`/`margin`
+    style values, this estimate has real error bars; (b) real device
+    safe-area insets (notches/cutouts in landscape) can consume an
+    additional ~40-50px combined on some phones, which iteration 20's dots
+    row didn't need to account for given its much larger margin; (c) the
+    low end of the 600-900px landscape-width range is uncomfortably close
+    to the ~600-630px estimate even before insets. This is not "confidently
+    safe" the way the dots row was — it's "plausibly at risk on some real
+    narrow-landscape device," which per this iteration's own instructions
+    ("if the math shows a genuine overflow/wrap risk, apply the smallest
+    safe layout fix... if the math shows it's safe, add a test that pins
+    down the safe conclusion... do not manufacture a fix if none is
+    needed") called for a fix, not just a documenting test.
+  - **Fix chosen and why**: `flexWrap: 'wrap'` + `gap: spacing.sm` on the
+    toolbar row container (replacing per-button `marginRight:
+    spacing.sm`), rather than a horizontal `ScrollView` (the pattern
+    already used for the palette strip directly below). A `ScrollView` was
+    considered and rejected: the palette's scroll-to-see-more-colors is an
+    optional/browsable affordance, but Fill/Pen/Undo/Clear are core
+    controls — hiding any of them behind an undiscovered horizontal scroll
+    for a 2-8 year old would risk exactly the kind of "essential control
+    unreachable without a hidden gesture" problem this app's other design
+    choices (e.g. always-visible retry buttons, no auto-advance timers)
+    consistently avoid. `flexWrap` keeps every button visible and tappable
+    at all times, just possibly on two lines instead of one — zero
+    downside in the common (fits-on-one-line) case, and a strictly better
+    failure mode than either clipping or hiding behind scroll in the rare
+    case it's needed.
+  - Also noted (found while reading `QuestionRenderer.tsx`'s existing
+    comment about a puzzle-board `flexWrap` float-precision issue from an
+    earlier iteration, in case it applied here too): that prior concern was
+    specifically about `flexWrap` producing uneven row breaks for a strict
+    equal-width grid of many small cells under floating-point Yoga layout
+    math — a different problem from a handful of variable-width buttons in
+    a simple toolbar row, where wrapping to a second line has no such
+    precision-sensitive grid to break. Confirmed this prior lesson does not
+    apply here before proceeding.
+  - Verified via `git stash` that the new pinning test fails for the right
+    reason (`coloring-toolbar-row` testID / `flexWrap` absent) against the
+    pre-fix source and passes after the fix.
+  - A code-review subagent independently reviewed and approved with no
+    required changes (see Current Status for the full review summary).
+- **Iteration 28 Part B: `ColoringScreen`'s empty-state handling — confirmed
+  fully closed, no gap.** `displayImage = filledImage ?? image` was traced
+  against every path through the `[imageUri, retryToken]`-keyed load effect:
+  decode success sets `image`; decode returning falsy OR any thrown error
+  (including the initial byte read) sets `imageLoadFailed`. There is no
+  path leaving `image` permanently `null` while `imageLoadFailed` stays
+  `false` — the only window where `displayImage` is `null` is the brief
+  moment between mount and the async decode resolving (a normal loading
+  flash, not a stuck/error state requiring its own friendly message). This
+  closes Phase 4 item 4 for good; do not re-open without new evidence (e.g.
+  a real device report of a genuinely stuck blank canvas).
 - **Iteration 20: quiz progress-dots row large-session-count overflow —
   investigated and closed as NOT a genuine risk.** Full investigation
   (this is the definitive answer; do not re-investigate in a future
