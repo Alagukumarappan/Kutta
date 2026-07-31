@@ -263,6 +263,13 @@ export function VideoGallery({
                 elevationLevel="level2"
                 style={styles.videoRow}
                 accessibilityLabel={fileNameFromUri(item)}
+                // Only meaningful once multi-select mode is actually
+                // active — outside it, this tile has no "selected" concept
+                // at all, so `selected` is omitted entirely (not `false`)
+                // to leave its accessibilityState untouched, same
+                // distinction AgePicker/LanguageSelector/PuzzleGallery's
+                // difficulty options already draw.
+                selected={selectionMode ? isSelected : undefined}
               >
                 <View style={styles.videoRowContent}>
                   {selectionMode && (

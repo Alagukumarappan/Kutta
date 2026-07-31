@@ -363,6 +363,11 @@ export function PuzzleGallery({
                 borderColor={isSelected ? PUZZLE_PALETTE.accent : PUZZLE_PALETTE.accentDark}
                 elevationLevel="level2"
                 style={styles.tile}
+                // Only meaningful once multi-select mode is actually
+                // active — outside it, this tile has no "selected" concept
+                // at all, so `selected` is omitted entirely (not `false`)
+                // to leave its accessibilityState untouched.
+                selected={selectionMode ? isSelected : undefined}
               >
                 <>
                   <Image source={{ uri: item }} style={styles.tileImage} />

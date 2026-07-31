@@ -401,6 +401,35 @@ describe('PuzzleGallery', () => {
       expect(onSelect).not.toHaveBeenCalled();
     });
 
+    // Regression test for the premium-polish accessibility pass: entering
+    // multi-select mode already showed a visible checkmark badge on
+    // selected tiles, but the underlying RaisedCard exposed no
+    // accessibilityState at all — a screen-reader user long-pressing into
+    // this mode had no way to tell which tiles were checked.
+    it('exposes accessibilityState.selected on tiles once multi-select mode is active', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+        'content://tree/pictures/forest.jpg',
+      ]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('puzzle-gallery-selection-bar');
+      expect(getByTestId('puzzle-item-content://tree/pictures/beach.jpg').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(getByTestId('puzzle-item-content://tree/pictures/forest.jpg').props.accessibilityState).toEqual({
+        selected: false,
+      });
+    });
+
     it('Cancel exits selection mode without removing anything', async () => {
       (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
         'content://tree/pictures/beach.jpg',

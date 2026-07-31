@@ -625,6 +625,39 @@ renderer for whatever runs after it — unrelated to this fix, a pre-existing
 issue) by placing the new test after it and reproducing the failure, then
 restoring the correct (before) placement.
 
+### Iteration 27 — Expose accessibilityState.selected on gallery multi-select tiles
+**Components:** `AnimatedPressable`, `RaisedCard` (shared design-system
+components); Video/Coloring/Puzzle galleries' tiles.
+**Problem:** Fresh-eyes sweep. Long-press multi-select mode in all three
+galleries already checks a tile visually (a checkmark badge + border color
+change), but the underlying `RaisedCard`/`AnimatedPressable` had no way to
+expose a "selected" accessibility state at all — a screen-reader user
+long-pressing into this mode got no indication of which tiles were
+checked, despite this being an established convention elsewhere in the
+app (AgePicker, LanguageSelector, PuzzleGallery's own difficulty options
+all already use `accessibilityState={{selected}}`).
+**Fix:** Added an optional `selected?: boolean` prop to both shared
+components, combined into `accessibilityState` alongside `disabled`
+(omitted entirely, not `false`, when unset — so every other consumer's
+`accessibilityState` stays byte-identical to before). Wired
+`selected={selectionMode ? isSelected : undefined}` into all three
+galleries' tile `RaisedCard`s.
+**Extra diligence given the wide blast radius:** self-review specifically
+grepped every other consumer of these two widely-shared components
+(HomeScreen, QuestionRenderer, QuizScreen, VideoPlayerScreen,
+OnboardingScreen, TicTacToeSetupScreen, RootNavigator) and confirmed none
+pass `selected` today, so the change is purely additive elsewhere;
+verified in isolation that spreading `null` for the omitted case never
+leaves a stray `selected: undefined` key on a control that's merely
+`disabled`.
+**Verified as a real bug, not a hypothetical:** confirmed via `git stash`
+that all 5 new regression tests genuinely fail without the fix.
+**Tests:** New tests in `AnimatedPressable.test.tsx` (selected exposed,
+selected omitted vs. false, combined with disabled) and one in each
+gallery's test file confirming the selected tile reports `{selected:
+true}` and an unselected tile reports `{selected: false}` once multi-select
+mode is active (545 total tests passing, up from 539).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -658,6 +691,9 @@ restoring the correct (before) placement.
 - Tic-Tac-Toe setup's Start button had no rapid-double-tap protection,
   risking pushing the game screen onto the navigation stack twice — fixed
   in iteration 20.
+- Video/Coloring/Puzzle galleries' multi-select mode had no
+  `accessibilityState.selected` on checked tiles at all — fixed in
+  iteration 27.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -699,8 +735,20 @@ restoring the correct (before) placement.
 - Quiz (progress-dots pop animation now also respects reduce-motion)
 - EmptyStatePanel / Coloring + Puzzle + Video galleries (looping bounce
   now respects reduce-motion)
+- AnimatedPressable + RaisedCard / Video + Coloring + Puzzle galleries
+  (multi-select "selected" state now exposed to accessibility)
 
 ## Remaining polish opportunities (not yet done)
+- `src/components/AddFilesButton.tsx` sets `disabled={busy}` but never sets
+  `accessibilityState={{disabled: busy, busy}}` — a minor, single-control
+  gap (lower impact than iteration 27's gallery-wide fix, but the same
+  category). Small, safe next candidate.
+- ColoringScreen's palette-swatch pop / toolbar button press feedback, and
+  PuzzleScreen's piece-swap spring: confirmed real, user-action-triggered
+  (not on-mount) one-shot springs that still ignore reduce-motion — same
+  category as iterations 24/25/26 but individually un-audited. Confirmed
+  as easy/low-risk to test (unlike iteration 26's on-mount case) if picked
+  up later.
 - `src/components/EmptyState.tsx` (the old, pre-redesign empty-state
   component, superseded by `EmptyStatePanel`) is confirmed dead code —
   never imported anywhere in the app. Same category as `PieceCountPicker`;

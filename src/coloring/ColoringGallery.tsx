@@ -259,6 +259,11 @@ export function ColoringGallery({
                 borderColor={isSelected ? accent.accent : accent.accentDark}
                 tilt="compact"
                 style={styles.tile}
+                // Only meaningful once multi-select mode is actually
+                // active — outside it, this tile has no "selected" concept
+                // at all, so `selected` is omitted entirely (not `false`)
+                // to leave its accessibilityState untouched.
+                selected={selectionMode ? isSelected : undefined}
               >
                 <>
                   <Image source={{ uri: item }} style={styles.tileImage} resizeMode="cover" />
