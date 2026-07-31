@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useLanguage } from '../i18n/LanguageContext';
+import { colors, spacing, radii, shadow } from '../theme/tokens';
 
 export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const { t } = useLanguage();
@@ -23,10 +24,64 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     return () => subscription.remove();
   }, [player]);
 
+  // Unlike QuizScreen/ColoringGallery/ColoringScreen/VideoGallery, which all
+  // re-run a fresh fetch/read effect on retry (bumping a `retryToken` in
+  // their dependency array), the video player already holds a live,
+  // long-lived `player` object for the whole screen lifetime — there's no
+  // effect to re-run. The equivalent recovery action here is telling that
+  // same player to reload its source and resume playback: `replace` is the
+  // documented way to make an `expo-video` player re-attempt the same
+  // source (e.g. after a transient SAF/file failure), and clearing `error`
+  // lets a subsequent `statusChange` (success or failure) drive the UI again.
+  const handleRetry = useCallback(() => {
+    setError(false);
+    player.replace(videoUri);
+    player.play();
+  }, [player, videoUri]);
+
   if (error) {
     return (
-      <View style={{ paddingLeft: insets.left, paddingRight: insets.right, paddingBottom: insets.bottom }}>
-        <Text>{t('videoLoadError')}</Text>
+      <View
+        testID="video-player-error"
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.background,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+          paddingBottom: insets.bottom,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 22,
+            fontWeight: 'bold',
+            color: colors.ink,
+            textAlign: 'center',
+            marginBottom: spacing.md,
+          }}
+        >
+          {t('videoLoadError')}
+        </Text>
+        <Pressable
+          testID="video-player-retry"
+          onPress={handleRetry}
+          accessibilityRole="button"
+          accessibilityLabel={t('retry')}
+          style={{
+            backgroundColor: colors.coral,
+            borderColor: colors.coralDark,
+            borderWidth: 2,
+            borderRadius: radii.xl,
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.xl,
+            ...shadow,
+            elevation: 4,
+          }}
+        >
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.white }}>{t('retry')}</Text>
+        </Pressable>
       </View>
     );
   }

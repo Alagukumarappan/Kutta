@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent } from 'react-native';
+import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -14,33 +14,48 @@ import {
 } from '@shopify/react-native-skia';
 import { floodFill } from './floodFill';
 import { base64ToUint8Array } from './base64';
-import { computeResponsiveSquareSize } from '../theme/tokens';
-import { colors, spacing, radii } from '../theme/tokens';
+import { computeResponsiveRectSize } from '../theme/tokens';
+import { colors, spacing, radii, shadow } from '../theme/tokens';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
+import Slider from '@react-native-community/slider';
 
 // Reserves room for the toolbar + palette footer strip rendered below the
 // canvas, and outer margins, so the canvas gets as much of the screen as
 // possible while still leaving room to pick a tool/color. This screen is
 // landscape-only via RootNavigator's runtime orientation lock (app.json
 // itself now uses "default" rather than a manifest-level lock). The footer
-// (toolbar buttons + palette swatches + padding/margins) needs roughly
-// 180-190dp on a typical phone, so 200 leaves a small margin rather than
-// letting the canvas clip against the footer.
-const CANVAS_RESERVED_HEIGHT = 200;
+// (toolbar row ~36dp + its marginBottom 8dp + the 44dp-tall palette strip
+// with 8dp of its own margin + the footer's own paddingTop/paddingBottom
+// 8+16dp) comes out to roughly 120dp; 150 leaves a modest margin for a
+// second toolbar-row wrap (see the "toolbar row screen-fit" note below)
+// without reserving as much dead space as the old flat 200dp estimate did.
+const CANVAS_RESERVED_HEIGHT = 150;
 const CANVAS_RESERVED_WIDTH = 32;
 const CANVAS_MIN_SIZE = 200;
 const CANVAS_MAX_SIZE = 900;
 
-// Visually chunky stroke width sized for a child's fingertip, not a thin
-// hairline.
-const PEN_STROKE_WIDTH = 14;
+// Default stroke width — visually chunky, sized for a child's fingertip,
+// not a thin hairline — plus the adjustable range the pen-size slider lets
+// the parent/child pick within.
+const PEN_STROKE_WIDTH_DEFAULT = 14;
+const PEN_STROKE_WIDTH_MIN = 4;
+const PEN_STROKE_WIDTH_MAX = 40;
+const PEN_STROKE_WIDTH_STEP = 2;
+
+// The pen-size slider row (~40dp) + its marginBottom (8dp) only renders in
+// pen mode, so it must only be reserved then too — otherwise switching to
+// pen mode would make the real footer taller than CANVAS_RESERVED_HEIGHT
+// budgeted for, pushing the footer down past what the canvas's fixed
+// height already assumed instead of shrinking the canvas to make room.
+const PEN_SIZE_ROW_RESERVED_HEIGHT = 48;
 
 type ToolMode = 'fill' | 'pen';
 
 interface Stroke {
   path: SkPath;
   color: string;
+  width: number;
 }
 
 export function ColoringScreen({ imageUri }: { imageUri: string }) {
@@ -63,8 +78,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // had.
   const [image, setImage] = useState<SkImage | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  // Bumped on Retry to force a fresh load attempt even when `imageUri`
+  // hasn't changed (e.g. a transient failure) — same pattern used by
+  // QuizScreen and ColoringGallery for this identical class of SAF failure
+  // (grant revoked, folder/file deleted externally, SD card unmounted).
+  const [retryToken, setRetryToken] = useState(0);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const [toolMode, setToolMode] = useState<ToolMode>('fill');
   // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's on-screen
   // nav bar; they don't know about *this* device's actual notch/gesture-bar
   // geometry, which varies (e.g. a Samsung S22's cutout and 3-button/gesture
@@ -76,10 +97,16 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // shown with headerShown:true (see RootNavigator), so the native header
   // already consumes the top inset before this component's flex:1 container
   // gets its share of the window — adding it again would double-count it.
-  const canvasSize = computeResponsiveSquareSize(
+  // Rectangular, not square: a landscape phone is short-but-wide, so
+  // constraining the canvas to a square would shrink its width down to
+  // match the tighter height budget, wasting most of the screen's width as
+  // blank margin and leaving the child's actual picture much smaller than
+  // it needs to be. Width and height each get their own full share of the
+  // available space instead.
+  const { width: canvasWidth, height: canvasHeight } = computeResponsiveRectSize(
     width,
     height,
-    CANVAS_RESERVED_HEIGHT + insets.bottom,
+    CANVAS_RESERVED_HEIGHT + (toolMode === 'pen' ? PEN_SIZE_ROW_RESERVED_HEIGHT : 0) + insets.bottom,
     CANVAS_RESERVED_WIDTH + insets.left + insets.right,
     CANVAS_MIN_SIZE,
     CANVAS_MAX_SIZE
@@ -89,9 +116,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const [pixels, setPixels] = useState<Uint8ClampedArray | null>(null);
   const [filledImage, setFilledImage] = useState<SkImage | null>(null);
 
-  const [toolMode, setToolMode] = useState<ToolMode>('fill');
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentPath, setCurrentPath] = useState<SkPath | null>(null);
+  const [penWidth, setPenWidth] = useState(PEN_STROKE_WIDTH_DEFAULT);
 
   // PanResponder callbacks are created once and must always act on the
   // latest state/props, so mirror the values that change over time into
@@ -102,14 +129,33 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   selectedColorRef.current = selectedColor;
   const selectedDisplayColorRef = useRef(selectedDisplayColor);
   selectedDisplayColorRef.current = selectedDisplayColor;
-  const canvasSizeRef = useRef(canvasSize);
-  canvasSizeRef.current = canvasSize;
+  const penWidthRef = useRef(penWidth);
+  penWidthRef.current = penWidth;
+  const canvasWidthRef = useRef(canvasWidth);
+  canvasWidthRef.current = canvasWidth;
+  const canvasHeightRef = useRef(canvasHeight);
+  canvasHeightRef.current = canvasHeight;
   const imageRef = useRef(image);
   imageRef.current = image;
   const pixelsRef = useRef(pixels);
   pixelsRef.current = pixels;
+  const filledImageRef = useRef(filledImage);
+  filledImageRef.current = filledImage;
 
   const activePathRef = useRef<SkPath | null>(null);
+
+  // Single-level "undo last flood fill" (iteration 27). `floodFill` already
+  // does `pixels.slice()` internally (see floodFill.ts) rather than
+  // mutating its input in place, so the pre-fill `pixels`/`filledImage`
+  // pair is already sitting there, untouched, right before each new fill —
+  // capturing it here for a possible undo is a pointer copy, not an extra
+  // buffer allocation. Deliberately a plain ref (not state) holding at most
+  // ONE snapshot: this is a one-level undo, not a history stack, so there's
+  // never more than one extra pixel buffer alive at a time.
+  const previousFillRef = useRef<{ pixels: Uint8ClampedArray; filledImage: SkImage | null } | null>(null);
+  // Mirrors whether `previousFillRef.current` is set, purely so the Undo
+  // button's visibility can react to it (refs alone don't trigger renders).
+  const [canUndoFill, setCanUndoFill] = useState(false);
 
   // Load the source photo's bytes ourselves (see the comment above the
   // `image` state) and decode them into an SkImage. Runs once per
@@ -142,7 +188,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     return () => {
       cancelled = true;
     };
-  }, [imageUri]);
+  }, [imageUri, retryToken]);
 
   // Read the raw RGBA pixel buffer out of the decoded image so floodFill has
   // something to operate on. Runs once per loaded image.
@@ -164,6 +210,10 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     setFilledImage(null);
     setStrokes([]);
     setCurrentPath(null);
+    // A fresh photo means any previous fill snapshot no longer applies —
+    // there's nothing left to undo back to.
+    previousFillRef.current = null;
+    setCanUndoFill(false);
   }, [image]);
 
   function handleCanvasTap(x: number, y: number) {
@@ -175,11 +225,22 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 
     // Tap coordinates arrive in the Canvas's displayed (possibly scaled)
     // coordinate space; map them back into the pixel buffer's native space.
-    const pixelX = Math.floor((x / canvasSizeRef.current) * width);
-    const pixelY = Math.floor((y / canvasSizeRef.current) * height);
+    // Width and height are scaled independently (the canvas is rectangular,
+    // not square — see computeResponsiveRectSize), so each axis uses its
+    // own ratio rather than a single shared one.
+    const pixelX = Math.floor((x / canvasWidthRef.current) * width);
+    const pixelY = Math.floor((y / canvasHeightRef.current) * height);
     if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height) return;
 
     const updated = floodFill(pixels, width, height, pixelX, pixelY, selectedColorRef.current);
+    // Capture the pre-fill buffer/image for a single-level undo BEFORE
+    // overwriting state below. `pixels`/`filledImageRef.current` here are
+    // exactly what was on screen right before this fill — floodFill never
+    // mutates its input (see floodFill.ts's own `pixels.slice()`), so this
+    // is just holding onto the reference that already existed, not copying
+    // anything new.
+    previousFillRef.current = { pixels, filledImage: filledImageRef.current };
+    setCanUndoFill(true);
     setPixels(updated);
 
     const bytesPerRow = width * 4;
@@ -190,6 +251,21 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       bytesPerRow
     );
     if (newImage) setFilledImage(newImage);
+  }
+
+  // Restores the single most-recent flood fill's pre-fill state and clears
+  // the snapshot — one level of undo only, not a history stack. Deliberately
+  // NOT gated behind a confirmation dialog (unlike `clear-drawing` above):
+  // it only ever reverts the one most recent fill, a much smaller and
+  // cheaper-to-redo action than wiping every pen stroke, so a confirmation
+  // tap here would just be friction, not a real safety need.
+  function handleUndoFill() {
+    const previous = previousFillRef.current;
+    if (!previous) return;
+    setPixels(previous.pixels);
+    setFilledImage(previous.filledImage);
+    previousFillRef.current = null;
+    setCanUndoFill(false);
   }
 
   // Commits the in-progress stroke (if any) into `strokes` and clears the
@@ -206,7 +282,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     const finished = activePathRef.current;
     activePathRef.current = null;
     if (finished) {
-      setStrokes((prev) => [...prev, { path: finished, color: selectedDisplayColorRef.current }]);
+      // Each stroke keeps the width it was drawn with, captured at the
+      // moment it's committed — moving the pen-size slider afterward must
+      // only affect the NEXT stroke, not retroactively resize ones already
+      // on the canvas (the same reasoning `color` above already follows).
+      setStrokes((prev) => [
+        ...prev,
+        { path: finished, color: selectedDisplayColorRef.current, width: penWidthRef.current },
+      ]);
     }
     setCurrentPath(null);
   }
@@ -219,8 +302,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         if (toolModeRef.current !== 'pen') return;
         const { locationX, locationY } = evt.nativeEvent;
         // Pen strokes are drawn as an overlay directly on the Canvas, which
-        // is already sized to canvasSize - the same coordinate space these
-        // locationX/locationY touch coordinates arrive in, so no further
+        // is already sized to canvasWidth/canvasHeight - the same
+        // coordinate space these locationX/locationY touch coordinates
+        // arrive in, so no further
         // scaling is needed here (unlike the fill-mode pixel-buffer lookup,
         // which maps this same raw coordinate into the image's native pixel
         // space instead).
@@ -264,14 +348,42 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         {imageLoadFailed ? (
-          <View testID="coloring-image-load-error">
-            <Text style={{ color: colors.ink }}>{t('coloringImageLoadError')}</Text>
+          <View testID="coloring-image-load-error" style={{ alignItems: 'center' }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: 'bold',
+                color: colors.ink,
+                textAlign: 'center',
+                marginBottom: spacing.md,
+              }}
+            >
+              {t('coloringImageLoadError')}
+            </Text>
+            <Pressable
+              testID="coloring-retry"
+              onPress={() => setRetryToken((n) => n + 1)}
+              accessibilityRole="button"
+              accessibilityLabel={t('retry')}
+              style={{
+                backgroundColor: colors.coral,
+                borderColor: colors.coralDark,
+                borderWidth: 2,
+                borderRadius: radii.xl,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.xl,
+                ...shadow,
+                elevation: 4,
+              }}
+            >
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.white }}>{t('retry')}</Text>
+            </Pressable>
           </View>
         ) : (
         <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
-          <Canvas style={{ width: canvasSize, height: canvasSize }} testID="coloring-canvas">
+          <Canvas style={{ width: canvasWidth, height: canvasHeight }} testID="coloring-canvas">
             {displayImage && (
-              <SkiaImage image={displayImage} x={0} y={0} width={canvasSize} height={canvasSize} />
+              <SkiaImage image={displayImage} x={0} y={0} width={canvasWidth} height={canvasHeight} />
             )}
             {strokes.map((stroke, i) => stroke.path && (
               <SkiaPath
@@ -279,7 +391,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                 path={stroke.path}
                 color={stroke.color}
                 style="stroke"
-                strokeWidth={PEN_STROKE_WIDTH}
+                strokeWidth={stroke.width}
                 strokeCap="round"
                 strokeJoin="round"
               />
@@ -289,7 +401,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                 path={currentPath}
                 color={selectedDisplayColor}
                 style="stroke"
-                strokeWidth={PEN_STROKE_WIDTH}
+                strokeWidth={penWidth}
                 strokeCap="round"
                 strokeJoin="round"
               />
@@ -307,7 +419,32 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           paddingTop: spacing.sm,
         }}
       >
-        <View style={{ flexDirection: 'row', marginBottom: spacing.sm }}>
+        <View
+          testID="coloring-toolbar-row"
+          style={{
+            flexDirection: 'row',
+            // See the "toolbar row screen-fit" note in Technical Decisions
+            // (iteration 28): with up to 4 buttons visible at once (Fill,
+            // Pen, Undo, Clear drawing — reachable together after both a
+            // fill and a pen stroke) and German text running noticeably
+            // longer than English (`clearDrawing`'s "Zeichnung löschen" is
+            // the longest), a hand-computed worst case leaves only a
+            // moderate safety margin against a narrow landscape phone's
+            // width once notch/gesture-bar insets are subtracted — not the
+            // huge, confidently-safe margin the quiz's progress-dots row
+            // had (iteration 20). `flexWrap: 'wrap'` costs nothing visually
+            // in the common one-row case and removes the overflow risk
+            // entirely by dropping excess buttons to a second line instead
+            // of clipping them off-screen. `gap` (RN 0.86 supports it,
+            // already used elsewhere in this codebase, e.g.
+            // QuizScreen.tsx/SettingsScreen.tsx) replaces the old
+            // per-button `marginRight` so wrapped rows get consistent
+            // vertical spacing too, not just horizontal.
+            flexWrap: 'wrap',
+            gap: spacing.sm,
+            marginBottom: spacing.sm,
+          }}
+        >
           <Pressable
             testID="tool-fill"
             onPress={() => setToolMode('fill')}
@@ -317,7 +454,6 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               paddingVertical: spacing.xs,
               paddingHorizontal: spacing.md,
               borderRadius: radii.md,
-              marginRight: spacing.sm,
               backgroundColor: toolMode === 'fill' ? colors.sky : colors.white,
               borderWidth: 2,
               borderColor: toolMode === 'fill' ? colors.skyDark : colors.disabledBorder,
@@ -334,7 +470,6 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               paddingVertical: spacing.xs,
               paddingHorizontal: spacing.md,
               borderRadius: radii.md,
-              marginRight: spacing.sm,
               backgroundColor: toolMode === 'pen' ? colors.sky : colors.white,
               borderWidth: 2,
               borderColor: toolMode === 'pen' ? colors.skyDark : colors.disabledBorder,
@@ -342,10 +477,50 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           >
             <Text style={{ color: colors.ink, fontWeight: '600' }}>{'✏️ '}{t('toolPen')}</Text>
           </Pressable>
+          {canUndoFill && (
+            <Pressable
+              testID="undo-fill"
+              onPress={handleUndoFill}
+              accessibilityRole="button"
+              accessibilityLabel={t('undoFill')}
+              style={{
+                paddingVertical: spacing.xs,
+                paddingHorizontal: spacing.md,
+                borderRadius: radii.md,
+                backgroundColor: colors.white,
+                borderWidth: 2,
+                borderColor: colors.disabledBorder,
+              }}
+            >
+              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'↩️ '}{t('undoFill')}</Text>
+            </Pressable>
+          )}
           {strokes.length > 0 && (
             <Pressable
               testID="clear-drawing"
-              onPress={() => setStrokes([])}
+              onPress={() =>
+                // Clearing wipes every pen stroke a child has drawn with a
+                // single tap and cannot be undone, so — unlike picking a
+                // tool/color, which is trivially reversible — this needs a
+                // confirmation step first. Uses the same Alert.alert
+                // cancel/confirm pattern already established for
+                // SettingsScreen's destructive folder-migration action, for
+                // consistency rather than introducing a second confirmation
+                // UI in this codebase.
+                Alert.alert(
+                  t('clearDrawingConfirmTitle'),
+                  t('clearDrawingConfirmBody'),
+                  [
+                    { text: t('clearDrawingConfirmCancel'), style: 'cancel', onPress: () => {} },
+                    {
+                      text: t('clearDrawingConfirmConfirm'),
+                      style: 'destructive',
+                      onPress: () => setStrokes([]),
+                    },
+                  ],
+                  { cancelable: true }
+                )
+              }
               style={{
                 paddingVertical: spacing.xs,
                 paddingHorizontal: spacing.md,
@@ -360,6 +535,34 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           )}
         </View>
 
+        {toolMode === 'pen' && (
+          // Only shown in pen mode — fill mode has no use for a stroke
+          // width, and showing it unconditionally would permanently cost
+          // this already-tight footer extra height for no benefit.
+          <View
+            testID="pen-size-row"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}
+          >
+            <Text style={{ color: colors.ink, fontWeight: '600' }}>{t('penSizeLabel')}</Text>
+            <Slider
+              testID="pen-size-slider"
+              style={{ flex: 1, height: 40 }}
+              minimumValue={PEN_STROKE_WIDTH_MIN}
+              maximumValue={PEN_STROKE_WIDTH_MAX}
+              step={PEN_STROKE_WIDTH_STEP}
+              value={penWidth}
+              onValueChange={setPenWidth}
+              minimumTrackTintColor={colors.skyDark}
+              maximumTrackTintColor={colors.disabledBorder}
+              thumbTintColor={colors.sky}
+              accessibilityLabel={t('penSizeLabel')}
+            />
+            <Text testID="pen-size-value" style={{ color: colors.ink, fontWeight: '600', minWidth: 28 }}>
+              {penWidth}
+            </Text>
+          </View>
+        )}
+
         <ScrollView
           testID="coloring-palette"
           horizontal
@@ -371,10 +574,20 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               <Pressable
                 key={i}
                 testID={`palette-color-${i}`}
+                accessibilityRole="button"
+                accessibilityLabel={t(paletteColor.nameKey)}
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => {
                   setSelectedColor(paletteColor.fill);
                   setSelectedDisplayColor(paletteColor.display);
                 }}
+                // The visual swatch is 44x44; this extends the tappable
+                // (not visible) area by 2px on every edge so the effective
+                // tap target meets the ~48x48 logical-pixel guideline.
+                // Swatches sit `spacing.sm` (8px) apart, so 2px of hitSlop
+                // on each side still leaves a 4px gap between neighboring
+                // hit zones — no overlap.
+                hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
                 style={{
                   backgroundColor: paletteColor.display,
                   width: 44,

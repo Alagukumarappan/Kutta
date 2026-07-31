@@ -1,16 +1,24 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PuzzleGallery } from '../../src/puzzle/PuzzleGallery';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
+import { addFileReferences } from '../../src/storage/fileReferenceStore';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+  getInfoAsync: jest.fn(),
 }));
+jest.mock('@react-native-async-storage/async-storage');
+jest.mock('expo-document-picker');
 
 describe('PuzzleGallery', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await AsyncStorage.clear();
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
   });
 
   it('lists images from the pictures folder and calls onSelect when tapped', async () => {
@@ -47,15 +55,105 @@ describe('PuzzleGallery', () => {
       .mockRejectedValueOnce(new Error('SAF grant revoked'))
       .mockResolvedValueOnce(['content://tree/pictures/beach.jpg']);
 
-    const { findByTestId, findByText } = await render(
+    const { findByTestId, findByText, findByLabelText } = await render(
       <LanguageProvider initialLanguage="en">
         <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
       </LanguageProvider>
     );
 
     await findByText('Something went wrong loading this content.');
-    await fireEvent.press(await findByTestId('puzzle-gallery-retry'));
+    await fireEvent.press(await findByLabelText('Retry'));
 
     await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+  });
+
+  it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
+      new Error('SAF grant revoked')
+    );
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const retryButton = await findByTestId('puzzle-gallery-retry');
+    // Same unstyled-Text-only, no-adjacent-sibling situation as
+    // ColoringGallery's retry button (see that test for the full rationale).
+    const { top, bottom, left, right } = retryButton.props.hitSlop ?? {};
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(bottom).toBeGreaterThanOrEqual(12);
+    expect(left).toBeGreaterThanOrEqual(12);
+    expect(right).toBeGreaterThanOrEqual(12);
+  });
+
+  describe('individually-added pictures', () => {
+    it('shows the "add puzzle picture" button', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('puzzle-gallery-add');
+      await findByLabelText('+ Add puzzle picture');
+    });
+
+    it('merges individually-added pictures with the folder content, without duplicates', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+      ]);
+      await addFileReferences('puzzle', ['content://picked/mountain.jpg', 'content://tree/pictures/beach.jpg']);
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+      await findByTestId('puzzle-item-content://picked/mountain.jpg');
+    });
+
+    it('silently prunes a reference whose file no longer exists, without affecting the others', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      await addFileReferences('puzzle', ['content://picked/still-there.jpg', 'content://picked/gone.jpg']);
+      (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (uri: string) => ({
+        exists: uri !== 'content://picked/gone.jpg',
+      }));
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('puzzle-item-content://picked/still-there.jpg');
+      expect(queryByTestId('puzzle-item-content://picked/gone.jpg')).toBeNull();
+    });
+
+    it('reloads the gallery to show a newly-picked picture after using the Add button', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://picked/new.jpg', name: 'new.jpg', lastModified: 0 }],
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('puzzle-gallery-empty');
+      expect(queryByTestId('puzzle-item-content://picked/new.jpg')).toBeNull();
+
+      await fireEvent.press(await findByTestId('puzzle-gallery-add'));
+
+      await findByTestId('puzzle-item-content://picked/new.jpg');
+    });
   });
 });

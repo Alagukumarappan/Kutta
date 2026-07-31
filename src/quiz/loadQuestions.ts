@@ -6,14 +6,14 @@ function isBilingualText(v: unknown): v is { en: string; de: string } {
   return (
     typeof v === 'object' &&
     v !== null &&
-    typeof (v as any).en === 'string' &&
-    typeof (v as any).de === 'string'
+    typeof (v as Record<string, unknown>).en === 'string' &&
+    typeof (v as Record<string, unknown>).de === 'string'
   );
 }
 
 function isValidOption(v: unknown): v is QuestionOption {
   if (typeof v !== 'object' || v === null) return false;
-  const o = v as any;
+  const o = v as Record<string, unknown>;
   if (typeof o.id !== 'string') return false;
   if (o.text !== undefined && !isBilingualText(o.text)) return false;
   if (o.image !== undefined && typeof o.image !== 'string') return false;
@@ -22,27 +22,28 @@ function isValidOption(v: unknown): v is QuestionOption {
 
 function isValidQuestion(v: unknown): v is Question {
   if (typeof v !== 'object' || v === null) return false;
-  const q = v as any;
+  const q = v as Record<string, unknown>;
 
   if (typeof q.id !== 'string') return false;
   if (q.category !== 'image' && q.category !== 'text') return false;
   if (typeof q.minAge !== 'number' || typeof q.maxAge !== 'number') return false;
 
   if (typeof q.question !== 'object' || q.question === null) return false;
-  const hasQuestionText = q.question.text !== undefined;
-  const hasQuestionImage = q.question.image !== undefined;
+  const question = q.question as Record<string, unknown>;
+  const hasQuestionText = question.text !== undefined;
+  const hasQuestionImage = question.image !== undefined;
   if (!hasQuestionText && !hasQuestionImage) return false;
-  if (hasQuestionText && !isBilingualText(q.question.text)) return false;
-  if (hasQuestionImage && typeof q.question.image !== 'string') return false;
+  if (hasQuestionText && !isBilingualText(question.text)) return false;
+  if (hasQuestionImage && typeof question.image !== 'string') return false;
 
   if (!Array.isArray(q.options) || q.options.length !== 4) return false;
   if (!q.options.every(isValidOption)) return false;
 
-  const optionIds = q.options.map((o: QuestionOption) => o.id);
+  const optionIds = q.options.map((o) => o.id);
   if (new Set(optionIds).size !== optionIds.length) return false;
 
   if (typeof q.correctOptionId !== 'string') return false;
-  if (!q.options.some((o: QuestionOption) => o.id === q.correctOptionId)) return false;
+  if (!q.options.some((o) => o.id === q.correctOptionId)) return false;
 
   if (q.minAge > q.maxAge) return false;
 
@@ -58,7 +59,7 @@ export function parseQuestionsFile(raw: string): Question[] {
   }
 
   if (typeof parsed !== 'object' || parsed === null) return [];
-  const questionsField = (parsed as any).questions;
+  const questionsField = (parsed as Record<string, unknown>).questions;
   if (!Array.isArray(questionsField)) return [];
 
   return questionsField.filter(isValidQuestion);

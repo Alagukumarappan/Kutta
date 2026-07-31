@@ -171,4 +171,49 @@ describe('OnboardingScreen', () => {
     expect(confirmText.props.children).toContain('Content');
     expect(confirmText.props.children).not.toBe('Folder selected ✓');
   });
+
+  it('gives the language pills and folder-picker button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
+    // Same gap, and same fix, as SettingsScreen's identically-styled (but
+    // separately-defined) language pills and folder button, addressed for
+    // OnboardingScreen too so the two nearly-identical screens don't drift
+    // out of consistency with each other.
+    const { getByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <OnboardingScreen onComplete={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    for (const testID of ['onboarding-lang-en', 'onboarding-lang-de']) {
+      const pill = getByTestId(testID);
+      const hitSlop = pill.props.hitSlop ?? {};
+      expect(hitSlop.top).toBeGreaterThanOrEqual(4);
+      expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
+    }
+
+    const folderButton = getByTestId('onboarding-folder-picker');
+    const folderHitSlop = folderButton.props.hitSlop ?? {};
+    expect(folderHitSlop.top).toBeGreaterThanOrEqual(4);
+    expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
+  });
+
+  describe('landscape screen-fit', () => {
+    // Same reasoning as SettingsScreen's screen-fit test: this screen stacks
+    // a title and two half-card rows inside a ScrollView on a
+    // landscape-locked phone with limited visible height. Pins the compact
+    // title spacing so it can't silently regress to the original large
+    // margins that made the first-run screen require excessive scrolling.
+    it('uses compact title spacing to minimize required scrolling', async () => {
+      const { StyleSheet } = require('react-native');
+      const { getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <OnboardingScreen onComplete={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const title = StyleSheet.flatten(getByText('Welcome!').props.style);
+      expect(title.fontSize).toBeLessThanOrEqual(24);
+      expect(title.marginTop).toBeLessThanOrEqual(8);
+      expect(title.marginBottom).toBeLessThanOrEqual(8);
+    });
+  });
 });

@@ -81,4 +81,20 @@ describe('RootNavigator header titles', () => {
     await waitFor(() => expect(findAllTitleProps(toJSON())).toContain('Settings'));
     expect(findAllTitleProps(toJSON())).not.toContain('settings');
   });
+
+  // If the SAF grant to the root folder was revoked, or a content subfolder
+  // was deleted/renamed outside the app, FolderErrorScreen's Retry button is
+  // the only way to recover without leaving the app entirely — it needs an
+  // accessible name so a screen-reader user isn't stuck on an unlabeled
+  // control.
+  it("gives FolderErrorScreen's retry button an accessible name", async () => {
+    (folderAccess.ensureContentStructure as jest.Mock).mockRejectedValueOnce(
+      new Error('SAF grant revoked')
+    );
+
+    const { findByLabelText, findByTestId } = await render(<RootNavigator />);
+
+    await findByTestId('folder-resolve-error');
+    await findByLabelText('Retry');
+  });
 });

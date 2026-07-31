@@ -97,6 +97,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
               testID="onboarding-lang-en"
               onPress={() => setLanguage('en' as Language)}
               style={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
                 English
@@ -106,6 +107,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
               testID="onboarding-lang-de"
               onPress={() => setLanguage('de' as Language)}
               style={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
                 Deutsch
@@ -115,7 +117,12 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         </View>
 
         <View style={[styles.card, styles.halfCard]}>
-          <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+          <Pressable
+            testID="onboarding-folder-picker"
+            onPress={handlePickFolder}
+            style={styles.folderButton}
+            hitSlop={{ top: 6, bottom: 6 }}
+          >
             <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
           </Pressable>
           {folderUri && (
@@ -157,17 +164,17 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   title: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   halfCard: {
     flex: 1,
@@ -176,16 +183,16 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
     ...shadow,
     elevation: 2,
   },
   label: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.ink,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   textInput: {
     borderWidth: 2,
@@ -259,9 +266,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     borderRadius: radii.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     borderWidth: 2,
   },
   saveButtonEnabled: {

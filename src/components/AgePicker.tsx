@@ -28,7 +28,12 @@ export function AgePicker({
 }) {
   return (
     <>
-      <Pressable testID={`${testIDPrefix}-picker`} onPress={onOpen} style={styles.field}>
+      <Pressable
+        testID={`${testIDPrefix}-picker`}
+        onPress={onOpen}
+        style={styles.field}
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+      >
         <Text style={value === null ? styles.placeholder : styles.value}>
           {value === null ? placeholder : String(value)}
         </Text>
@@ -92,6 +97,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   optionRow: {
+    minHeight: 48,
+    justifyContent: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,

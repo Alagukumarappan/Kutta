@@ -36,7 +36,35 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const Stack = createNativeStackNavigator();
+// Every route this navigator renders, with its exact `route.params` shape (or
+// `undefined` for routes that take none). Passing this to
+// `createNativeStackNavigator<RootStackParamList>()` below makes React
+// Navigation infer the correct `RouteProp<RootStackParamList, RouteName>` for
+// each `<Stack.Screen name="...">`'s `children` render-prop `route` argument,
+// so `route.params.imageUri`/`route.params.videoUri` type-check for real
+// instead of needing an `as any` cast on the destructure (hand-verified: a
+// wrong/misspelled `route.params` property name fails `tsc`). Note this does
+// NOT extend to the `navigation` argument in that same render-prop callback —
+// React Navigation's own `RouteConfigComponent` type declares it as plain
+// `any` regardless of the navigator's param-list generic (see
+// `node_modules/@react-navigation/core/.../types.d.ts`'s `children:` field),
+// so `navigation.navigate(...)` call sites below and in `HomeScreen` remain
+// unchecked against this list — a library type limitation, not something a
+// local fix can close without wrapping every render prop in a manually-typed
+// helper, which is out of scope here.
+type RootStackParamList = {
+  Home: undefined;
+  settings: undefined;
+  quiz: undefined;
+  coloring: undefined;
+  'coloring-detail': { imageUri: string };
+  puzzle: undefined;
+  'puzzle-detail': { imageUri: string };
+  video: undefined;
+  'video-detail': { videoUri: string };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const CONTENT_SUBFOLDERS = ['pictures', 'videos', 'coloring', 'quiz'] as const;
 type ContentSubfolder = (typeof CONTENT_SUBFOLDERS)[number];
@@ -82,7 +110,12 @@ function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
   return (
     <View testID="folder-resolve-error">
       <Text>{t('folderResolveError')}</Text>
-      <Pressable testID="folder-resolve-retry" onPress={onRetry}>
+      <Pressable
+        testID="folder-resolve-retry"
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel={t('retry')}
+      >
         <Text>{t('retry')}</Text>
       </Pressable>
     </View>
@@ -111,15 +144,22 @@ function AppStack({
         {({ navigation }) => (
           <HomeScreen
             childName={profile.name}
+            pictureUri={profile.pictureUri}
             onNavigate={(destination) => navigation.navigate(destination)}
           />
         )}
       </Stack.Screen>
       <Stack.Screen name="settings" options={{ title: titleFor('settingsTitle') }}>
-        {() => <SettingsScreen onProfileChanged={onProfileChanged} />}
+        {() => <SettingsScreen onProfileChanged={onProfileChanged} picturesFolderUri={folderUris.pictures} />}
       </Stack.Screen>
       <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
-        {() => <QuizScreen quizFolderUri={folderUris.quiz} childAge={profile.age} />}
+        {({ navigation }) => (
+          <QuizScreen
+            quizFolderUri={folderUris.quiz}
+            childAge={profile.age}
+            onGoHome={() => navigation.navigate('Home')}
+          />
+        )}
       </Stack.Screen>
       <Stack.Screen name="coloring" options={{ title: titleFor('homeColoring') }}>
         {({ navigation }) => (
@@ -130,7 +170,7 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="coloring-detail" options={{ title: titleFor('coloringDetailTitle') }}>
-        {({ route }: any) => <ColoringScreen imageUri={route.params.imageUri} />}
+        {({ route }) => <ColoringScreen imageUri={route.params.imageUri} />}
       </Stack.Screen>
       <Stack.Screen name="puzzle" options={{ title: titleFor('homePuzzle') }}>
         {({ navigation }) => (
@@ -141,7 +181,7 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="puzzle-detail" options={{ title: titleFor('puzzleDetailTitle') }}>
-        {({ route }: any) => <PuzzleScreen imageUri={route.params.imageUri} />}
+        {({ route }) => <PuzzleScreen imageUri={route.params.imageUri} />}
       </Stack.Screen>
       <Stack.Screen name="video" options={{ title: titleFor('homeVideo') }}>
         {({ navigation }) => (
@@ -152,7 +192,7 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="video-detail" options={{ title: titleFor('videoDetailTitle') }}>
-        {({ route }: any) => <VideoPlayerScreen videoUri={route.params.videoUri} />}
+        {({ route }) => <VideoPlayerScreen videoUri={route.params.videoUri} />}
       </Stack.Screen>
     </Stack.Navigator>
   );

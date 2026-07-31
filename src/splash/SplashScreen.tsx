@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Image, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { colors, spacing } from '../theme/tokens';
 
@@ -13,8 +13,13 @@ export function SplashScreen() {
 
   return (
     <View style={styles.screen} testID="splash-screen">
-      <Text style={styles.mascot}>🐶</Text>
-      <Text style={styles.title}>Kutta</Text>
+      <Image
+        testID="splash-logo"
+        source={require('../../assets/splash-icon.png')}
+        style={styles.logo}
+        resizeMode="contain"
+        accessibilityLabel="Kutta"
+      />
       <Text style={styles.tagline}>{t('splashTagline')}</Text>
       <ActivityIndicator size="large" color={colors.coral} style={styles.spinner} />
     </View>
@@ -29,15 +34,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.xl,
   },
-  mascot: {
-    fontSize: 96,
+  logo: {
+    width: 240,
+    height: 160,
     marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: colors.ink,
-    marginBottom: spacing.sm,
   },
   tagline: {
     fontSize: 16,

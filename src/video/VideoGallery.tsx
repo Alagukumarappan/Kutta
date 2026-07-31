@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
+import { spacing } from '../theme/tokens';
+import { EmptyState } from '../components/EmptyState';
+import { AddFilesButton } from '../components/AddFilesButton';
+import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
 
@@ -45,9 +49,20 @@ export function VideoGallery({
     setError(false);
     setVideos(null);
 
-    FileSystem.StorageAccessFramework.readDirectoryAsync(videosFolderUri)
-      .then((entries: string[]) => {
-        if (!cancelled) setVideos(entries.filter(isVideoFile));
+    Promise.all([
+      FileSystem.StorageAccessFramework.readDirectoryAsync(videosFolderUri).then((entries: string[]) =>
+        entries.filter(isVideoFile)
+      ),
+      // Videos the parent added individually (outside the configured
+      // folder) via AddFilesButton — pruneMissingFileReferences silently
+      // drops any that have since become unreachable rather than throwing,
+      // so it never causes this Promise.all to reject on its own.
+      pruneMissingFileReferences('video'),
+    ])
+      .then(([folderVideos, extraVideos]) => {
+        if (cancelled) return;
+        const merged = [...folderVideos, ...extraVideos.filter((uri) => !folderVideos.includes(uri))];
+        setVideos(merged);
       })
       .catch(() => {
         // The SAF grant may have been revoked, the folder deleted externally,
@@ -65,7 +80,13 @@ export function VideoGallery({
     return (
       <View testID="video-gallery-error" style={insetStyle}>
         <Text>{t('loadError')}</Text>
-        <Pressable testID="video-gallery-retry" onPress={() => setRetryToken((n) => n + 1)}>
+        <Pressable
+          testID="video-gallery-retry"
+          onPress={() => setRetryToken((n) => n + 1)}
+          accessibilityRole="button"
+          accessibilityLabel={t('retry')}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+        >
           <Text>{t('retry')}</Text>
         </Pressable>
       </View>
@@ -74,24 +95,40 @@ export function VideoGallery({
 
   if (videos === null) return <View testID="video-gallery-loading" style={insetStyle} />;
 
-  if (videos.length === 0) {
-    return (
-      <View style={insetStyle}>
-        <Text>{t('emptyVideos')}</Text>
-      </View>
-    );
-  }
-
   return (
-    <FlatList
-      data={videos}
-      keyExtractor={(uri) => uri}
-      contentContainerStyle={insetStyle}
-      renderItem={({ item }) => (
-        <Pressable testID={`video-item-${item}`} onPress={() => onSelect(item)}>
-          <Text>{fileNameFromUri(item)}</Text>
-        </Pressable>
+    <View style={[{ flex: 1 }, insetStyle]}>
+      <AddFilesButton
+        testID="video-gallery-add"
+        label={t('addVideo')}
+        contentType="video"
+        mimeType="video/*"
+        onAdded={() => setRetryToken((n) => n + 1)}
+      />
+      {videos.length === 0 ? (
+        <EmptyState testID="video-gallery-empty" emoji="🎥" message={t('emptyVideos')} />
+      ) : (
+        <FlatList
+          data={videos}
+          keyExtractor={(uri) => uri}
+          renderItem={({ item }) => (
+            <Pressable testID={`video-item-${item}`} onPress={() => onSelect(item)} style={styles.videoRow}>
+              <Text>{fileNameFromUri(item)}</Text>
+            </Pressable>
+          )}
+        />
       )}
-    />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  // Rows are rendered back-to-back with no gap/separator, so a `hitSlop`
+  // fix (as used for the isolated retry button above) would make adjacent
+  // rows' tap zones overlap. A real minHeight instead grows the row itself,
+  // pushing later rows down rather than creating an invisible overlap.
+  videoRow: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+  },
+});

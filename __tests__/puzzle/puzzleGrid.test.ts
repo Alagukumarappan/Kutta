@@ -188,6 +188,23 @@ describe('groupPiecesIntoRows', () => {
     ]);
   });
 
+  it('puts the remainder into a shorter final row when the item count is not an exact multiple of `cols`', () => {
+    // Not a real user-reachable puzzle shape today (GRID_DIMENSIONS_LANDSCAPE's
+    // pieceCount/cols pairs are always exact multiples), but groupPiecesIntoRows
+    // is a general-purpose helper and every existing test above happens to use
+    // an exact multiple - this pins down the ragged-remainder branch of
+    // `items.slice(i, i + cols)` for any future non-exact caller.
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5, 6], 3)).toEqual([
+      [0, 1, 2],
+      [3, 4, 5],
+      [6],
+    ]);
+  });
+
+  it('returns a single short row (not an empty extra row) when item count is less than `cols`', () => {
+    expect(groupPiecesIntoRows([0, 1], 3)).toEqual([[0, 1]]);
+  });
+
   it('never produces a row with more or fewer than `cols` items across all groups but the last', () => {
     for (const [length, cols] of [
       [4, 2],
@@ -246,5 +263,27 @@ describe('shufflePieceOrder', () => {
       const order = shufflePieceOrder(pieceCount, identityProducingRng);
       expect(order).not.toEqual(Array.from({ length: pieceCount }, (_, i) => i));
     }
+  });
+
+  // With exactly 2 pieces there are only 2 possible permutations of [0, 1]:
+  // the identity [0, 1] and the single swap [1, 0]. Since non-identity is
+  // guaranteed, the result must ALWAYS be [1, 0] - regardless of which of
+  // Fisher-Yates's two code paths produces it. Hand-traced both branches of
+  // `shuffle([0, 1], rng)` (the only loop iteration is i=1, j = floor(rng() * 2)):
+  //   - rng() >= 0.5 -> j = 1 -> result[1] swaps with itself -> stays [0, 1]
+  //     (identity) -> shufflePieceOrder's own fallback then swaps indices 0
+  //     and 1 -> [1, 0].
+  //   - rng() < 0.5 -> j = 0 -> result[1] swaps with result[0] -> becomes
+  //     [1, 0] directly, already non-identity, so the fallback does not fire.
+  // Both branches converge on the same [1, 0] output.
+  it('always returns [1, 0] for exactly 2 pieces, regardless of which RNG branch fires', () => {
+    // rng() >= 0.5: Fisher-Yates itself produces identity, so the
+    // guaranteed-non-identity fallback swap must fire to produce [1, 0].
+    expect(shufflePieceOrder(2, () => 0.99999)).toEqual([1, 0]);
+    expect(shufflePieceOrder(2, () => 0.5)).toEqual([1, 0]);
+    // rng() < 0.5: Fisher-Yates itself already produces the non-identity
+    // swap directly, without the fallback needing to fire.
+    expect(shufflePieceOrder(2, () => 0.0)).toEqual([1, 0]);
+    expect(shufflePieceOrder(2, () => 0.25)).toEqual([1, 0]);
   });
 });

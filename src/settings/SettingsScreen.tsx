@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getProfile, saveProfile } from '../storage/profileStore';
@@ -7,10 +7,14 @@ import { requestFolderAccess } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import { AgePicker } from '../components/AgePicker';
+import { ProfilePicturePicker } from './ProfilePicturePicker';
 import type { Language, Profile } from '../types/profile';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 
-export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => void } = {}) {
+export function SettingsScreen({
+  onProfileChanged,
+  picturesFolderUri,
+}: { onProfileChanged?: () => void; picturesFolderUri?: string } = {}) {
   const { t, setLanguage } = useLanguage();
   // Shown with headerShown:true (see RootNavigator), so the native header
   // already covers the top inset — only left/right/bottom are ours to
@@ -23,6 +27,14 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
   const [pendingFolderUri, setPendingFolderUri] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [migrationError, setMigrationError] = useState<string | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  // The current profile-picture preview can go stale exactly like every
+  // other locally-referenced photo this app shows (file deleted, SD card
+  // unmounted, SAF grant revoked) — track a load failure so a broken-image
+  // icon never gets shown in its place, same reasoning as
+  // resolveProfilePictureUri (src/storage/profilePicture.ts), which the
+  // Home screen side of this feature uses for the same file.
+  const [previewFailed, setPreviewFailed] = useState(false);
 
   useEffect(() => {
     getProfile().then((p) => {
@@ -30,6 +42,33 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
       if (p) setAge(p.age);
     });
   }, []);
+
+  // Reset the stale-preview flag whenever the picture itself changes (a new
+  // pick, a remove, or the profile reloading) — a failure recorded against
+  // the OLD uri must never keep hiding the preview for a newly-picked one.
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [profile?.pictureUri]);
+
+  function handleChoosePicture() {
+    setPickerVisible(true);
+  }
+
+  function handlePictureSelected(uri: string) {
+    if (!profile) return;
+    // Staged into local `profile` state exactly like name/age/language
+    // above — not persisted until "Save changes" is pressed. This keeps a
+    // mis-tap on a thumbnail low-stakes (nothing is written to storage
+    // until the parent explicitly confirms), matching this screen's
+    // existing edit-then-save convention rather than writing immediately.
+    setProfile({ ...profile, pictureUri: uri });
+    setPickerVisible(false);
+  }
+
+  function handleRemovePicture() {
+    if (!profile) return;
+    setProfile({ ...profile, pictureUri: undefined });
+  }
 
   async function handlePickFolder() {
     try {
@@ -103,6 +142,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
   const displayedFolderUri = pendingFolderUri ?? profile.rootFolderUri;
 
   return (
+    <>
     <ScrollView
       testID="settings-loaded"
       style={styles.scrollView}
@@ -144,6 +184,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
               testID="settings-lang-en"
               onPress={() => setProfile({ ...profile, language: 'en' as Language })}
               style={[styles.langPill, profile.language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text
                 style={[
@@ -158,6 +199,7 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
               testID="settings-lang-de"
               onPress={() => setProfile({ ...profile, language: 'de' as Language })}
               style={[styles.langPill, profile.language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text
                 style={[
@@ -180,9 +222,54 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
               </Text>
             </View>
           )}
-          <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+          <Pressable
+            testID="settings-folder-picker"
+            onPress={handlePickFolder}
+            style={styles.folderButton}
+            hitSlop={{ top: 6, bottom: 6 }}
+          >
             <Text style={styles.folderButtonText}>{t('settingsChangeFolder')}</Text>
           </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.label}>{t('settingsProfilePicture')}</Text>
+        <View style={styles.pictureRow}>
+          {profile.pictureUri && !previewFailed ? (
+            <Image
+              testID="settings-picture-preview"
+              source={{ uri: profile.pictureUri }}
+              style={styles.picturePreview}
+              accessibilityLabel={t('settingsProfilePicture')}
+              onError={() => setPreviewFailed(true)}
+            />
+          ) : (
+            <View testID="settings-picture-placeholder" style={styles.picturePlaceholder} />
+          )}
+
+          <View style={styles.pictureButtons}>
+            {picturesFolderUri && (
+              <Pressable
+                testID="settings-picture-choose"
+                onPress={handleChoosePicture}
+                style={styles.choosePictureButton}
+                hitSlop={{ top: 6, bottom: 6 }}
+              >
+                <Text style={styles.choosePictureButtonText}>{t('profilePictureChoose')}</Text>
+              </Pressable>
+            )}
+            {profile.pictureUri && (
+              <Pressable
+                testID="settings-picture-remove"
+                onPress={handleRemovePicture}
+                style={styles.removePictureButton}
+                hitSlop={{ top: 6, bottom: 6 }}
+              >
+                <Text style={styles.removePictureButtonText}>{t('profilePictureRemove')}</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
 
@@ -208,6 +295,16 @@ export function SettingsScreen({ onProfileChanged }: { onProfileChanged?: () => 
         </Text>
       </Pressable>
     </ScrollView>
+
+      {picturesFolderUri && (
+        <ProfilePicturePicker
+          visible={pickerVisible}
+          picturesFolderUri={picturesFolderUri}
+          onSelect={handlePictureSelected}
+          onClose={() => setPickerVisible(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -221,17 +318,17 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   title: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   halfCard: {
     flex: 1,
@@ -240,16 +337,16 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
     ...shadow,
     elevation: 2,
   },
   label: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.ink,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   textInput: {
     borderWidth: 2,
@@ -315,6 +412,59 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  pictureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  picturePreview: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.disabledBg,
+  },
+  picturePlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.disabledBg,
+    borderWidth: 2,
+    borderColor: colors.disabledBorder,
+  },
+  pictureButtons: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  choosePictureButton: {
+    backgroundColor: colors.sky,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    ...shadow,
+    elevation: 2,
+  },
+  choosePictureButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  removePictureButton: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.coral,
+  },
+  removePictureButtonText: {
+    color: colors.coral,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   infoBanner: {
     backgroundColor: colors.sun,
     borderRadius: radii.md,
@@ -339,9 +489,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     borderRadius: radii.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
     borderWidth: 2,
   },
   saveButtonEnabled: {

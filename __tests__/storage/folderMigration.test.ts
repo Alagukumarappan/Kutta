@@ -150,6 +150,40 @@ describe('migrateContent', () => {
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
   });
 
+  it('does NOT treat a sibling folder whose name is a prefix of another as nested (e.g. "Kutta" vs "KuttaBackup")', async () => {
+    // Regression test for the boundary-char fix documented above
+    // isSameOrNestedWithin: a naive `candidate.startsWith(ancestor)` check
+    // (with no boundary-character follow-up) would wrongly treat
+    // "primary:KuttaBackup" as nested inside "primary:Kutta" purely because
+    // one string happens to be a textual prefix of the other, even though
+    // they're unrelated sibling folders on disk. The boundary check (next
+    // char must be "/" or ":") must reject that false match and let the
+    // migration proceed normally.
+    const oldRoot = 'content://tree/document/primary%3AKutta';
+    const newRoot = 'content://tree/document/primary%3AKuttaBackup';
+    const tree = {
+      [oldRoot]: ['pictures', 'videos', 'coloring', 'quiz'],
+      [newRoot]: ['pictures', 'videos', 'coloring', 'quiz'],
+      [`${oldRoot}/pictures`]: ['p1.png'],
+      [`${newRoot}/pictures`]: ['p1.png'],
+      [`${oldRoot}/videos`]: [],
+      [`${newRoot}/videos`]: [],
+      [`${oldRoot}/coloring`]: [],
+      [`${newRoot}/coloring`]: [],
+      [`${oldRoot}/quiz`]: ['questions.json', 'images'],
+      [`${newRoot}/quiz`]: ['questions.json', 'images'],
+      [`${oldRoot}/quiz/images`]: [],
+      [`${newRoot}/quiz/images`]: [],
+    };
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
+    (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
+
+    const result = await migrateContent(oldRoot, newRoot);
+
+    expect(result).toEqual({ success: true });
+    expect(FileSystem.StorageAccessFramework.copyAsync).toHaveBeenCalled();
+  });
+
   it('refuses to migrate when old and new roots are the same folder', async () => {
     const result = await migrateContent('same-root', 'same-root');
 

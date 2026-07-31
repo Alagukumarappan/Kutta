@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { seedSampleColoring, seedSamplePictures, seedSampleQuizImages, getSampleQuestionsJson } from './sampleContent';
 
 const SUBFOLDERS = ['pictures', 'videos', 'coloring', 'quiz'] as const;
 
@@ -53,13 +54,25 @@ export async function ensureContentStructure(rootUri: string): Promise<void> {
   }
 
   const quizUri = subfolderUris.quiz;
-
-  await ensureSubfolder(quizUri, 'images');
+  const quizImagesUri = await ensureSubfolder(quizUri, 'images');
 
   const quizEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(quizUri);
   const hasQuestionsFile = quizEntries.some((e) => leafNameOf(e) === 'questions.json');
   if (!hasQuestionsFile) {
+    // A brand-new quiz folder gets the bundled sample questions instead of
+    // an empty stub, so the quiz card isn't blank the first time a parent
+    // opens it — see sampleContent.ts. This only ever runs once per folder
+    // (gated on the file not existing yet), so it can never overwrite a
+    // parent's own questions.json on a later app open.
     const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(quizUri, 'questions.json', 'application/json');
-    await FileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, JSON.stringify({ questions: [] }, null, 2));
+    await FileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, getSampleQuestionsJson());
   }
+
+  // Each of these is independently gated on its own destination folder
+  // being empty (see sampleContent.ts), so re-running ensureContentStructure
+  // against a folder the parent has already started adding their own
+  // content to is always a safe no-op.
+  await seedSampleColoring(subfolderUris.coloring);
+  await seedSamplePictures(subfolderUris.pictures);
+  await seedSampleQuizImages(quizImagesUri);
 }

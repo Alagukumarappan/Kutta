@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, Image, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, ScrollView, Animated, Modal } from 'react-native';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
-import { t } from '../i18n/strings';
+import { t, tFormat } from '../i18n/strings';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 
 // This screen rebuilds the quiz UI as a single-question, STACKED layout
@@ -73,22 +73,105 @@ export function QuestionRenderer({
   selectedOptionId,
   onSelect,
   onNext,
+  onRetry,
   currentIndex,
   totalQuestions,
+  childAge,
 }: {
   question: Question;
   language: Language;
   selectedOptionId: string | null;
   onSelect: (optionId: string) => void;
   onNext: () => void;
+  // Called when the child taps "Try Again" after a wrong answer. Expected to
+  // clear the parent's selectedOptionId (see QuizScreen.handleRetry) so the
+  // options re-enable and the child can pick again on the SAME question —
+  // this never itself scores anything; only onNext ever does that, so a
+  // retry can never cause a duplicate/extra score for one question.
+  onRetry?: () => void;
   // Optional: when provided, a row of progress dots is shown above the
   // question so a pre-reader can see how far through the session they are
   // without needing to parse numbers/text. currentIndex is 0-based.
   currentIndex?: number;
   totalQuestions?: number;
+  // The active child's profile age (2-8), used only to pick the
+  // age-appropriate wrong-answer wording tier below. Optional and defaults
+  // to the older (5-8) tier so existing/other call sites that don't pass it
+  // still get sensible, non-crashing wording.
+  childAge?: number;
 }) {
   const hasAnswered = selectedOptionId !== null;
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
+  // Ages 2-4 get the gentlest, simplest phrasing; 5-8 gets a slightly more
+  // capable-sounding nudge. See quizIncorrectYoung/quizIncorrectOlder in
+  // src/i18n/strings.ts for the actual wording in both languages.
+  const incorrectTextKey = typeof childAge === 'number' && childAge <= 4 ? 'quizIncorrectYoung' : 'quizIncorrectOlder';
+
+  // Brief, non-blocking "correct answer" celebration: a pop-in/fade-out
+  // bubble that plays alongside (never in front of, and never gating) the
+  // existing feedback banner + Next button below. Built with RN's built-in
+  // Animated API only — react-native-reanimated is listed in package.json
+  // but is wired into neither babel.config.js nor used anywhere in this
+  // app today, and adding that wiring is a separate, riskier change than
+  // this iteration's scope, so Animated (bundled with react-native, no new
+  // dependency) is used instead.
+  //
+  // The effect below only re-runs when `isCorrect` flips from false to
+  // true. Combined with renderOption's existing `!hasAnswered` guard on
+  // onSelect (a few lines below), one answer can never (a) score twice or
+  // (b) replay/stack this celebration twice, even under rapid/repeated
+  // tapping on an option.
+  const scaleAnim = React.useRef(new Animated.Value(0)).current;
+  const opacityAnim = React.useRef(new Animated.Value(0)).current;
+  const [showCelebration, setShowCelebration] = React.useState(false);
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!isCorrect) {
+      setShowCelebration(false);
+      return;
+    }
+
+    setShowCelebration(true);
+    scaleAnim.setValue(0);
+    opacityAnim.setValue(0);
+
+    // Bounded, non-flashing sequence: pop in (~200ms), hold briefly
+    // (900ms), then fade out (300ms) — well under a couple of seconds
+    // total, so it always auto-resolves on its own.
+    const animation = Animated.sequence([
+      Animated.parallel([
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]),
+      Animated.delay(900),
+      Animated.timing(opacityAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]);
+
+    animation.start(({ finished }) => {
+      if (finished && isMountedRef.current) setShowCelebration(false);
+    });
+
+    // Stop the animation (cancelling any pending step/callback) if the
+    // question changes, the child navigates away, or this component
+    // unmounts mid-celebration — no leaked timers/handles.
+    return () => {
+      animation.stop();
+    };
+    // question.id is included defensively (not just `isCorrect`): today
+    // QuizScreen always resets selectedOptionId to null before advancing to
+    // the next question, so isCorrect already cycles true -> false -> ...
+    // on every question change — but keying the effect on the question too
+    // means this can't silently start replaying a stale celebration even if
+    // that reset contract ever changes elsewhere.
+  }, [isCorrect, question.id, scaleAnim, opacityAnim]);
 
   const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
 
@@ -157,7 +240,22 @@ export function QuestionRenderer({
     >
       <View style={styles.column}>
         {showProgress && (
-          <View testID="quiz-progress" style={styles.progressRow}>
+          <View
+            testID="quiz-progress"
+            style={styles.progressRow}
+            // The dots themselves stay plain, unlabeled decoration — simple
+            // enough for a 2-4 year old to glance at without any digits on
+            // screen. `accessible` collapses the whole row (and its child
+            // dot Views) into ONE screen-reader-focusable node carrying this
+            // label, so TalkBack/VoiceOver announces "Question 2 of 5" once
+            // instead of reading out N separate, unlabeled dot views.
+            accessible
+            accessibilityRole="text"
+            accessibilityLabel={tFormat('quizProgressLabel', language, {
+              current: (currentIndex as number) + 1,
+              total: totalQuestions as number,
+            })}
+          >
             {Array.from({ length: totalQuestions as number }).map((_, i) => (
               <View
                 key={i}
@@ -193,17 +291,98 @@ export function QuestionRenderer({
         </View>
 
         {hasAnswered && (
-          <View testID="quiz-feedback" style={styles.feedbackRow}>
-            {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
-            <Text
-              style={[styles.feedbackText, isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText]}
-            >
-              {isCorrect ? t('quizCorrect', language) : t('quizIncorrect', language)}
-            </Text>
-            <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButton}>
-              <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
-            </Pressable>
-          </View>
+          // A single overlay presents both the result and the next action —
+          // rather than an inline footer row — so the child's attention goes
+          // to one clear thing at a time instead of splitting it between the
+          // answer grid and a row of text/buttons below it. Conditionally
+          // MOUNTING the Modal (rather than always rendering it with
+          // visible={hasAnswered}) is what actually keeps it out of the
+          // query tree entirely before an answer is given — matches this
+          // file's existing convention (the old feedback row used the same
+          // `hasAnswered &&` guard).
+          <Modal visible transparent animationType="fade">
+            <View style={styles.feedbackBackdrop}>
+              <View testID="quiz-feedback" style={styles.feedbackCard}>
+                {showCelebration && (
+                  // Decorative only: pointerEvents="none" so it can never
+                  // intercept a tap meant for Retry/Next underneath, and
+                  // hidden from assistive tech since the feedbackText below
+                  // ("Correct!"/quizCorrect) already announces the result —
+                  // this is purely a visual flourish layered on top, not new
+                  // information. "Overlay inside the overlay": this brief,
+                  // auto-fading bubble lives inside the same card as the
+                  // persistent message/buttons below, instead of floating
+                  // separately over the question card.
+                  <Animated.View
+                    testID="quiz-celebration"
+                    pointerEvents="none"
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    style={[
+                      styles.celebrationBubble,
+                      { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+                    ]}
+                  >
+                    <Text style={styles.celebrationEmoji}>🎉</Text>
+                    <Text style={styles.celebrationText} numberOfLines={1}>
+                      {t('quizCelebration', language)}
+                    </Text>
+                  </Animated.View>
+                )}
+
+                <View style={styles.feedbackMessageRow}>
+                  {isCorrect && <Text style={styles.feedbackEmoji}>🎉</Text>}
+                  <Text
+                    style={[
+                      styles.feedbackText,
+                      isCorrect ? styles.feedbackCorrectText : styles.feedbackIncorrectText,
+                    ]}
+                    numberOfLines={2}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    {isCorrect ? t('quizCorrect', language) : t(incorrectTextKey, language)}
+                  </Text>
+                </View>
+
+                {/* Retry + Next together, whether correct or wrong: Retry
+                    (calls onRetry — clears the selection only, never
+                    scores, see the onRetry prop doc above) lets the child
+                    replay this same question even after answering
+                    correctly, purely for fun; Next always advances via the
+                    single onNext/answerCurrentQuestion path, so a correct
+                    Retry can never double-score. */}
+                <View style={styles.feedbackButtonGroup}>
+                  <Pressable
+                    testID="quiz-retry-answer"
+                    onPress={onRetry}
+                    style={styles.tryAgainButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('retry', language)}
+                  >
+                    <Text
+                      style={styles.tryAgainButtonText}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      {t('retry', language)}
+                    </Text>
+                  </Pressable>
+                  <Pressable testID="quiz-next" onPress={onNext} style={styles.nextButtonSmall}>
+                    <Text
+                      style={styles.nextButtonText}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      {t('quizNext', language)}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
         )}
       </View>
     </ScrollView>
@@ -361,12 +540,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   image: {},
-  feedbackRow: {
-    marginTop: spacing.sm,
+  // Dark, non-interactive backdrop (no onPress — a child must use Retry or
+  // Next, not a tap-outside dismiss) behind the centered feedback card.
+  feedbackBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  feedbackCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    alignItems: 'center',
+    maxWidth: 420,
+    width: '100%',
+    ...shadow,
+    elevation: 8,
+  },
+  feedbackMessageRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     columnGap: spacing.sm,
+    marginBottom: spacing.md,
   },
   feedbackEmoji: {
     fontSize: 22,
@@ -375,6 +573,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 20,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   feedbackCorrectText: {
     color: colors.mintDark,
@@ -382,19 +581,61 @@ const styles = StyleSheet.create({
   feedbackIncorrectText: {
     color: colors.coralDark,
   },
-  nextButton: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
+  feedbackButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.xs,
+  },
+  tryAgainButton: {
+    backgroundColor: colors.sun,
+    borderColor: colors.sunDark,
     borderWidth: 2,
     borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
     ...shadow,
     elevation: 4,
+  },
+  tryAgainButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.ink,
   },
   nextButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.white,
+  },
+  nextButtonSmall: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coralDark,
+    borderWidth: 2,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    ...shadow,
+    elevation: 4,
+  },
+  // A normal flex child now (not absolutely positioned) — it lives inside
+  // feedbackCard, above the message/buttons, rather than floating over the
+  // question card separately. pointerEvents "none" (set on the component)
+  // still means it can never block a tap on Retry/Next below it.
+  celebrationBubble: {
+    backgroundColor: colors.sun,
+    borderRadius: radii.xl,
+    borderWidth: 3,
+    borderColor: colors.sunDark,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  celebrationEmoji: {
+    fontSize: 26,
+  },
+  celebrationText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.ink,
   },
 });
