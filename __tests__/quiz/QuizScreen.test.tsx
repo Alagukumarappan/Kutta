@@ -408,6 +408,17 @@ describe('QuizScreen', () => {
 
       expect(springSpy.mock.calls.length).toBe(springCallsBefore);
       expect(timingSpy.mock.calls.length).toBeGreaterThan(timingCallsBefore);
+
+      // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+      // jest.fn() (a native module method), so this file's own
+      // `afterEach(() => jest.restoreAllMocks())` can't undo the
+      // `mockResolvedValue(true)` above — there's no real "original"
+      // implementation for it to revert to, so the mocked value otherwise
+      // silently leaks into every later test in this file (a real,
+      // verified bug — see ColoringScreen's iteration 30 notes for the
+      // full mechanism). Explicitly resetting it back to `false` here is
+      // what actually fixes it.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
     });
 
     it('"Play Again" starts a genuinely fresh session — new shuffle, score and progress reset to zero', async () => {

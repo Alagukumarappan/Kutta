@@ -459,6 +459,17 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const activeToolbarAnimationsRef = useRef<Partial<Record<ToolbarButtonKey, Animated.CompositeAnimation>>>({});
 
   function animateToolbarButton(key: ToolbarButtonKey, toValue: number) {
+    activeToolbarAnimationsRef.current[key]?.stop();
+    // Same reduce-motion treatment as this screen's palette-swatch pop
+    // (iteration 29) and useTiltPress's app-wide press feedback (iteration
+    // 24): land directly on the target scale instead of animating. This
+    // spring has no overshoot (bounciness: 0) so it's gentler than the
+    // swatch pop, but it's still the scale-transform press feedback
+    // reduce-motion guidance targets.
+    if (reducedMotion) {
+      toolbarScales[key].setValue(toValue);
+      return;
+    }
     // Native-driven, no-overshoot spring — only ever touches `transform`,
     // so it can't affect this footer's layout/screen-fit (see the
     // "toolbar row screen-fit" note above).

@@ -80,6 +80,16 @@ describe('RaisedPrimaryButton', () => {
     expect(springSpy).not.toHaveBeenCalled();
 
     springSpy.mockRestore();
+    // `restoreAllMocks()` alone can't undo this specific mock:
+    // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+    // jest.fn() (a native module method), so `jest.spyOn` above just
+    // returns that same mock rather than wrapping a real implementation —
+    // there's no "original" to restore to, and the mocked `true` value
+    // otherwise silently leaks into every later test in this file (a real,
+    // verified bug — see ColoringScreen's iteration 30 notes for the full
+    // mechanism). Explicitly resetting it back to `false` here is what
+    // actually fixes it.
+    (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
     jest.restoreAllMocks();
   });
 });

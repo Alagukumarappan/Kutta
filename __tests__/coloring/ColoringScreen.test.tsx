@@ -750,6 +750,18 @@ describe('ColoringScreen', () => {
       expect(blueScale).toBeCloseTo(1.12);
       expect(redScale).toBeCloseTo(1);
 
+      // `jest.restoreAllMocks()` alone does NOT undo this specific mock:
+      // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+      // jest.fn() (a native module method), so `jest.spyOn` above just
+      // returns that same mock rather than wrapping a real implementation —
+      // there's no "original" for restore to revert to, and the
+      // `mockResolvedValue(true)` set above silently keeps leaking into
+      // every later test in this file (a real, verified bug: confirmed by
+      // reproducing it in isolation — see iteration 30's notes). Explicitly
+      // resetting the resolved value back to `false` here is what actually
+      // fixes it; `restoreAllMocks()` is kept alongside for the OTHER real
+      // (non-automocked) spies this file's tests use.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
       jest.restoreAllMocks();
     });
   });
@@ -800,6 +812,44 @@ describe('ColoringScreen', () => {
       // toolbar tests elsewhere, which press these same buttons via
       // fireEvent.press and observe toolMode-driven UI change correctly.
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this
+    // press-in/press-out scale always sprang, ignoring the OS reduce-motion
+    // setting — the same category as the palette-swatch pop just above and
+    // useTiltPress's app-wide press feedback (iteration 24). Unlike the
+    // spring case above, `setValue` takes effect synchronously under Jest,
+    // so this reads the settled flattened style directly rather than
+    // spying on `Animated.spring`.
+    it('skips the toolbar button press spring when the OS reduce-motion setting is on, landing directly on the pressed/rest scale', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const fillButton = getByTestId('tool-fill');
+      await fireEvent(fillButton, 'pressIn');
+
+      const pressedFlattened = StyleSheet.flatten(getByTestId('tool-fill-face').props.style);
+      const pressedScale = pressedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(pressedScale).toBeCloseTo(0.94);
+
+      await fireEvent(fillButton, 'pressOut');
+
+      const restedFlattened = StyleSheet.flatten(getByTestId('tool-fill-face').props.style);
+      const restedScale = restedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(restedScale).toBeCloseTo(1);
+
+      // See the matching comment on the swatch-pop reduce-motion test above
+      // — `restoreAllMocks()` alone can't undo this specific mock.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
+      jest.restoreAllMocks();
     });
   });
 });
