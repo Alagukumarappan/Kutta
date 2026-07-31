@@ -34,7 +34,13 @@ export function ProfilePicturePicker({
   onClose,
 }: {
   visible: boolean;
-  picturesFolderUri: string;
+  // Optional: during onboarding, the parent hasn't picked a content folder
+  // yet (and even once they have, ensureContentStructure only creates the
+  // real "pictures" subfolder at Save time) — so there is nothing to list
+  // yet. When omitted, this picker skips the folder grid/loading/error
+  // states entirely and offers only "Browse anywhere", which needs no
+  // folder at all.
+  picturesFolderUri?: string;
   onSelect: (imageUri: string) => void;
   onClose: () => void;
 }) {
@@ -69,10 +75,21 @@ export function ProfilePicturePicker({
   // added/removed from outside the app) and this is cheap to re-run.
   useEffect(() => {
     if (!visible) return;
+    selectingRef.current = false;
+
+    if (!picturesFolderUri) {
+      // No folder to list (see the prop's own doc comment) — leave images
+      // as null and skip the SAF call entirely; the render below treats a
+      // missing picturesFolderUri as "no grid section" rather than
+      // rendering null as an infinite loading spinner.
+      setError(false);
+      setImages(null);
+      return;
+    }
+
     let cancelled = false;
     setError(false);
     setImages(null);
-    selectingRef.current = false;
 
     FileSystem.StorageAccessFramework.readDirectoryAsync(picturesFolderUri)
       .then((entries) => {
@@ -134,7 +151,7 @@ export function ProfilePicturePicker({
         <View style={styles.card}>
           <Text style={styles.title}>{t('profilePicturePickerTitle')}</Text>
 
-          {error && (
+          {picturesFolderUri && error && (
             <View testID="profile-picture-picker-error" style={styles.stateBox}>
               <Text style={styles.stateText}>{t('loadError')}</Text>
               <Pressable
@@ -149,15 +166,17 @@ export function ProfilePicturePicker({
             </View>
           )}
 
-          {!error && images === null && <View testID="profile-picture-picker-loading" style={styles.stateBox} />}
+          {picturesFolderUri && !error && images === null && (
+            <View testID="profile-picture-picker-loading" style={styles.stateBox} />
+          )}
 
-          {!error && images !== null && images.length === 0 && (
+          {picturesFolderUri && !error && images !== null && images.length === 0 && (
             <View style={styles.stateBox}>
               <Text style={styles.stateText}>{t('emptyPictures')}</Text>
             </View>
           )}
 
-          {!error && images !== null && images.length > 0 && (
+          {picturesFolderUri && !error && images !== null && images.length > 0 && (
             <FlatList
               testID="profile-picture-picker-list"
               data={images}

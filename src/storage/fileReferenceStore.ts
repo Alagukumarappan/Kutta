@@ -57,6 +57,25 @@ export async function addFileReferences(
   return next;
 }
 
+// Removes a single reference by uri (used when a parent explicitly removes
+// an individually-added file via the gallery's multi-select "remove"
+// action) — this only ever drops the local REFERENCE, never the underlying
+// file itself, since that file lives wherever the parent originally picked
+// it from (outside this app's control) and may still be something they
+// want to keep. Contrast with a folder-sourced item's removal, which does
+// delete the real file (see fileReferenceStore's callers).
+export async function removeFileReference(
+  type: FileReferenceContentType,
+  uri: string
+): Promise<FileReference[]> {
+  const existing = await getFileReferences(type);
+  const next = existing.filter((ref) => ref.uri !== uri);
+  if (next.length !== existing.length) {
+    await saveFileReferences(type, next);
+  }
+  return next;
+}
+
 // Verifies every reference's file still exists, drops only the ones that
 // don't (a deleted file, a revoked SAF grant, an unmounted SD card), and
 // persists the pruned list — the same "safe empty result, don't take down

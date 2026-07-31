@@ -60,6 +60,19 @@ describe('ProfilePicturePicker', () => {
     expect(FileSystem.StorageAccessFramework.readDirectoryAsync).not.toHaveBeenCalled();
   });
 
+  it('offers only "Browse anywhere" (no folder grid/loading/error states) when no picturesFolderUri is given, e.g. during onboarding', async () => {
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker visible={true} onSelect={jest.fn()} onClose={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    expect(FileSystem.StorageAccessFramework.readDirectoryAsync).not.toHaveBeenCalled();
+    expect(queryByTestId('profile-picture-picker-loading')).toBeNull();
+    expect(queryByTestId('profile-picture-picker-list')).toBeNull();
+    await findByTestId('profile-picture-picker-browse-anywhere');
+  });
+
   it('shows the empty state when the pictures folder has no images', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
 

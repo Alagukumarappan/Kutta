@@ -31,6 +31,7 @@ export function RaisedCard({
   color = colors.surface,
   borderColor,
   onPress,
+  onLongPress,
   disabled,
   tilt = 'regular',
   elevationLevel = 'level3',
@@ -44,6 +45,10 @@ export function RaisedCard({
   color?: string;
   borderColor?: string;
   onPress?: (event: GestureResponderEvent) => void;
+  // Optional long-press (e.g. a gallery's "enter multi-select mode")  —
+  // only meaningful alongside onPress, since the static (no-onPress) panel
+  // path below isn't a Pressable at all.
+  onLongPress?: (event: GestureResponderEvent) => void;
   disabled?: boolean;
   tilt?: TiltVariant;
   elevationLevel?: keyof typeof elevation;
@@ -70,6 +75,7 @@ export function RaisedCard({
     <AnimatedPressable
       testID={testID}
       onPress={onPress}
+      onLongPress={onLongPress}
       disabled={disabled}
       tilt={tilt}
       style={style}

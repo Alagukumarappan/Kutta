@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import { AgePicker } from '../components/AgePicker';
+import { ProfilePicturePicker } from '../settings/ProfilePicturePicker';
 import type { Language } from '../types/profile';
 import {
   colors,
@@ -42,6 +43,15 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [ageModalVisible, setAgeModalVisible] = useState(false);
   const [folderUri, setFolderUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Optional profile picture — same field Settings lets a parent change
+  // later (Profile.pictureUri), just settable here too so Home's greeting
+  // can show it from the very first launch. No picturesFolderUri is passed
+  // to the picker below (see that component's own doc comment): the
+  // "pictures" folder doesn't exist as a real listable directory until
+  // ensureContentStructure runs in handleSave, below — so onboarding can
+  // only offer "Browse anywhere", not a folder grid.
+  const [pictureUri, setPictureUri] = useState<string | undefined>(undefined);
+  const [pictureModalVisible, setPictureModalVisible] = useState(false);
 
   const nameValid = name.trim().length > 0;
   const ageValid = age !== null;
@@ -63,7 +73,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
     setSaving(true);
     try {
       await ensureContentStructure(folderUri);
-      await saveProfile({ name: name.trim(), age, language, rootFolderUri: folderUri });
+      await saveProfile({ name: name.trim(), age, language, rootFolderUri: folderUri, pictureUri });
       onComplete();
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : String(err));
@@ -86,14 +96,48 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
           <View style={styles.cardContent}>
             <Text style={styles.label}>{t('onboardingName')}</Text>
-            <TextInput
-              testID="onboarding-name-input"
-              value={name}
-              onChangeText={setName}
-              style={[styles.textInput, nameValid ? styles.textInputFilled : styles.textInputEmpty]}
-              placeholder="Name"
-              placeholderTextColor={colors.inkMuted}
-            />
+            <View style={styles.nameRow}>
+              <AnimatedPressable
+                testID="onboarding-picture-picker"
+                onPress={() => setPictureModalVisible(true)}
+                tilt="compact"
+                style={styles.avatarOuter}
+                innerStyle={styles.avatarButton}
+                accessibilityLabel={t('profilePictureChoose')}
+              >
+                {pictureUri ? (
+                  <Image
+                    testID="onboarding-picture-preview"
+                    source={{ uri: pictureUri }}
+                    style={styles.avatarImage}
+                    onError={() => setPictureUri(undefined)}
+                  />
+                ) : (
+                  <Text testID="onboarding-picture-placeholder" style={styles.avatarPlaceholderText}>
+                    {(name.trim().charAt(0) || '?').toUpperCase()}
+                  </Text>
+                )}
+              </AnimatedPressable>
+              <View style={styles.nameInputColumn}>
+                <TextInput
+                  testID="onboarding-name-input"
+                  value={name}
+                  onChangeText={setName}
+                  style={[styles.textInput, nameValid ? styles.textInputFilled : styles.textInputEmpty]}
+                  placeholder="Name"
+                  placeholderTextColor={colors.inkMuted}
+                />
+                {pictureUri && (
+                  <Text
+                    testID="onboarding-picture-remove"
+                    onPress={() => setPictureUri(undefined)}
+                    style={styles.removePictureLink}
+                  >
+                    {t('profilePictureRemove')}
+                  </Text>
+                )}
+              </View>
+            </View>
             {!nameValid && (
               <Text testID="onboarding-name-error" style={styles.fieldError}>
                 ⚠ {t('onboardingNameMissing')}
@@ -198,6 +242,15 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           style={styles.saveButton}
         />
       </View>
+
+      <ProfilePicturePicker
+        visible={pictureModalVisible}
+        onSelect={(uri) => {
+          setPictureUri(uri);
+          setPictureModalVisible(false);
+        }}
+        onClose={() => setPictureModalVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -250,6 +303,44 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.ink,
     marginBottom: spacing.xs,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
+  avatarOuter: {
+    width: 44,
+    height: 44,
+  },
+  avatarButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.violetSoft,
+    borderWidth: 2,
+    borderColor: colors.violetDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholderText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.violetDark,
+  },
+  nameInputColumn: {
+    flex: 1,
+  },
+  removePictureLink: {
+    marginTop: spacing.xxs,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.berryDark,
   },
   textInput: {
     borderWidth: 2,

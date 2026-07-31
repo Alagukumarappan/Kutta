@@ -6,9 +6,11 @@ import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { paperTheme } from '../../src/design-system/paperTheme';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as profileStore from '../../src/storage/profileStore';
+import * as DocumentPicker from 'expo-document-picker';
 
 jest.mock('../../src/storage/folderAccess');
 jest.mock('../../src/storage/profileStore');
+jest.mock('expo-document-picker');
 
 // The redesigned screen builds on the design-system's RaisedPrimaryButton
 // (react-native-paper under the hood), which in the real app always renders
@@ -229,6 +231,89 @@ describe('OnboardingScreen', () => {
       expect(title.fontSize).toBeLessThanOrEqual(24);
       expect(title.marginTop).toBeLessThanOrEqual(8);
       expect(title.marginBottom).toBeLessThanOrEqual(8);
+    });
+  });
+
+  describe('optional profile picture', () => {
+    it('shows the name\'s initial letter as a placeholder when no picture is set', async () => {
+      const { getByTestId, queryByTestId } = await renderScreen();
+
+      await fireEvent.changeText(getByTestId('onboarding-name-input'), 'sam');
+
+      expect(getByTestId('onboarding-picture-placeholder')).toHaveTextContent('S');
+      expect(queryByTestId('onboarding-picture-preview')).toBeNull();
+    });
+
+    it('shows "?" as the placeholder before any name has been typed', async () => {
+      const { getByTestId } = await renderScreen();
+      expect(getByTestId('onboarding-picture-placeholder')).toHaveTextContent('?');
+    });
+
+    it('lets the parent pick a picture via "Browse anywhere" and shows a preview + remove link', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://picked/photo.jpg', name: 'photo.jpg', lastModified: 0 }],
+      });
+
+      const { getByTestId, findByTestId, queryByTestId } = await renderScreen();
+
+      await fireEvent.press(getByTestId('onboarding-picture-picker'));
+      await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+
+      const preview = await findByTestId('onboarding-picture-preview');
+      expect(preview.props.source).toEqual({ uri: 'content://picked/photo.jpg' });
+      expect(queryByTestId('onboarding-picture-placeholder')).toBeNull();
+      await findByTestId('onboarding-picture-remove');
+    });
+
+    it('clears the picture when "Remove" is pressed, reverting to the initial-letter placeholder', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://picked/photo.jpg', name: 'photo.jpg', lastModified: 0 }],
+      });
+
+      const { getByTestId, findByTestId, queryByTestId } = await renderScreen();
+      await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Max');
+      await fireEvent.press(getByTestId('onboarding-picture-picker'));
+      await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+      await findByTestId('onboarding-picture-preview');
+
+      await fireEvent.press(await findByTestId('onboarding-picture-remove'));
+
+      expect(queryByTestId('onboarding-picture-preview')).toBeNull();
+      expect(getByTestId('onboarding-picture-placeholder')).toHaveTextContent('M');
+    });
+
+    it('includes the picked pictureUri when saving the profile', async () => {
+      (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+      (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+      (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://picked/photo.jpg', name: 'photo.jpg', lastModified: 0 }],
+      });
+
+      const { getByTestId, getByText, findByTestId } = await renderScreen();
+
+      await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
+      await selectAge(getByTestId, 4);
+      await fireEvent.press(getByText('Choose content folder'));
+      await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+      await fireEvent.press(getByTestId('onboarding-picture-picker'));
+      await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+      await findByTestId('onboarding-picture-preview');
+
+      await fireEvent.press(getByText('Save'));
+
+      await waitFor(() =>
+        expect(profileStore.saveProfile).toHaveBeenCalledWith({
+          name: 'Sam',
+          age: 4,
+          language: 'en',
+          rootFolderUri: 'content://tree/root',
+          pictureUri: 'content://picked/photo.jpg',
+        })
+      );
     });
   });
 });

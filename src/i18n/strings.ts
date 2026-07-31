@@ -157,6 +157,17 @@ export const UI_STRINGS = {
   addPuzzlePicture: { en: '+ Add puzzle picture', de: '+ Puzzlebild hinzufügen' },
   addVideo: { en: '+ Add video', de: '+ Video hinzufügen' },
   addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
+  gallerySelectedCount: { en: '{count} selected', de: '{count} ausgewählt' },
+  galleryRemove: { en: 'Remove', de: 'Entfernen' },
+  galleryRemoveConfirmTitle: { en: 'Remove selected items?', de: 'Ausgewählte Elemente entfernen?' },
+  galleryRemoveConfirmBody: {
+    en: "Items you added yourself will just be removed from here. Items from the folder will be deleted for good.",
+    de: 'Selbst hinzugefügte Elemente werden nur hier entfernt. Elemente aus dem Ordner werden endgültig gelöscht.',
+  },
+  galleryRemoveError: {
+    en: "Some items couldn't be removed — please try again.",
+    de: 'Einige Elemente konnten nicht entfernt werden — bitte erneut versuchen.',
+  },
   penSizeLabel: { en: 'Pen size', de: 'Stiftgröße' },
   profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
   // Lets a parent pick a profile picture from anywhere on the device (not
