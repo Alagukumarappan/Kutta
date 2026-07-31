@@ -344,6 +344,24 @@ the fix before committing.
 **Tests:** New regression test double-tapping Retry, asserting the video
 source is only replaced once (526 total tests passing, up from 525).
 
+### Iteration 16 — Extend reduce-motion support to Quiz's score-card pop-in
+**Screen:** Quiz.
+**Problem:** Direct follow-up to iteration 14. `QuestionRenderer`'s
+completion screen has its OWN hand-rolled score-card pop-in (a
+`scoreCardScaleAnim`/`scoreCardOpacityAnim` pair in `QuizScreen.tsx`) —
+NOT routed through the shared `CelebrationOverlay` component that iteration
+14 already fixed — using the exact same bouncy-spring-plus-fade recipe, so
+it still ignored the OS reduce-motion setting.
+**Fix:** Same treatment as iteration 14: when `useReducedMotion()` returns
+true, jump the scale straight to its resting value and animate opacity only
+via `Animated.timing`; unchanged spring+timing parallel otherwise.
+**Tests:** New regression test isolates the score-card's own spring calls
+from `QuestionRenderer`'s unrelated `useTiltPress` press/lift springs by
+asserting a delta (spring call count unchanged, timing call count
+increased) around the completion transition, rather than a naive "spring
+never called" check that unrelated tilt-press animations would contaminate
+(527 total tests passing, up from 526).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -397,6 +415,7 @@ source is only replaced once (526 total tests passing, up from 525).
 - CelebrationOverlay / Quiz + Puzzle + Tic-Tac-Toe + Video completion
   moments (reduce-motion support added)
 - Video player (Retry double-tap guard added, for consistency)
+- Quiz (score-card pop-in now also respects reduce-motion)
 
 ## Remaining polish opportunities (not yet done)
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
@@ -446,15 +465,16 @@ source is only replaced once (526 total tests passing, up from 525).
   next accessibility candidate, but iteration 13 found it's actually dead
   code (never imported anywhere) — the live component fixed instead was
   `PuzzleGallery.tsx`'s inline difficulty modal. See iteration 13's entry.
-- Reduce-motion support: iteration 14 covered `CelebrationOverlay` (the
-  shared completion-celebration component), but other spring/timing
-  animations still ignore the OS setting entirely — QuizScreen's own
-  score-card pop-in (separate from CelebrationOverlay, hand-rolled the same
-  spring recipe), progress dots, and every `useTiltPress`-driven
-  press/lift feedback across the app. Same fix shape as iteration 14
-  (`useReducedMotion()` + skip the spring, animate opacity/skip entirely);
-  worth doing incrementally, one component at a time, rather than all at
-  once.
+- Reduce-motion support: iterations 14 and 16 covered `CelebrationOverlay`
+  and Quiz's score-card pop-in, but other spring/timing animations still
+  ignore the OS setting entirely — progress dots, and every
+  `useTiltPress`-driven press/lift feedback across the app (HomeScreen
+  cards, buttons, RaisedCard, QuestionRenderer's answer options). Same fix
+  shape (`useReducedMotion()` + skip the spring); worth doing
+  incrementally, one component at a time, rather than all at once. Note
+  `useTiltPress` is shared much more widely than the previous two fixes, so
+  changing it touches more render paths — worth extra care/broader test
+  coverage when this is picked up.
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a

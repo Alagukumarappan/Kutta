@@ -14,6 +14,7 @@ import {
   typography,
   motion,
   getActivityPalette,
+  useReducedMotion,
   RaisedCard,
   RaisedPrimaryButton,
   RaisedSecondaryButton,
@@ -99,6 +100,12 @@ export function QuizScreen({
   // the `state.isFinished` JSX branch further down.
   const scoreCardScaleAnim = useRef(new Animated.Value(0.85)).current;
   const scoreCardOpacityAnim = useRef(new Animated.Value(0)).current;
+  // Same OS "reduce motion" check CelebrationOverlay now respects (see
+  // src/design-system/useReducedMotion.ts) — this pop-in is a separate,
+  // hand-rolled animation (not routed through CelebrationOverlay, see the
+  // file-header comment on why the completion screen is built directly),
+  // so it needed its own opt-out rather than inheriting one.
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (!state?.isFinished) {
@@ -111,10 +118,23 @@ export function QuizScreen({
       return;
     }
 
-    const animation = Animated.parallel([
-      Animated.spring(scoreCardScaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
-      Animated.timing(scoreCardOpacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
-    ]);
+    // With reduce-motion enabled, skip the bouncy spring entirely — jump
+    // straight to the resting scale and fade opacity only (same recipe as
+    // CelebrationOverlay's own reduced-motion path).
+    let animation: Animated.CompositeAnimation;
+    if (reducedMotion) {
+      scoreCardScaleAnim.setValue(1);
+      animation = Animated.timing(scoreCardOpacityAnim, {
+        toValue: 1,
+        duration: motion.duration.base,
+        useNativeDriver: true,
+      });
+    } else {
+      animation = Animated.parallel([
+        Animated.spring(scoreCardScaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
+        Animated.timing(scoreCardOpacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
+      ]);
+    }
     animation.start();
 
     // Mirrors QuestionRenderer's own cleanup: stop (don't leave running) if
@@ -123,7 +143,7 @@ export function QuizScreen({
     return () => {
       animation.stop();
     };
-  }, [state?.isFinished, scoreCardScaleAnim, scoreCardOpacityAnim]);
+  }, [state?.isFinished, reducedMotion, scoreCardScaleAnim, scoreCardOpacityAnim]);
 
   useEffect(() => {
     let cancelled = false;

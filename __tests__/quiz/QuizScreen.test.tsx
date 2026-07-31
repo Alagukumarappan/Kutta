@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated } from 'react-native';
+import { AccessibilityInfo, Animated } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { QuizScreen } from '../../src/quiz/QuizScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -338,6 +338,46 @@ describe('QuizScreen', () => {
       expect(toValues).toContain(1);
 
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this
+    // score-card pop-in is a separate, hand-rolled spring animation (not
+    // routed through the shared CelebrationOverlay component, which
+    // already respects the OS reduce-motion setting as of an earlier
+    // iteration) — it needed its own opt-out.
+    it('skips the bouncy spring for the score card when the OS reduce-motion setting is on', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+      const springSpy = jest.spyOn(Animated, 'spring');
+      const timingSpy = jest.spyOn(Animated, 'timing');
+
+      const { findByText, getByText, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+
+      // Baseline taken right before the final Next press that reveals the
+      // completion screen — QuestionRenderer's own option/feedback tilt
+      // presses (useTiltPress) also call Animated.spring for unrelated
+      // reasons throughout the quiz, so the assertion below checks for NO
+      // NEW spring calls caused specifically by the score-card entrance,
+      // rather than asserting spring was never called at all.
+      const springCallsBefore = springSpy.mock.calls.length;
+      const timingCallsBefore = timingSpy.mock.calls.length;
+
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      expect(springSpy.mock.calls.length).toBe(springCallsBefore);
+      expect(timingSpy.mock.calls.length).toBeGreaterThan(timingCallsBefore);
     });
 
     it('"Play Again" starts a genuinely fresh session — new shuffle, score and progress reset to zero', async () => {
