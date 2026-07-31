@@ -124,6 +124,7 @@ export const UI_STRINGS = {
   tictactoePlayerXWins: { en: 'Player X wins! 🎉', de: 'Spieler X hat gewonnen! 🎉' },
   tictactoePlayerOWins: { en: 'Player O wins! 🎉', de: 'Spieler O hat gewonnen! 🎉' },
   tictactoeDraw: { en: "It's a draw!", de: 'Unentschieden!' },
+  tictactoeTryAgainEncouragement: { en: 'Good try! Want to play again?', de: 'Gut versucht! Nochmal spielen?' },
   tictactoePlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
   tictactoeChangeSetup: { en: 'Menu', de: 'Menü' },
   tictactoeCellEmptyLabel: { en: 'Row {row}, column {column}, empty', de: 'Reihe {row}, Spalte {column}, leer' },

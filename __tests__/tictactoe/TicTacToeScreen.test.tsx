@@ -2,6 +2,20 @@ import React from 'react';
 import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { TicTacToeScreen } from '../../src/tictactoe/TicTacToeScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import { getComputerMove } from '../../src/tictactoe/ticTacToeEngine';
+
+// Defaults to the REAL minimax (via jest.fn(actual.getComputerMove)) for
+// every test — only the one test below that needs a guaranteed computer
+// win overrides it with `.mockReturnValueOnce(...)` for a few calls, which
+// Jest automatically falls back off of afterward. Deliberately never
+// calling mockReset/mockClear on this particular mock anywhere in this
+// file, since that would also wipe the real-implementation passthrough for
+// every other test (the module mock is a single shared instance for the
+// whole file).
+jest.mock('../../src/tictactoe/ticTacToeEngine', () => {
+  const actual = jest.requireActual('../../src/tictactoe/ticTacToeEngine');
+  return { ...actual, getComputerMove: jest.fn(actual.getComputerMove) };
+});
 
 function renderGame(props: Partial<React.ComponentProps<typeof TicTacToeScreen>> = {}) {
   const onMenu = props.onMenu ?? jest.fn();
@@ -230,6 +244,43 @@ describe('TicTacToeScreen', () => {
 
       const status = getByTestId('tictactoe-status').props.children as string;
       expect(status).not.toBe('You win! 🎉');
+      jest.useRealTimers();
+    });
+
+    // Regression test for the premium-polish child-delight pass: the
+    // computer beating the child previously fired the exact same confetti/
+    // success styling as the child winning — a loss shouldn't be styled as
+    // a triumph. Forces a specific computer win by scripting its moves
+    // (via the mocked getComputerMove) rather than relying on the human
+    // player to lose against the real minimax, which the AI is specifically
+    // designed never to allow.
+    it('does NOT use success tone/confetti when the computer wins, and shows an encouraging message instead', async () => {
+      jest.useFakeTimers();
+      (getComputerMove as jest.Mock)
+        .mockReturnValueOnce(0) // O: top-left
+        .mockReturnValueOnce(1) // O: top-middle
+        .mockReturnValueOnce(2); // O: top-right -> completes the top row
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      // Human (X) plays cells that never block the top row the computer is
+      // building: 3, 6, 7.
+      for (const index of [3, 6, 7]) {
+        await act(async () => {
+          fireEvent.press(getByTestId(`tictactoe-cell-${index}`));
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(600);
+        });
+      }
+
+      const overlay = await findByTestId('tictactoe-complete');
+      expect(within(overlay).getByText('Computer wins')).toBeTruthy();
+      expect(within(overlay).getByText('Good try! Want to play again?')).toBeTruthy();
+      // No celebration bubble/emoji for a computer win — that's the
+      // success-only flourish CelebrationOverlay renders when `tone`
+      // is 'success' AND an `emoji` is provided.
+      expect(within(overlay).queryByTestId('celebration-bubble')).toBeNull();
+
       jest.useRealTimers();
     });
   });

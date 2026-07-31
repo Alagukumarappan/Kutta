@@ -135,6 +135,14 @@ export function TicTacToeScreen({
   const cellSize = boardSize / 3;
 
   const winningLine = status.status === 'won' ? status.line : null;
+  // Previously every win — including the computer beating the child —
+  // fired the same success tone, confetti emoji, and celebratory styling.
+  // A friend-mode win (either child wins) or the child beating the
+  // computer both deserve that; the computer beating the child is a loss
+  // for the human player and shouldn't be styled as a triumph. Only that
+  // one specific case gets a calmer, encouraging message instead.
+  const isHumanLoss = mode === 'computer' && status.status === 'won' && status.winner === COMPUTER_PLAYER;
+  const isCelebratoryWin = status.status === 'won' && !isHumanLoss;
 
   return (
     <View
@@ -198,9 +206,10 @@ export function TicTacToeScreen({
 
       <CelebrationOverlay
         visible={isGameOver}
-        tone={status.status === 'won' ? 'success' : 'neutral'}
-        emoji={status.status === 'won' ? '🎉' : undefined}
+        tone={isCelebratoryWin ? 'success' : 'neutral'}
+        emoji={isCelebratoryWin ? '🎉' : undefined}
         title={statusText()}
+        message={isHumanLoss ? t('tictactoeTryAgainEncouragement') : undefined}
         testID="tictactoe-complete"
         actions={[
           { label: t('tictactoePlayAgain'), onPress: handleRetry, testID: 'tictactoe-retry' },

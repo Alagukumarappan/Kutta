@@ -148,6 +148,26 @@ infrastructure — pure reuse of what already exists.
 with the right wording/action; "Watch Again" replays the video and
 dismisses the celebration) — 511 total tests passing, up from 509.
 
+### Iteration 8 — Don't celebrate a Tic-Tac-Toe loss as a triumph
+**Screen:** Tic-Tac-Toe.
+**Problem:** The win `CelebrationOverlay` always used `tone: 'success'` +
+confetti emoji for ANY win, including the computer beating the child in
+computer mode — the exact same festive styling for "you won!" and
+"you lost to the computer." A loss shouldn't be styled as a triumph;
+that's a real emotional-feedback mismatch for a young child.
+**Fix:** Distinguishes a genuine human loss (`mode === 'computer' &&
+winner === COMPUTER_PLAYER`) from every other win case (a friend-mode win
+by either player, or the child beating the computer), which all still get
+the full success/confetti treatment. Only the human-loss case gets a
+calmer neutral tone, no confetti, and a new encouraging message
+("Good try! Want to play again?") instead.
+**Verified as a real bug, not a hypothetical:** confirmed the new
+regression test genuinely fails without the fix before committing.
+**Tests:** New regression test scripts a guaranteed computer win (via a
+mocked `getComputerMove` that defaults to the real minimax for every other
+test in the file) and asserts neutral tone + the encouraging message (512
+total tests passing, up from 511).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -163,6 +183,8 @@ dismisses the celebration) — 511 total tests passing, up from 509.
 - Settings' Save button had no rapid-double-tap protection in the common
   (no-folder-change) case, causing a double navigation to Home — fixed in
   iteration 6.
+- Tic-Tac-Toe celebrated a computer win against the child with the same
+  confetti/success styling as a real win — fixed in iteration 8.
 
 ## Performance improvements
 _(none yet)_
@@ -174,16 +196,11 @@ _(none yet)_
 - Puzzle board screen (loading state deduplicated + unified; piece slots
   now accessible)
 - Quiz (accessibility label for image-only options)
-- Tic-Tac-Toe board screen (cells now accessible)
+- Tic-Tac-Toe board screen (cells now accessible; win/loss tone corrected)
 - Settings (Save button double-tap protection)
 - Video player (completion celebration added)
 
 ## Remaining polish opportunities (not yet done)
-- Tic-Tac-Toe's win overlay doesn't distinguish WHO won for tone/emoji
-  purposes: `tone === 'won' ? 'success' : 'neutral'` fires confetti/success
-  styling even when "Computer wins" — worth a tone-aware follow-up (e.g.
-  neutral/encouraging tone specifically for a human loss against the
-  computer, vs. success for a human win or a friend-mode win).
 - Coloring has no completion celebration at all, unlike the other four
   activities — but genuinely has no natural "finished" signal to detect
   (fills/strokes are open-ended and re-doable indefinitely), so this needs
