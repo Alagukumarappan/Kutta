@@ -9,12 +9,20 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Animated,
-  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { PieceCountPicker } from '../components/PieceCountPicker';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import {
+  colors,
+  radii,
+  spacing,
+  elevation,
+  typography,
+  getActivityPalette,
+  RaisedCard,
+  CelebrationOverlay,
+} from '../design-system';
 import {
   computeGridDimensions,
   computePieceRects,
@@ -23,6 +31,12 @@ import {
   groupPiecesIntoRows,
   PieceRect,
 } from './puzzleGrid';
+
+// Puzzle's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
+// getActivityPalette) — used throughout this screen's board chrome instead
+// of the old theme's flat mint/sun pairing, so the board reads as
+// unmistakably "the puzzle activity" even before a child can read the title.
+const PUZZLE_PALETTE = getActivityPalette('puzzle');
 
 // Thin border drawn around every piece slot so young children can see the
 // grid structure (where each piece belongs) even before it's filled in
@@ -36,7 +50,12 @@ import {
 // edges of the crop are left untouched. Not worth insetting the image to
 // compensate, since the crop is small and the border's visual purpose
 // matters more than pixel-perfect image cropping.
-const SLOT_BORDER = 3;
+//
+// Bumped from 3 -> 4px for the redesign: the brief calls for "strong piece
+// separation" on the new, more dimensional board, and a slightly thicker
+// border reads more clearly as "these are separate physical tiles" without
+// eating meaningfully more into the crop.
+const SLOT_BORDER = 4;
 
 function PuzzlePiece({
   imageUri,
@@ -63,13 +82,11 @@ function PuzzlePiece({
   return (
     <Animated.View
       style={[
+        styles.pieceSlot,
         {
           width: rect.width,
           height: rect.height,
-          overflow: 'hidden',
-          borderWidth: SLOT_BORDER,
-          borderColor: selected ? colors.sunDark : colors.mintDark,
-          backgroundColor: colors.white,
+          borderColor: selected ? colors.bubblegum : PUZZLE_PALETTE.accentDark,
           transform: [{ scale }],
         },
         selected && styles.pieceSelected,
@@ -86,86 +103,6 @@ function PuzzlePiece({
         }}
       />
     </Animated.View>
-  );
-}
-
-// Completion overlay — mirrors the quiz's feedback Modal (QuestionRenderer's
-// `hasAnswered && <Modal visible transparent animationType="fade">...`
-// backdrop + centered feedbackCard pattern) instead of the old inline
-// completion banner: a dark, non-interactive backdrop behind a centered
-// white card carrying the message and a Retry/Next button row. Conditionally
-// MOUNTING the Modal only while `isSolved` is true (see the
-// `{isSolved && <CompletionModal ... />}` call site below) is what keeps it
-// out of the query tree entirely before the puzzle is solved — same
-// convention as the quiz's `hasAnswered &&` guard.
-//
-// The card keeps the exact pop-in recipe the old CompletionBanner already
-// had (and the quiz's own feedback card uses): starts slightly
-// shrunk/invisible (0.85/0) and springs to rest (1/1), speed 20/bounciness 6
-// for the scale, a 220ms timing for the opacity. This component only exists
-// in the tree while solved, so a plain mount-effect is enough to replay the
-// pop-in every time it (re)appears — no separate show/hide toggle needed.
-function CompletionModal({
-  text,
-  onRetry,
-  onNext,
-}: {
-  text: string;
-  onRetry: () => void;
-  onNext: () => void;
-}) {
-  const { t } = useLanguage();
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const animation = Animated.parallel([
-      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
-      Animated.timing(opacityAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-    ]);
-    animation.start();
-    return () => animation.stop();
-  }, [scaleAnim, opacityAnim]);
-
-  return (
-    <Modal visible transparent animationType="fade">
-      <View style={styles.completeBackdrop}>
-        <Animated.View
-          testID="puzzle-complete"
-          style={[styles.completeCard, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
-        >
-          <View style={styles.completeMessageRow}>
-            <Text style={styles.completeEmoji}>🎉</Text>
-            <Text style={styles.completeText}>{text}</Text>
-            <Text style={styles.completeEmoji}>🎉</Text>
-          </View>
-
-          {/* Retry (reshuffles this same puzzle) + Next (goes back to the
-              gallery to pick a different picture) side by side — mirrors the
-              quiz's feedbackButtonGroup/tryAgainButton/nextButtonSmall split. */}
-          <View style={styles.completeButtonGroup}>
-            <Pressable
-              testID="puzzle-retry"
-              onPress={onRetry}
-              style={styles.tryAgainButton}
-              accessibilityRole="button"
-              accessibilityLabel={t('retry')}
-            >
-              <Text style={styles.tryAgainButtonText}>{t('retry')}</Text>
-            </Pressable>
-            <Pressable
-              testID="puzzle-next"
-              onPress={onNext}
-              style={styles.nextButtonSmall}
-              accessibilityRole="button"
-              accessibilityLabel={t('quizNext')}
-            >
-              <Text style={styles.nextButtonText}>{t('quizNext')}</Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-      </View>
-    </Modal>
   );
 }
 
@@ -232,12 +169,12 @@ export function PuzzleScreen({
   // (piece-count-picker / loading) returns further down.
   const isSolved = order.length > 0 && order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
 
-  // Double-fire guards for the completion modal's two buttons — same idiom
+  // Double-fire guards for the completion overlay's two buttons — same idiom
   // as QuizScreen's playAgainFiredRef/hasNavigatedHomeRef: a ref survives
   // across renders and is shared by every closure of this component
   // instance, so even a second press captured from a stale (pre-close)
   // render can't slip past it. Both re-arm whenever the puzzle is freshly
-  // (re)solved, so Retry/Next still work the next time the modal appears.
+  // (re)solved, so Retry/Next still work the next time the overlay appears.
   const retryFiredRef = useRef(false);
   const nextFiredRef = useRef(false);
 
@@ -332,8 +269,8 @@ export function PuzzleScreen({
     // Reshuffles the SAME puzzle (same pieceCount) using the exact
     // startPuzzle path that set up the board in the first place — not a new
     // shuffling approach — which also clears selectedSlot and the
-    // correctness baseline, so the completion modal closes immediately since
-    // shufflePieceOrder guarantees a non-identity (unsolved) order.
+    // correctness baseline, so the completion overlay closes immediately
+    // since shufflePieceOrder guarantees a non-identity (unsolved) order.
     if (pieceCount) startPuzzle(pieceCount);
   }
 
@@ -358,20 +295,24 @@ export function PuzzleScreen({
           justifyContent: 'center',
         }}
       >
-        <Text style={styles.pickerEmoji}>🧩</Text>
-        <Text style={styles.pickerTitle}>{t('puzzlePickPieces')}</Text>
-        <View style={{ marginTop: spacing.md, width: '100%', maxWidth: 220 }}>
-          <PieceCountPicker
-            value={pieceCount}
-            onChange={startPuzzle}
-            visible={pieceCountModalVisible}
-            onOpen={() => setPieceCountModalVisible(true)}
-            onClose={() => setPieceCountModalVisible(false)}
-            placeholder={t('puzzlePickPieces')}
-            testIDPrefix="puzzle-piece-count"
-            isPortrait={isPortrait}
-          />
-        </View>
+        <RaisedCard color={colors.surface} borderColor={PUZZLE_PALETTE.accentDark} style={styles.pickerCard}>
+          <View style={styles.pickerCardInner}>
+            <Text style={styles.pickerEmoji}>🧩</Text>
+            <Text style={styles.pickerTitle}>{t('puzzlePickPieces')}</Text>
+            <View style={{ marginTop: spacing.md, width: '100%', maxWidth: 220 }}>
+              <PieceCountPicker
+                value={pieceCount}
+                onChange={startPuzzle}
+                visible={pieceCountModalVisible}
+                onOpen={() => setPieceCountModalVisible(true)}
+                onClose={() => setPieceCountModalVisible(false)}
+                placeholder={t('puzzlePickPieces')}
+                testIDPrefix="puzzle-piece-count"
+                isPortrait={isPortrait}
+              />
+            </View>
+          </View>
+        </RaisedCard>
       </ScrollView>
     );
   }
@@ -379,7 +320,7 @@ export function PuzzleScreen({
   if (!isImageSizeReady) {
     return (
       <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
-        <ActivityIndicator size="large" color={colors.mintDark} />
+        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
       </View>
     );
   }
@@ -401,12 +342,24 @@ export function PuzzleScreen({
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.row}>
-        <View style={styles.previewCard}>
-          <Image source={{ uri: imageUri }} style={styles.previewImage} testID="puzzle-preview" />
-          <Text style={styles.previewHint}>{t('puzzleMatchHint')}</Text>
-        </View>
+        <RaisedCard
+          color={colors.surface}
+          borderColor={PUZZLE_PALETTE.accentDark}
+          elevationLevel="level3"
+          style={styles.previewCardOuter}
+        >
+          <View style={styles.previewCard}>
+            <Image source={{ uri: imageUri }} style={styles.previewImage} testID="puzzle-preview" />
+            <Text style={styles.previewHint}>{t('puzzleMatchHint')}</Text>
+          </View>
+        </RaisedCard>
 
-        <View style={styles.boardFrame}>
+        {/* The board sits inside a deliberately deep "recessed tray" frame
+            (surfaceSunk fill, a strong accent border, and a heavier
+            elevation than any single piece) so the pieces themselves read as
+            physical tiles sitting IN something, rather than floating flat
+            on the page. */}
+        <View style={[styles.boardFrame, elevation.level4]}>
           {/* Explicit row-by-row rendering instead of a single flexWrap:'wrap'
               container: relying on Yoga to "naturally" break a line after
               exactly `cols` pieces depends on cols*pieceWidth landing on the
@@ -445,9 +398,28 @@ export function PuzzleScreen({
         </View>
       </View>
 
-      {isSolved && (
-        <CompletionModal text={t('puzzleComplete')} onRetry={handleRetryPuzzle} onNext={handleNextPuzzle} />
-      )}
+      {/* CelebrationOverlay (design-system) replaces the old hand-rolled
+          completion Modal: it internally renders nothing while
+          `visible={isSolved}` is false, so it's kept mounted here at all
+          times (unlike the old `{isSolved && <CompletionModal .../>}` guard)
+          without ever being present in the query tree before the puzzle is
+          solved — same externally-observable behavior, just backed by the
+          shared component's own visibility check instead of a conditional
+          mount. Retry/Next semantics and their double-fire guards
+          (retryFiredRef/nextFiredRef, re-armed by the isSolved effect above)
+          are completely unchanged — only which component renders the
+          message/buttons has moved. */}
+      <CelebrationOverlay
+        visible={isSolved}
+        tone="success"
+        emoji="🎉"
+        title={t('puzzleComplete')}
+        testID="puzzle-complete"
+        actions={[
+          { label: t('retry'), onPress: handleRetryPuzzle, variant: 'secondary', testID: 'puzzle-retry' },
+          { label: t('quizNext'), onPress: handleNextPuzzle, testID: 'puzzle-next' },
+        ]}
+      />
     </ScrollView>
   );
 }
@@ -455,19 +427,27 @@ export function PuzzleScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvas,
   },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pickerCard: {
+    width: '100%',
+    maxWidth: 360,
+  },
+  pickerCardInner: {
+    padding: spacing.lg,
+    alignItems: 'center',
   },
   pickerEmoji: {
     fontSize: 56,
     marginBottom: spacing.xs,
   },
   pickerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: typography.h2.fontSize,
+    fontWeight: typography.h2.fontWeight,
     color: colors.ink,
     textAlign: 'center',
   },
@@ -475,16 +455,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  previewCard: {
+  previewCardOuter: {
     marginRight: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 3,
-    borderColor: colors.mintDark,
+  },
+  previewCard: {
     padding: spacing.sm,
     alignItems: 'center',
-    ...shadow,
-    elevation: 4,
   },
   previewImage: {
     width: 80,
@@ -493,104 +469,38 @@ const styles = StyleSheet.create({
   },
   previewHint: {
     marginTop: spacing.xs,
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.ink,
+    fontSize: typography.caption.fontSize,
+    fontWeight: typography.caption.fontWeight,
+    color: PUZZLE_PALETTE.accentDark,
     textAlign: 'center',
     maxWidth: 90,
   },
+  // The "recessed tray" the board sits in — a sunken fill (darker than the
+  // canvas background, lighter than the pieces' own white slots) plus a
+  // thick accent border gives the whole board area a soft dimensional depth
+  // even before any single piece is considered, per the brief's "game
+  // board" feel.
   boardFrame: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceSunk,
+    borderRadius: radii.xl,
     borderWidth: 4,
-    borderColor: colors.mintDark,
+    borderColor: PUZZLE_PALETTE.accentDark,
     padding: spacing.sm,
-    ...shadow,
-    elevation: 4,
+  },
+  pieceSlot: {
+    overflow: 'hidden',
+    borderWidth: SLOT_BORDER,
+    backgroundColor: colors.white,
+    // Android-only elevation (no iOS shadow* fields here) so each piece
+    // reads as a distinct, slightly raised tile against the sunken tray
+    // without the shadow being clipped away by this same View's
+    // overflow:'hidden' (required for the image crop) on iOS — mirrors
+    // RaisedCard's own documented reasoning for splitting shadow vs. clip
+    // across two layers, simplified here since a per-piece shadow doesn't
+    // need to survive a press-tilt transform.
+    elevation: 3,
   },
   pieceSelected: {
-    ...shadow,
     elevation: 6,
-  },
-  // Dark, non-interactive backdrop (no onPress — a child must use Retry or
-  // Next, not a tap-outside dismiss) behind the centered completion card —
-  // mirrors QuestionRenderer's feedbackBackdrop exactly.
-  completeBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  // Kept the same sun-toned card the old inline banner used (rather than
-  // switching to the quiz's white/mint-or-coral card) since there's no
-  // correct/incorrect result to color-code here — just one warm "you did
-  // it" card. Still mirrors the quiz's feedbackCard shape: rounded, bordered,
-  // shadowed, capped width so it doesn't stretch edge-to-edge in landscape.
-  completeCard: {
-    backgroundColor: colors.sun,
-    borderRadius: radii.xl,
-    borderWidth: 4,
-    borderColor: colors.sunDark,
-    maxWidth: 420,
-    width: '100%',
-    padding: spacing.lg,
-    alignItems: 'center',
-    ...shadow,
-    elevation: 8,
-  },
-  completeMessageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  completeEmoji: {
-    fontSize: 28,
-  },
-  completeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.ink,
-  },
-  // Retry + Next side by side — mirrors the quiz's feedbackButtonGroup.
-  completeButtonGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    columnGap: spacing.sm,
-  },
-  // Reuses the quiz's exact tryAgainButton/nextButtonSmall/nextButtonText
-  // visual recipe (this codebase duplicates small style objects per screen
-  // rather than sharing a UI-kit module).
-  tryAgainButton: {
-    backgroundColor: colors.white,
-    borderColor: colors.sunDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    ...shadow,
-    elevation: 4,
-  },
-  tryAgainButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.ink,
-  },
-  nextButtonSmall: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    ...shadow,
-    elevation: 4,
-  },
-  nextButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.white,
   },
 });

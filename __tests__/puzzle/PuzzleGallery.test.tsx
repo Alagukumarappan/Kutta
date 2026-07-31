@@ -67,6 +67,28 @@ describe('PuzzleGallery', () => {
     await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
   });
 
+  // Redesign requirement: every tile must be a comfortable, large tap
+  // target (Material's 48dp minimum) — checked statically off the tile's
+  // own declared width/height rather than a measured layout, the same way
+  // this suite already checks the retry button's hitSlop below rather than
+  // simulating a real tap-and-measure.
+  it('renders picture tiles at least 48dp in each dimension (comfortable touch target)', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/pictures/beach.jpg',
+    ]);
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const tile = await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+    const flatStyle = [tile.props.style].flat(Infinity).reduce((acc, s) => ({ ...acc, ...s }), {});
+    expect(flatStyle.width).toBeGreaterThanOrEqual(48);
+    expect(flatStyle.height).toBeGreaterThanOrEqual(48);
+  });
+
   it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
       new Error('SAF grant revoked')

@@ -3,12 +3,18 @@ import { View, Text, FlatList, Pressable, Image, StyleSheet } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
-import { EmptyState } from '../components/EmptyState';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
-import { spacing } from '../theme/tokens';
+import { colors, spacing, radii, getActivityPalette, RaisedCard, EmptyStatePanel } from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
+
+// Puzzle's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
+// getActivityPalette) — carried through onto every tile's border here so
+// the gallery already reads as "puzzle" before a child taps into it.
+const PUZZLE_PALETTE = getActivityPalette('puzzle');
+const TILE_SIZE = 128;
+const GRID_COLUMNS = 4;
 
 function isImageFile(uri: string): boolean {
   const lower = uri.toLowerCase();
@@ -73,8 +79,8 @@ export function PuzzleGallery({
 
   if (error) {
     return (
-      <View testID="puzzle-gallery-error" style={insetStyle}>
-        <Text>{t('loadError')}</Text>
+      <View testID="puzzle-gallery-error" style={[styles.screen, insetStyle]}>
+        <Text style={styles.errorText}>{t('loadError')}</Text>
         <Pressable
           testID="puzzle-gallery-retry"
           onPress={() => setRetryToken((n) => n + 1)}
@@ -82,16 +88,16 @@ export function PuzzleGallery({
           accessibilityLabel={t('retry')}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
         >
-          <Text>{t('retry')}</Text>
+          <Text style={styles.retryText}>{t('retry')}</Text>
         </Pressable>
       </View>
     );
   }
 
-  if (images === null) return <View testID="puzzle-gallery-loading" style={insetStyle} />;
+  if (images === null) return <View testID="puzzle-gallery-loading" style={[styles.screen, insetStyle]} />;
 
   return (
-    <View style={[{ flex: 1 }, insetStyle]}>
+    <View style={[styles.screen, insetStyle]}>
       <View style={styles.headerRow}>
         <AddFilesButton
           testID="puzzle-gallery-add"
@@ -103,15 +109,27 @@ export function PuzzleGallery({
         />
       </View>
       {images.length === 0 ? (
-        <EmptyState testID="puzzle-gallery-empty" emoji="🧩" message={t('emptyPictures')} />
+        <EmptyStatePanel testID="puzzle-gallery-empty" emoji="🧩" title={t('emptyPictures')} />
       ) : (
         <FlatList
           data={images}
           keyExtractor={(uri) => uri}
+          numColumns={GRID_COLUMNS}
+          contentContainerStyle={styles.grid}
+          columnWrapperStyle={styles.gridRow}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <Pressable testID={`puzzle-item-${item}`} onPress={() => onSelect(item)}>
-              <Image source={{ uri: item }} style={{ width: 100, height: 100 }} />
-            </Pressable>
+            <RaisedCard
+              testID={`puzzle-item-${item}`}
+              onPress={() => onSelect(item)}
+              tilt="compact"
+              color={colors.surface}
+              borderColor={PUZZLE_PALETTE.accentDark}
+              elevationLevel="level2"
+              style={styles.tile}
+            >
+              <Image source={{ uri: item }} style={styles.tileImage} />
+            </RaisedCard>
           )}
         />
       )}
@@ -120,11 +138,44 @@ export function PuzzleGallery({
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
   // Thin header row that right-aligns the compact Add button above the
   // list, instead of the button itself acting as a prominent CTA.
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  grid: {
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.lg,
+  },
+  gridRow: {
+    columnGap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  // 128x128 (well above the 48dp minimum touch target) so each tile is both
+  // a comfortable tap target and large enough for a 2-8 year old to
+  // recognize the picture inside it at a glance.
+  tile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+  },
+  tileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  errorText: {
+    color: colors.ink,
+    marginBottom: spacing.sm,
+  },
+  retryText: {
+    color: PUZZLE_PALETTE.accentDark,
+    fontWeight: '700',
   },
 });

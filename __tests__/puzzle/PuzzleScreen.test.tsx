@@ -237,6 +237,20 @@ describe('PuzzleScreen', () => {
     });
   });
 
+  // Redesign requirement: the board should read as a dimensional "game
+  // board" with strong piece separation — checked statically off each
+  // slot's own declared border width (same static-style-inspection idiom as
+  // the row-grouping tests above), rather than any visual snapshot.
+  it('draws a strong border around each piece slot for clear piece separation', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+
+    const slot0 = utils.getByTestId('puzzle-slot-0');
+    const pieceView = slot0.children[0] as any;
+    const flatStyle = [pieceView.props.style].flat(Infinity).reduce((acc, s) => ({ ...acc, ...s }), {});
+    expect(flatStyle.borderWidth).toBeGreaterThanOrEqual(4);
+  });
+
   describe('piece-snap celebratory pop', () => {
     // Same "spy on Animated.spring's call args instead of the settled style"
     // technique established in ColoringScreen.test.tsx (jest's Animated mock
