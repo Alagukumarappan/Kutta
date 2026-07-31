@@ -401,6 +401,31 @@ purely additive (no existing test reads these Pressables' exact prop set).
 **Tests:** Two new regression tests covering the default state and the
 flip after pressing Pen (532 total tests passing, up from 530).
 
+### Iteration 19 — Fix a real double-tap bug on Onboarding's first-run Save
+**Screen:** Onboarding.
+**Problem:** Bug-hunt pass across every screen's Save/submit actions,
+following the same category as iterations 6, 11, and 15.
+`OnboardingScreen.tsx`'s `handleSave` — the very first screen a parent or
+child interacts with — had no re-entrancy guard beyond
+`!isValid || !folderUri || age === null`; it never checked `saving`
+itself. The UI-level `saveDisabled` prop only takes effect on the NEXT
+render, so a rapid double-tap on Save (trivial for a child) could re-enter
+`handleSave` while the first call was still awaiting
+`ensureContentStructure`/`saveProfile` — risking two concurrent sample-
+content copies into the newly-granted folder and `onComplete()` firing
+twice into the navigator.
+**Fix:** Added a `savingRef` guard (same idiom as SettingsScreen's
+`saveInFlightRef` from iteration 6), checked synchronously at the top of
+`handleSave` and reset in the existing `finally` block (so a failed save's
+Alert-and-retry path still works correctly afterward).
+**Verified as a real bug, not a hypothetical:** confirmed the new
+regression test genuinely fails (`ensureContentStructure` called twice)
+without the fix before committing.
+**Tests:** New regression test double-tapping Save before the mocked
+`ensureContentStructure` promise resolves, asserting exactly one call each
+to `ensureContentStructure`/`saveProfile`/`onComplete` (533 total tests
+passing, up from 532).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -428,6 +453,9 @@ flip after pressing Pen (532 total tests passing, up from 530).
   its trigger, backdrop, and all 7 options — fixed in iteration 12.
 - Puzzle gallery's difficulty-modal backdrop and its 4 options had no
   accessibility semantics at all — fixed in iteration 13.
+- Onboarding's first-run Save button had no rapid-double-tap protection,
+  risking two concurrent sample-content copies and `onComplete()` firing
+  twice — fixed in iteration 19.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -457,8 +485,14 @@ flip after pressing Pen (532 total tests passing, up from 530).
 - Quiz (score-card pop-in now also respects reduce-motion)
 - LanguageSelector / Onboarding + Settings (accessibility semantics added)
 - Coloring (tool-mode buttons now expose accessibilityState)
+- Onboarding (Save button double-tap protection)
 
 ## Remaining polish opportunities (not yet done)
+- `TicTacToeSetupScreen.tsx`'s `handleStart` has no double-fire guard ref
+  before calling `onStart`/navigating to the game screen — same bug class
+  as iteration 19's Onboarding fix, just lower blast radius (a stray
+  duplicate stack entry, recoverable via back button, rather than a
+  duplicate first-run setup). Small, safe next candidate.
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
   imported anywhere in the app. Its i18n key `puzzlePickPieces` is likewise
   unused. Not a fix candidate (nothing to improve on unreachable code); a

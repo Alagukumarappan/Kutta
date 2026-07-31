@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
@@ -60,6 +60,15 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const folderValid = !!folderUri;
   const isValid = nameValid && ageValid && folderValid;
   const saveDisabled = !isValid || saving;
+  // Same re-entrancy guard idiom as SettingsScreen's saveInFlightRef
+  // (iteration 6): `saveDisabled`/`saving` only take effect on the NEXT
+  // render, so a rapid double-tap on Save — trivial for a child, and this
+  // is the very first screen anyone interacts with — could re-enter
+  // handleSave while the first call is still awaiting
+  // ensureContentStructure/saveProfile, risking two concurrent sample-
+  // content copies and onComplete() firing twice. A ref closes that gap
+  // immediately, synchronously, unlike state.
+  const savingRef = useRef(false);
 
   async function handlePickFolder() {
     try {
@@ -71,7 +80,8 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   async function handleSave() {
-    if (!isValid || !folderUri || age === null) return;
+    if (!isValid || !folderUri || age === null || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await ensureContentStructure(folderUri);
@@ -80,6 +90,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : String(err));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
