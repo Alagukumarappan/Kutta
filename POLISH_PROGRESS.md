@@ -706,6 +706,58 @@ audited candidate. Independently re-verified by a dispatched review agent.
 asserting both swatches land directly on their resting scale (547 total
 tests passing, up from 546).
 
+### Iteration 30 — Extend reduce-motion support to ColoringScreen's toolbar buttons; fix a real cross-test mock-pollution bug
+**Screen:** Coloring; **also affects the test suite's own hygiene** (5
+other test files).
+**Problem:** Direct follow-up to iteration 29. ColoringScreen's toolbar
+button press feedback (`animateToolbarButton`, backing the Fill/Pen/Undo/
+Clear buttons) still used an unconditional `Animated.spring` for its
+press-in/press-out scale, ignoring the OS reduce-motion setting — the same
+category already fixed for this screen's own palette-swatch pop moments
+earlier. While writing the regression test, discovered a real, previously
+undetected bug in this codebase's OWN test infrastructure: `jest.spyOn(
+AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true)`
+followed later by `jest.restoreAllMocks()` does NOT actually undo the
+mock — `isReduceMotionEnabled` is already an auto-mocked `jest.fn()` (a
+native module method), so `jest.spyOn` on it just returns that same mock
+rather than wrapping a real implementation, leaving no genuine "original"
+for `restoreAllMocks()`/`mockRestore()` to revert to. The mocked `true`
+value was silently leaking into every LATER test in the same file. This
+had been latent (present but invisible) in 4 other files — `QuizScreen.
+test.tsx`, `QuestionRenderer.test.tsx`, `EmptyStatePanel.test.tsx`,
+`Buttons.test.tsx` — purely by luck, since no test after their respective
+reduce-motion mock happened to assert anything that depended on reduce
+motion being off. It became a live, reproducible failure here because the
+new toolbar test now sits right after iteration 29's own polluting swatch
+test, breaking the pre-existing "requests a spring toward the pressed-down
+scale..." test.
+**Fix:** Applied the same reduce-motion branch to `animateToolbarButton`
+as iteration 29's swatch pop (stop any in-flight animation, then either
+`setValue` directly or spring as before). Separately, fixed the mock-
+pollution bug at its root by adding an explicit `(AccessibilityInfo.
+isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);` reset in
+all 6 places across the codebase where this mock is set to `true`
+(`ColoringScreen.test.tsx` x2, `QuizScreen.test.tsx`, `QuestionRenderer.
+test.tsx`, `EmptyStatePanel.test.tsx`, `Buttons.test.tsx`) — restoring the
+actual guarantee those tests already claimed to provide. Confirmed
+`CelebrationOverlay.test.tsx` needed no change: its very next test in the
+same `describe` block already explicitly re-mocks to `false` itself,
+sidestepping the bug through a different, already-safe mechanism.
+**Verified as a real bug, not a hypothetical:** reproduced the pollution
+in complete isolation (mock true → restoreAllMocks → next test's fresh
+call still resolves true) before writing any fix; confirmed via `git
+stash` that the new toolbar test genuinely fails without the
+`ColoringScreen.tsx` source change.
+**Extra diligence given the unusually wide diff (6 files) for this loop's
+normal one-thing-per-iteration discipline:** dispatched a review agent
+specifically briefed to be skeptical of the scope, independently
+reproduce the pollution bug itself, and grep for every occurrence of the
+mock pattern to confirm none were missed — confirmed all 7 real
+occurrences (6 needing the fix, 1 already safe) were accounted for.
+**Tests:** New regression test for the toolbar reduce-motion path, plus
+the 6 test-file fixes (no new test count from those, since they only
+correct existing tests' cleanup) — 548 total tests passing, up from 547.
+
 ## Bugs fixed
 - White text on 3 of 5 Home activity cards (jade/marigold/sky) failed
   WCAG AA contrast badly (as low as 1.8:1 against a 3:1 minimum) — fixed
@@ -728,6 +780,10 @@ tests passing, up from 546).
   iteration 27.
 - `AddFilesButton`'s Pressable never set `accessibilityState.busy` while a
   file-picker operation was in flight — fixed in iteration 28.
+- Test-suite bug (not app-facing): `jest.restoreAllMocks()` silently
+  failed to reset a mocked `AccessibilityInfo.isReduceMotionEnabled`
+  value, leaking a "reduce motion is on" state into later tests in the
+  same file — fixed across 6 occurrences in iteration 30.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -774,14 +830,15 @@ tests passing, up from 546).
 - AddFilesButton / Coloring + Video galleries (now exposes
   accessibilityState.busy while a pick is in flight)
 - Coloring (palette-swatch selection pop now respects reduce-motion)
+- Coloring (toolbar button press feedback now respects reduce-motion)
 
 ## Remaining polish opportunities (not yet done)
-- ColoringScreen's toolbar button press feedback (`animateToolbarButton`,
-  the Fill/Pen/Undo/Clear buttons), and PuzzleScreen's piece-swap spring:
-  confirmed real, user-action-triggered (not on-mount) one-shot springs
-  that still ignore reduce-motion — same category as iterations 24/25/26/29
-  but individually un-audited. Confirmed as easy/low-risk to test (unlike
-  iteration 26's on-mount case) if picked up later.
+- PuzzleScreen's piece-swap spring: confirmed real, user-action-triggered
+  (not on-mount) one-shot spring that still ignores reduce-motion — same
+  category as iterations 24/25/26/29/30, the last remaining un-audited
+  spot. Confirmed as easy/low-risk to test (unlike iteration 26's on-mount
+  case) if picked up later — likely completes the reduce-motion sweep
+  entirely.
 - `src/components/EmptyState.tsx` (the old, pre-redesign empty-state
   component, superseded by `EmptyStatePanel`) is confirmed dead code —
   never imported anywhere in the app. Same category as `PieceCountPicker`;
