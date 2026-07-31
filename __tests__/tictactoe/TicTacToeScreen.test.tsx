@@ -178,6 +178,33 @@ describe('TicTacToeScreen', () => {
     });
   });
 
+  // Regression test for a real, screenshot-confirmed bug: the board used to
+  // be a single flexDirection:'row', flexWrap:'wrap' container over all 9
+  // cells, relying on Yoga to break a new line after exactly 3 cells. Since
+  // each cell's width is boardSize/3 (routinely fractional), the third
+  // column wrapped early on a real device, rendering as one solid strip of
+  // the board's own background color instead of three bordered cells (same
+  // failure class PuzzleScreen.tsx's own grid already fixed the same way).
+  // Explicit per-row containers make each row's cell count independent of
+  // any floating-point width comparison.
+  describe('board grid layout', () => {
+    it('lays out exactly 3 cells per row, in 3 explicit row containers, not relying on flexWrap', async () => {
+      const { getByTestId } = await renderGame({ mode: 'friend' });
+
+      for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
+        const row = getByTestId(`tictactoe-row-${rowIndex}`);
+        const cellsInRow = within(row).getAllByRole('button');
+        expect(cellsInRow).toHaveLength(3);
+        // Each row holds exactly the 3 cells it's meant to (0-2, 3-5, 6-8),
+        // never a cell that belongs to a different row.
+        for (let colIndex = 0; colIndex < 3; colIndex++) {
+          const expectedIndex = rowIndex * 3 + colIndex;
+          expect(within(row).getByTestId(`tictactoe-cell-${expectedIndex}`)).toBeTruthy();
+        }
+      }
+    });
+  });
+
   describe('computer mode', () => {
     it('lets the human (X) move first, then triggers a computer (O) move automatically', async () => {
       jest.useFakeTimers();
