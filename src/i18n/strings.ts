@@ -45,6 +45,10 @@ export const UI_STRINGS = {
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   quizCorrect: { en: 'Correct!', de: 'Richtig!' },
   quizIncorrect: { en: 'Try again!', de: 'Versuch es nochmal!' },
+  // Shown in a brief, auto-fading celebration pop (see QuestionRenderer)
+  // alongside quizCorrect — kept intentionally short (a few characters) so
+  // it can never cause the child-facing quiz screen to need scrolling.
+  quizCelebration: { en: 'Yay! ⭐', de: 'Juhu! ⭐' },
   quizNext: { en: 'Next', de: 'Weiter' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },

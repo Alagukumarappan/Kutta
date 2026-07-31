@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, ScrollView, Animated } from 'react-native';
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t } from '../i18n/strings';
@@ -89,6 +89,72 @@ export function QuestionRenderer({
 }) {
   const hasAnswered = selectedOptionId !== null;
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
+
+  // Brief, non-blocking "correct answer" celebration: a pop-in/fade-out
+  // bubble that plays alongside (never in front of, and never gating) the
+  // existing feedback banner + Next button below. Built with RN's built-in
+  // Animated API only — react-native-reanimated is listed in package.json
+  // but is wired into neither babel.config.js nor used anywhere in this
+  // app today, and adding that wiring is a separate, riskier change than
+  // this iteration's scope, so Animated (bundled with react-native, no new
+  // dependency) is used instead.
+  //
+  // The effect below only re-runs when `isCorrect` flips from false to
+  // true. Combined with renderOption's existing `!hasAnswered` guard on
+  // onSelect (a few lines below), one answer can never (a) score twice or
+  // (b) replay/stack this celebration twice, even under rapid/repeated
+  // tapping on an option.
+  const scaleAnim = React.useRef(new Animated.Value(0)).current;
+  const opacityAnim = React.useRef(new Animated.Value(0)).current;
+  const [showCelebration, setShowCelebration] = React.useState(false);
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!isCorrect) {
+      setShowCelebration(false);
+      return;
+    }
+
+    setShowCelebration(true);
+    scaleAnim.setValue(0);
+    opacityAnim.setValue(0);
+
+    // Bounded, non-flashing sequence: pop in (~200ms), hold briefly
+    // (900ms), then fade out (300ms) — well under a couple of seconds
+    // total, so it always auto-resolves on its own.
+    const animation = Animated.sequence([
+      Animated.parallel([
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]),
+      Animated.delay(900),
+      Animated.timing(opacityAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]);
+
+    animation.start(({ finished }) => {
+      if (finished && isMountedRef.current) setShowCelebration(false);
+    });
+
+    // Stop the animation (cancelling any pending step/callback) if the
+    // question changes, the child navigates away, or this component
+    // unmounts mid-celebration — no leaked timers/handles.
+    return () => {
+      animation.stop();
+    };
+    // question.id is included defensively (not just `isCorrect`): today
+    // QuizScreen always resets selectedOptionId to null before advancing to
+    // the next question, so isCorrect already cycles true -> false -> ...
+    // on every question change — but keying the effect on the question too
+    // means this can't silently start replaying a stale celebration even if
+    // that reset contract ever changes elsewhere.
+  }, [isCorrect, question.id, scaleAnim, opacityAnim]);
 
   const showProgress = typeof currentIndex === 'number' && typeof totalQuestions === 'number' && totalQuestions > 0;
 
@@ -204,6 +270,34 @@ export function QuestionRenderer({
               <Text style={styles.nextButtonText}>{t('quizNext', language)}</Text>
             </Pressable>
           </View>
+        )}
+
+        {showCelebration && (
+          // Decorative only: pointerEvents="none" so it can never intercept
+          // a tap meant for the Next button or (defensively) an option
+          // underneath it, and hidden from assistive tech since the
+          // feedbackText above ("Correct!"/quizCorrect) already announces
+          // the result — this is purely a visual flourish layered on top,
+          // not new information.
+          <Animated.View
+            testID="quiz-celebration"
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.celebrationOverlay}
+          >
+            <Animated.View
+              style={[
+                styles.celebrationBubble,
+                { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+              ]}
+            >
+              <Text style={styles.celebrationEmoji}>🎉</Text>
+              <Text style={styles.celebrationText} numberOfLines={1}>
+                {t('quizCelebration', language)}
+              </Text>
+            </Animated.View>
+          </Animated.View>
         )}
       </View>
     </ScrollView>
@@ -396,5 +490,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.white,
+  },
+  // Absolutely positioned (not part of the flex flow) so this transient,
+  // auto-fading celebration can never disturb the carefully tuned
+  // proportional flex layout above (see the top-of-file comment on why
+  // this screen avoids hand-computed pixel budgets). It's pinned to the
+  // TOP of the column — over the question card, not the feedback/Next
+  // row — so it never visually covers the Next button, and pointerEvents
+  // "none" (set on the component) means it can never block a tap either
+  // way.
+  celebrationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+  },
+  celebrationBubble: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    borderWidth: 3,
+    borderColor: colors.sunDark,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    ...shadow,
+    elevation: 6,
+  },
+  celebrationEmoji: {
+    fontSize: 26,
+  },
+  celebrationText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.ink,
   },
 });

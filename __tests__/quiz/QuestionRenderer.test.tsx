@@ -187,4 +187,144 @@ describe('QuestionRenderer', () => {
     expect(getByTestId('option-mark-a')).toBeTruthy(); // correct option
     expect(getByTestId('option-mark-b')).toBeTruthy(); // wrongly selected option
   });
+
+  describe('correct-answer celebration', () => {
+    it('shows a brief celebration with a localized message when the answer is correct', async () => {
+      const { getByTestId, getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // This overlay is intentionally hidden from the accessibility tree
+      // (see the dedicated test below), so RNTL's default queries — which
+      // skip accessibility-hidden nodes — need includeHiddenElements here.
+      expect(getByTestId('quiz-celebration', { includeHiddenElements: true })).toBeTruthy();
+      expect(getByText('Yay! ⭐', { includeHiddenElements: true })).toBeTruthy();
+    });
+
+    it('shows the celebration message in German when language is de', async () => {
+      const { getByText } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="de"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(getByText('Juhu! ⭐', { includeHiddenElements: true })).toBeTruthy();
+    });
+
+    it('does NOT show a celebration when the selected answer is wrong', async () => {
+      const { queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(queryByTestId('quiz-celebration', { includeHiddenElements: true })).toBeNull();
+    });
+
+    it('does NOT show a celebration before any option has been selected', async () => {
+      const { queryByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(queryByTestId('quiz-celebration', { includeHiddenElements: true })).toBeNull();
+    });
+
+    it('is purely decorative to assistive tech (hidden from the accessibility tree) since "Correct!" already announces the result', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      const celebration = getByTestId('quiz-celebration', { includeHiddenElements: true });
+      expect(celebration.props.pointerEvents).toBe('none');
+      expect(celebration.props.importantForAccessibility).toBe('no-hide-descendants');
+      expect(celebration.props.accessibilityElementsHidden).toBe(true);
+    });
+
+    it('never blocks tapping "Next" while the celebration is showing', async () => {
+      const onNext = jest.fn();
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={onNext}
+        />
+      );
+
+      expect(getByTestId('quiz-celebration', { includeHiddenElements: true })).toBeTruthy();
+      await fireEvent.press(getByTestId('quiz-next'));
+      expect(onNext).toHaveBeenCalled();
+    });
+
+    it('cleans up its animation on unmount without warning or throwing (no leaked timers/handles)', async () => {
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { unmount } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(() => unmount()).not.toThrow();
+      expect(consoleError).not.toHaveBeenCalled();
+
+      consoleError.mockRestore();
+    });
+
+    it('does not re-render into a repeated celebration when re-rendered with the same correct selection (double-fire guard)', async () => {
+      const { getAllByTestId, rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      // Still exactly one celebration node, not one appended per re-render.
+      expect(getAllByTestId('quiz-celebration', { includeHiddenElements: true })).toHaveLength(1);
+    });
+  });
 });
