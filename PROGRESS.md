@@ -1,17 +1,21 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 4
+- Phase: 1 (baseline verification + inventory), Iteration: 5
 - Latest completed improvement: added 1 test to
-  `__tests__/storage/folderMigration.test.ts` covering the sibling-folder
-  prefix boundary case ("Kutta" vs "KuttaBackup") of `isSameOrNestedWithin`
-  in `src/storage/folderMigration.ts`. No production code changed — the new
-  test passed against the existing implementation unmodified on first run,
-  and was manually verified to fail for the right reason (temporarily
-  reverted the boundary-char fix to a naive `startsWith`, confirmed the test
-  failed as expected, then restored the original file exactly).
-- Test status: 22/22 suites passing, 149/149 tests passing (was 22/22 suites,
-  148/148 tests before this iteration's added test).
+  `__tests__/puzzle/puzzleGrid.test.ts` covering `shufflePieceOrder(2, rng)` —
+  confirms the output is ALWAYS `[1, 0]` for exactly 2 pieces regardless of
+  which of Fisher-Yates's two branches fires (rng >= 0.5 producing identity
+  that the guaranteed-non-identity fallback then swaps, vs. rng < 0.5
+  producing the swap directly). No production code changed — the new test
+  passed against the existing implementation unmodified on first run, and was
+  manually verified to fail for the right reason (temporarily removed the
+  `isIdentity` fallback-swap block in `shufflePieceOrder`, confirmed the
+  rng>=0.5 assertions failed as expected with `[0,1]` instead of `[1,0]`,
+  then restored the original file exactly — `git diff --stat` on the
+  production file showed no change afterward).
+- Test status: 22/22 suites passing, 150/150 tests passing (was 22/22 suites,
+  149/149 tests before this iteration's added test).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -145,6 +149,42 @@
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add folderMigration sibling-prefix boundary coverage`.
 
+7. **loop: add shufflePieceOrder pieceCount=2 boundary coverage** (iteration 5)
+   - Files: `__tests__/puzzle/puzzleGrid.test.ts` (test-only change; no
+     production code modified)
+   - Checked first: confirmed iteration 4's `Next` top recommendation
+     (`shufflePieceOrder` with `pieceCount === 2`) was genuinely uncovered —
+     the existing "never returns the identity order" test only loops over
+     `pieceCount` in `[4, 6, 9, 12]`, and no test anywhere calls
+     `shufflePieceOrder(2, ...)`.
+   - Test added (1): "always returns [1, 0] for exactly 2 pieces, regardless
+     of which RNG branch fires" — hand-traced both branches of
+     `shuffle([0, 1], rng)` (the only Fisher-Yates loop iteration is `i=1`,
+     `j = floor(rng() * 2)`): `rng() >= 0.5` gives `j=1` (self-swap, stays
+     identity `[0,1]`, so `shufflePieceOrder`'s own fallback swap then
+     produces `[1,0]`); `rng() < 0.5` gives `j=0` (swaps directly to `[1,0]`,
+     already non-identity, fallback does not fire). Asserted 4 RNG values
+     spanning both branches (0.99999, 0.5, 0.25, 0.0) all yield `[1, 0]`.
+   - TDD-verified: temporarily removed the `isIdentity` fallback-swap block
+     from `shufflePieceOrder` in `src/puzzle/puzzleGrid.ts` to confirm the
+     new test fails for the intended reason — the `rng() >= 0.5` assertions
+     failed with `[0, 1]` (uncorrected identity) instead of `[1, 0]`, exactly
+     as expected. Restored the original production file exactly afterward;
+     `git diff --stat` confirmed zero production-code change remained. The
+     test passes against the real, unmodified implementation — no bug found,
+     pure coverage addition.
+   - A code-review subagent independently re-traced all 4 RNG values against
+     the Fisher-Yates loop and confirmed the assertions are mathematically
+     correct (not coincidental), confirmed this is genuinely new
+     non-overlapping coverage, confirmed the test would catch a real
+     regression if the fallback swap were broken/removed, and confirmed only
+     the test file changed. Approved with no required changes (one optional
+     cosmetic nit — also assert a value just below 0.5 like 0.4999 to pin the
+     exact boundary — not applied, since the four existing values already
+     fully partition both code paths).
+   - Commit: see `git log` on `overnight-improvements` branch, message
+     `loop: add shufflePieceOrder pieceCount=2 boundary coverage`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -153,7 +193,7 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (6 tests after this iteration) | out-of-range `startX`/`startY` (negative or >= width/height) passed as the initial seed before the loop begins — currently only guarded inside the stack loop, not at entry; tolerance boundary (`tolerance` exactly matching a diff); 1x1 image; fully-filled image (no border) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
 | `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
-| `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test (both exercise the same `Math.max(..., PUZZLE_MIN_SIZE)` clamp on a negative pre-floor value — the only difference is whether the negative comes from a small window or from oversized insets, which is not a distinct branch); not treated as a real gap. Remaining real gaps: `shufflePieceOrder` with `pieceCount` of exactly 2 (only 2 possible permutations, guaranteed-non-identity swap logic); `groupPiecesIntoRows` with `items.length` not evenly divisible by `cols` |
+| `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (32 tests as of iteration 5) — now covers `shufflePieceOrder(2, rng)` always returning `[1,0]` across both Fisher-Yates branches | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. Remaining real gap: `groupPiecesIntoRows` with `items.length` not evenly divisible by `cols` (every existing test uses an exact multiple of `cols`) |
 | `src/quiz/filterQuestions.ts` | Age-range filter | `__tests__/quiz/filterQuestions.test.ts` | already well covered (in-range, boundary-inclusive, empty-result) |
 | `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | duplicate option IDs (partially covered per `isValidQuestion`'s Set-size check — verify test exists); `minAge > maxAge` rejection; question with neither `text` nor `image`; option `text` present but missing one language key |
 | `src/quiz/quizSession.ts` | Session building (shuffle + slice to 20), score/finish state machine | `__tests__/quiz/quizSession.test.ts` (10 tests as of iteration 3) — now covers fewer-than-20-eligible, 0-eligible, already-finished no-op, and normal score/advance paths | well covered now; no further gaps identified in this module |
@@ -175,20 +215,19 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 5 priority: `src/puzzle/puzzleGrid.ts`'s `shufflePieceOrder` with
-`pieceCount` of exactly 2 — only 2 possible permutations exist for 2
-elements, so `shuffle`'s output is either the identity or its single swap;
-worth confirming the guaranteed-non-identity fallback (swapping the first
-two elements when `shuffle` returns identity) is exercised and that the
-result is always `[1, 0]` for `pieceCount === 2` regardless of which branch
-fires. First read `__tests__/puzzle/puzzleGrid.test.ts`'s existing
-`shufflePieceOrder` tests to confirm this exact case isn't already covered.
-If it is, fall back to `groupPiecesIntoRows` with `items.length` not evenly
-divisible by `cols` (last remaining item in the inventory table above), or
-the `src/coloring/floodFill.ts` out-of-range seed / tolerance-boundary /
-1x1-image cases, or `src/coloring/base64.ts` malformed-input cases, or
-`src/quiz/loadQuestions.ts`'s `minAge > maxAge` rejection and
-missing-both-text-and-image rejection.
+Iteration 6 priority: `src/puzzle/puzzleGrid.ts`'s `groupPiecesIntoRows` with
+`items.length` NOT evenly divisible by `cols` — every existing test in
+`__tests__/puzzle/puzzleGrid.test.ts` uses an exact multiple of `cols`
+(4/2, 6/3, 6/2, 9/3, 12/4, 12/3), so the final-shorter-row behavior of
+`items.slice(i, i + cols)` on a ragged remainder is currently unexercised.
+First read the existing `groupPiecesIntoRows` describe block to confirm this
+exact case isn't already covered (it doesn't appear to be, but re-verify
+before writing anything, per protocol). If it turns out to already be
+covered, fall back to (in priority order): `src/coloring/floodFill.ts`'s
+out-of-range seed / tolerance-boundary / 1x1-image cases,
+`src/coloring/base64.ts`'s malformed-input cases (non-multiple-of-4 length,
+empty string, whitespace-only), or `src/quiz/loadQuestions.ts`'s
+`minAge > maxAge` rejection and missing-both-text-and-image rejection.
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -246,6 +285,19 @@ None found that affect correctness. Notes:
   fallback was used: `folderMigration.ts`'s sibling-prefix-name boundary
   case, which was a real, previously-untested gap (see Completed #6).
 
+- Iteration 5: picked `shufflePieceOrder`'s `pieceCount === 2` case exactly
+  as iteration 4 recommended, since it was confirmed genuinely uncovered on
+  inspection (existing identity-fallback test only loops `[4, 6, 9, 12]`).
+  Note: `pieceCount` is typed as a plain `number` in `shufflePieceOrder`'s own
+  signature (unlike `computeGridDimensions`, which restricts to the literal
+  union `4 | 6 | 9 | 12`), and the actual UI (`PieceCountPicker` /
+  `PuzzleScreen`) only ever offers 4/6/9/12 — so `pieceCount === 2` is not a
+  real user-reachable difficulty tier today. It's still worth testing as the
+  mathematically tightest edge case of the shuffle function's own general
+  contract (smallest N for which shuffling/non-identity is meaningful at
+  all, with only 2 possible permutations), and it's cheap regression
+  insurance if a future "very easy" 2-piece mode is ever added.
+
 ## BLOCKED
 None. No pre-existing uncommitted changes were found (`git status` was clean
 before starting), so no developer-owned-changes conflict exists. No test or
@@ -263,24 +315,21 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
-- What changed (iteration 4): one test-only commit adding 1 test to
-  `__tests__/storage/folderMigration.test.ts` covering the sibling-prefix
-  boundary of `isSameOrNestedWithin` (e.g. "Kutta" vs "KuttaBackup" should
-  not be treated as nested). No production/runtime code changed. No UI
-  changed. Also documented (in Technical Decisions) a decision NOT to add a
-  test for iteration 3's originally-recommended `computePuzzleBoardSize`
-  case, since it turned out to be the same code path as an existing test.
-- What's valuable: closes the last documented coverage gap in
-  `src/storage/folderMigration.ts`; the added test is a genuine regression
-  guard against a subtle real-world SAF footgun — a naive prefix check could
-  have wrongly blocked (or worse, silently mis-scoped) a migration between
-  two similarly-named but unrelated sibling folders, which the fix and now
-  the test both explicitly protect against.
-- What needs visual testing: nothing from this iteration (test-only, and the
-  underlying logic touches SAF folder migration, not any rendered UI).
+- What changed (iteration 5): one test-only commit adding 1 test to
+  `__tests__/puzzle/puzzleGrid.test.ts` covering `shufflePieceOrder(2, rng)`
+  always returning `[1, 0]` regardless of which Fisher-Yates branch fires.
+  No production/runtime code changed. No UI changed.
+- What's valuable: pins down the guaranteed-non-identity fallback logic at
+  its tightest boundary condition (N=2, only 2 possible permutations); also
+  documents (Technical Decisions) that `pieceCount === 2` isn't currently a
+  real user-reachable puzzle difficulty (UI only offers 4/6/9/12) — flagged
+  as cheap future-proofing rather than covering live behavior.
+- What needs visual testing: nothing from this iteration (test-only, pure
+  shuffle-array logic, no rendered UI touched).
 - Risks: none identified — intentionally conservative, test-only iteration.
-- Open questions for the developer: none blocking. Java version note: your
-  default global `java -version` reports JDK 25; the project needs JDK 17 for
-  Android/Gradle builds specifically, and `.sdkmanrc` + `sdk env` handles that
-  per-shell already — no action needed unless you want JDK 17 as your global
-  default too (not changed by this loop, per hard limits on shell config).
+- Open questions for the developer: none blocking. Java version note (still
+  applies from earlier iterations): your default global `java -version`
+  reports JDK 25; the project needs JDK 17 for Android/Gradle builds
+  specifically, and `.sdkmanrc` + `sdk env` handles that per-shell already —
+  no action needed unless you want JDK 17 as your global default too (not
+  changed by this loop, per hard limits on shell config).
