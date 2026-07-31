@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -43,10 +43,31 @@ export function TicTacToeSetupScreen({
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
 
   const canStart = mode === 'friend' || (mode === 'computer' && difficulty !== null);
+  // Same time-based re-arm guard as HomeScreen's own navLockRef: this
+  // screen stays mounted (not unmounted) underneath 'tictactoe-game' when
+  // navigation.navigate pushes it, so a rapid double-tap on Start — before
+  // React Navigation's push has visually taken over — could otherwise fire
+  // onStart/navigate twice, pushing the game screen onto the stack twice.
+  // A permanent one-shot ref would work for that immediate double-tap but
+  // would also permanently disable Start if the parent backs out and wants
+  // to legitimately start again, so this re-arms after a short delay
+  // instead, exactly like HomeScreen's cards.
+  const navLockRef = useRef(false);
+  const rearmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rearmTimeoutRef.current) clearTimeout(rearmTimeoutRef.current);
+    };
+  }, []);
 
   function handleStart() {
-    if (!canStart || !mode) return;
+    if (!canStart || !mode || navLockRef.current) return;
+    navLockRef.current = true;
     onStart(mode, mode === 'computer' ? difficulty : null);
+    rearmTimeoutRef.current = setTimeout(() => {
+      navLockRef.current = false;
+    }, 800);
   }
 
   return (

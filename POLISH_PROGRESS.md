@@ -426,6 +426,30 @@ without the fix before committing.
 to `ensureContentStructure`/`saveProfile`/`onComplete` (533 total tests
 passing, up from 532).
 
+### Iteration 20 — Guard Tic-Tac-Toe's Start button against a rapid double-tap
+**Screen:** Tic-Tac-Toe setup.
+**Problem:** Direct follow-up to iteration 19's bug-hunt category.
+`TicTacToeSetupScreen.tsx`'s `handleStart` had no double-fire guard before
+calling `onStart`, which `RootNavigator.tsx` wires straight to
+`navigation.navigate('tictactoe-game', ...)`. Since React Navigation's
+default stack keeps a screen mounted underneath whatever gets pushed on
+top of it, a rapid double-tap on Start — before the push visually takes
+over — could fire `onStart`/navigate twice, pushing the game screen onto
+the stack twice.
+**Fix:** Added a time-based `navLockRef` guard mirroring an EXISTING
+precedent in this same codebase — `HomeScreen.tsx`'s own `navLockRef`
+(same 800ms re-arm window, same unmount cleanup via a tracked timeout
+ref) — rather than a permanent one-shot guard, since this setup screen
+persists in the stack and a permanent lock would incorrectly leave Start
+disabled forever if the parent backs out and legitimately wants to start
+again.
+**Verified as a real bug, not a hypothetical:** confirmed the new
+regression test genuinely fails (`onStart` called twice) without the fix
+before committing.
+**Tests:** New regression test double-tapping Start (asserting a single
+call), then using fake timers to confirm the guard re-arms after 800ms for
+a later legitimate start (534 total tests passing, up from 533).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -456,6 +480,9 @@ passing, up from 532).
 - Onboarding's first-run Save button had no rapid-double-tap protection,
   risking two concurrent sample-content copies and `onComplete()` firing
   twice — fixed in iteration 19.
+- Tic-Tac-Toe setup's Start button had no rapid-double-tap protection,
+  risking pushing the game screen onto the navigation stack twice — fixed
+  in iteration 20.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -486,13 +513,9 @@ passing, up from 532).
 - LanguageSelector / Onboarding + Settings (accessibility semantics added)
 - Coloring (tool-mode buttons now expose accessibilityState)
 - Onboarding (Save button double-tap protection)
+- Tic-Tac-Toe setup (Start button double-tap protection)
 
 ## Remaining polish opportunities (not yet done)
-- `TicTacToeSetupScreen.tsx`'s `handleStart` has no double-fire guard ref
-  before calling `onStart`/navigating to the game screen — same bug class
-  as iteration 19's Onboarding fix, just lower blast radius (a stray
-  duplicate stack entry, recoverable via back button, rather than a
-  duplicate first-run setup). Small, safe next candidate.
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
   imported anywhere in the app. Its i18n key `puzzlePickPieces` is likewise
   unused. Not a fix candidate (nothing to improve on unreachable code); a
