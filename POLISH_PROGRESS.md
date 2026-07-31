@@ -277,6 +277,26 @@ unlabeled modal-dismiss backdrop.
 states, every option's role/label/selected-state, the backdrop's label,
 and German translations (520 total tests passing, up from 515).
 
+### Iteration 13 — Accessibility semantics for the Puzzle gallery's difficulty modal
+**Screen:** Puzzle gallery.
+**Problem:** Continuing the accessibility sweep from iteration 12. While
+looking for the next candidate, discovered `src/components/PieceCountPicker.tsx`
+(a difficulty-picker component) is dead code — never imported anywhere in
+the app (confirmed by grepping the whole `src/` tree). The REAL, live
+difficulty picker is inline inside `PuzzleGallery.tsx`: a "Difficulty: N"
+pill that opens a Modal with 4 piece-count options. The trigger pill
+already had accessibility props, but the modal's dismiss backdrop and all 4
+options had none at all — the same gap AgePicker had before iteration 12,
+on the live component this time.
+**Fix:** Added `accessibilityRole="button"` + a real label (new
+`puzzleDifficultyModalCloseLabel` i18n key) + a `testID` to the previously
+untagged backdrop; `accessibilityRole="button"`, a templated "{count}
+pieces" label (new `puzzleDifficultyOptionLabel` i18n key), and
+`accessibilityState={{selected}}` to each of the 4 options.
+**Tests:** Three new regression tests covering every option's role/label/
+selected-state, the backdrop's label, and German translations (523 total
+tests passing, up from 520).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -302,6 +322,8 @@ and German translations (520 total tests passing, up from 515).
   iteration 11.
 - `AgePicker` (Onboarding + Settings) had zero accessibility semantics on
   its trigger, backdrop, and all 7 options — fixed in iteration 12.
+- Puzzle gallery's difficulty-modal backdrop and its 4 options had no
+  accessibility semantics at all — fixed in iteration 13.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -324,8 +346,15 @@ and German translations (520 total tests passing, up from 515).
 - Home screen (card text contrast fixed for 3 of 5 activities)
 - Quiz (Next button double-tap/skip bug fixed)
 - AgePicker / Onboarding + Settings (accessibility semantics added)
+- Puzzle gallery (difficulty modal accessibility semantics added)
 
 ## Remaining polish opportunities (not yet done)
+- `src/components/PieceCountPicker.tsx` is confirmed dead code — never
+  imported anywhere in the app. Its i18n key `puzzlePickPieces` is likewise
+  unused. Not a fix candidate (nothing to improve on unreachable code); a
+  cleanup candidate if this app-wide sweep ever finds and removes other
+  dead code, but out of scope for a single-purpose polish iteration on its
+  own.
 - White-on-bubblegum (Coloring card) is 3.04:1 — technically passes the
   3:1 large/bold-text minimum but with almost zero margin (0.04 above the
   line). Not touched this iteration since it does pass, but worth a look

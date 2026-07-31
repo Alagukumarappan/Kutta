@@ -108,6 +108,14 @@ export const UI_STRINGS = {
   quizGoHome: { en: 'Home', de: 'Start' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleDifficultyLabel: { en: 'Difficulty: {count}', de: 'Schwierigkeit: {count}' },
+  // Accessibility labels for the difficulty-picker modal opened from the
+  // pill above — same "positional/value fallback label" idiom as
+  // ageOptionLabel/ageModalCloseLabel.
+  puzzleDifficultyOptionLabel: { en: '{count} pieces', de: '{count} Teile' },
+  puzzleDifficultyModalCloseLabel: {
+    en: 'Close difficulty picker',
+    de: 'Schwierigkeitsauswahl schließen',
+  },
   puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },
   puzzlePieceSlotLabel: { en: 'Puzzle piece, position {position}', de: 'Puzzleteil, Position {position}' },
   puzzleComplete: { en: 'Great job!', de: 'Super gemacht!' },

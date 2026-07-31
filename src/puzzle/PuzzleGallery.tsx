@@ -291,7 +291,13 @@ export function PuzzleGallery({
       </View>
 
       <Modal visible={difficultyModalVisible} transparent animationType="fade" onRequestClose={() => setDifficultyModalVisible(false)}>
-        <Pressable style={styles.difficultyModalOverlay} onPress={() => setDifficultyModalVisible(false)}>
+        <Pressable
+          testID="puzzle-difficulty-modal-overlay"
+          style={styles.difficultyModalOverlay}
+          onPress={() => setDifficultyModalVisible(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t('puzzleDifficultyModalCloseLabel')}
+        >
           <View style={styles.difficultyModalCard}>
             {DIFFICULTY_OPTIONS.map((option) => (
               <Pressable
@@ -299,6 +305,9 @@ export function PuzzleGallery({
                 testID={`puzzle-difficulty-option-${option}`}
                 onPress={() => handleSelectDifficulty(option)}
                 style={[styles.difficultyOptionRow, option === difficulty && styles.difficultyOptionRowSelected]}
+                accessibilityRole="button"
+                accessibilityLabel={tFormat('puzzleDifficultyOptionLabel', language, { count: option })}
+                accessibilityState={{ selected: option === difficulty }}
               >
                 <Text
                   style={[styles.difficultyOptionText, option === difficulty && styles.difficultyOptionTextSelected]}

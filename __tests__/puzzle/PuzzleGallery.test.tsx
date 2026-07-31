@@ -314,6 +314,66 @@ describe('PuzzleGallery', () => {
     });
   });
 
+  // Regression tests for the premium-polish accessibility pass: the
+  // difficulty modal's dismiss backdrop and its 4 piece-count options had no
+  // accessibilityRole/Label/State at all — the trigger pill already had
+  // them, but opening the modal dropped a screen-reader user with no way to
+  // tell what each option meant or which one was currently chosen (the same
+  // class of gap iteration 12 fixed for AgePicker).
+  describe('difficulty modal accessibility', () => {
+    it('gives every difficulty option a button role, a pieces-count label, and marks only the current difficulty as selected', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+
+      for (const option of [4, 6, 9, 12]) {
+        const optionEl = getByTestId(`puzzle-difficulty-option-${option}`);
+        expect(optionEl.props.accessibilityRole).toBe('button');
+        expect(optionEl.props.accessibilityLabel).toBe(`${option} pieces`);
+        expect(optionEl.props.accessibilityState).toEqual({ selected: option === 4 });
+      }
+    });
+
+    it('gives the modal-dismiss backdrop a button role and a real label instead of leaving it unlabeled', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+
+      const overlay = getByTestId('puzzle-difficulty-modal-overlay');
+      expect(overlay.props.accessibilityRole).toBe('button');
+      expect(overlay.props.accessibilityLabel).toBe('Close difficulty picker');
+    });
+
+    it('translates the difficulty option and modal-close labels into German', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="de">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+
+      expect(getByTestId('puzzle-difficulty-option-9').props.accessibilityLabel).toBe('9 Teile');
+      expect(getByTestId('puzzle-difficulty-modal-overlay').props.accessibilityLabel).toBe(
+        'Schwierigkeitsauswahl schließen'
+      );
+    });
+  });
+
   describe('long-press multi-select removal', () => {
     it('enters selection mode on long-press, shows a check badge, and does not call onSelect', async () => {
       (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
