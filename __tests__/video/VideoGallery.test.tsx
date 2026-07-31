@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoGallery } from '../../src/video/VideoGallery';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -8,17 +9,31 @@ import * as DocumentPicker from 'expo-document-picker';
 import { addFileReferences } from '../../src/storage/fileReferenceStore';
 
 jest.mock('expo-file-system/legacy', () => ({
-  StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+  StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
   getInfoAsync: jest.fn(),
 }));
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-document-picker');
 
+// Simulates tapping the destructive button of the remove-confirmation
+// Alert — same pattern established by SettingsScreen.test.tsx's own
+// confirmAlertWith helper for its migration-confirmation Alert.
+async function confirmRemoval() {
+  const alertSpy = Alert.alert as jest.Mock;
+  const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+  const confirmButton = buttons.find((b: { text: string }) => b.text === 'Remove');
+  await act(async () => {
+    await confirmButton.onPress();
+  });
+}
+
 describe('VideoGallery', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     await AsyncStorage.clear();
     (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+    (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
   it('lists videos and calls onSelect when tapped', async () => {
@@ -196,6 +211,88 @@ describe('VideoGallery', () => {
       await fireEvent.press(await findByTestId('video-gallery-add'));
 
       await findByTestId('video-item-content://picked/new.mp4');
+    });
+  });
+
+  describe('long-press multi-select removal', () => {
+    it('enters selection mode on long-press, shows a check badge, and does not call onSelect', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/videos/party.mp4',
+      ]);
+      const onSelect = jest.fn();
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={onSelect} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('video-item-content://tree/videos/party.mp4');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('video-gallery-selection-bar');
+      await findByTestId('video-item-check-content://tree/videos/party.mp4');
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('Cancel exits selection mode without removing anything', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/videos/party.mp4',
+      ]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('video-item-content://tree/videos/party.mp4'), 'longPress');
+      await fireEvent.press(await findByTestId('video-gallery-cancel-selection'));
+
+      expect(queryByTestId('video-gallery-selection-bar')).toBeNull();
+      await findByTestId('video-item-content://tree/videos/party.mp4');
+    });
+
+    it('removing a folder-sourced item deletes the real file and reloads the gallery', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock)
+        .mockResolvedValueOnce(['content://tree/videos/party.mp4'])
+        .mockResolvedValueOnce([]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('video-item-content://tree/videos/party.mp4'), 'longPress');
+      await fireEvent.press(await findByTestId('video-gallery-remove-selected'));
+      await confirmRemoval();
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(
+        'content://tree/videos/party.mp4',
+        { idempotent: true }
+      );
+      await findByTestId('video-gallery-empty');
+      expect(queryByTestId('video-item-content://tree/videos/party.mp4')).toBeNull();
+    });
+
+    it('removing a reference-sourced item only drops the reference, never calling deleteAsync', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      await addFileReferences('video', ['content://picked/holiday.mp4']);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('video-item-content://picked/holiday.mp4'), 'longPress');
+      await fireEvent.press(await findByTestId('video-gallery-remove-selected'));
+      await confirmRemoval();
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+      await findByTestId('video-gallery-empty');
+      expect(queryByTestId('video-item-content://picked/holiday.mp4')).toBeNull();
     });
   });
 });

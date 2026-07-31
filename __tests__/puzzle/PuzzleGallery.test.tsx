@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PuzzleGallery } from '../../src/puzzle/PuzzleGallery';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -8,17 +9,31 @@ import * as DocumentPicker from 'expo-document-picker';
 import { addFileReferences } from '../../src/storage/fileReferenceStore';
 
 jest.mock('expo-file-system/legacy', () => ({
-  StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+  StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
   getInfoAsync: jest.fn(),
 }));
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-document-picker');
 
+// Simulates tapping the destructive button of the remove-confirmation
+// Alert — same pattern established by SettingsScreen.test.tsx's own
+// confirmAlertWith helper for its migration-confirmation Alert.
+async function confirmRemoval() {
+  const alertSpy = Alert.alert as jest.Mock;
+  const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+  const confirmButton = buttons.find((b: { text: string }) => b.text === 'Remove');
+  await act(async () => {
+    await confirmButton.onPress();
+  });
+}
+
 describe('PuzzleGallery', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     await AsyncStorage.clear();
     (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+    (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
   it('lists images from the pictures folder and calls onSelect when tapped', async () => {
@@ -179,6 +194,88 @@ describe('PuzzleGallery', () => {
       await fireEvent.press(await findByTestId('puzzle-gallery-add'));
 
       await findByTestId('puzzle-item-content://picked/new.jpg');
+    });
+  });
+
+  describe('long-press multi-select removal', () => {
+    it('enters selection mode on long-press, shows a check badge, and does not call onSelect', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+      ]);
+      const onSelect = jest.fn();
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={onSelect} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('puzzle-gallery-selection-bar');
+      await findByTestId('puzzle-item-check-content://tree/pictures/beach.jpg');
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('Cancel exits selection mode without removing anything', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+      ]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('puzzle-item-content://tree/pictures/beach.jpg'), 'longPress');
+      await fireEvent.press(await findByTestId('puzzle-gallery-cancel-selection'));
+
+      expect(queryByTestId('puzzle-gallery-selection-bar')).toBeNull();
+      await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+    });
+
+    it('removing a folder-sourced item deletes the real file and reloads the gallery', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock)
+        .mockResolvedValueOnce(['content://tree/pictures/beach.jpg'])
+        .mockResolvedValueOnce([]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('puzzle-item-content://tree/pictures/beach.jpg'), 'longPress');
+      await fireEvent.press(await findByTestId('puzzle-gallery-remove-selected'));
+      await confirmRemoval();
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(
+        'content://tree/pictures/beach.jpg',
+        { idempotent: true }
+      );
+      await findByTestId('puzzle-gallery-empty');
+      expect(queryByTestId('puzzle-item-content://tree/pictures/beach.jpg')).toBeNull();
+    });
+
+    it('removing a reference-sourced item only drops the reference, never calling deleteAsync', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      await addFileReferences('puzzle', ['content://picked/mountain.jpg']);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('puzzle-item-content://picked/mountain.jpg'), 'longPress');
+      await fireEvent.press(await findByTestId('puzzle-gallery-remove-selected'));
+      await confirmRemoval();
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+      await findByTestId('puzzle-gallery-empty');
+      expect(queryByTestId('puzzle-item-content://picked/mountain.jpg')).toBeNull();
     });
   });
 });
