@@ -8,11 +8,12 @@ const PIECE_COUNT_OPTIONS = [4, 6, 9, 12] as const;
 // A tiny rows x cols dot-grid rendered inside each option, so a pre-reader
 // can recognize "this one has more/smaller pieces" by eye rather than by
 // reading the number.
-function MiniGrid({ count }: { count: 4 | 6 | 9 | 12 }) {
-  // This mini preview icon doesn't know the shape of the photo the player will
-  // eventually pick, so it always shows the landscape (wide) shape - the
-  // real board/pieces adapt to the actual photo's orientation once picked.
-  const { rows, cols } = computeGridDimensions(count, false);
+function MiniGrid({ count, isPortrait }: { count: 4 | 6 | 9 | 12; isPortrait: boolean }) {
+  // The real photo's orientation is already known by the time this picker is
+  // shown (PuzzleScreen passes it through as `isPortrait`), so the icon shows
+  // the same rows x cols shape the actual board will use, instead of always
+  // assuming landscape.
+  const { rows, cols } = computeGridDimensions(count, isPortrait);
   return (
     <View style={styles.miniGrid}>
       {Array.from({ length: rows }).map((_, r) => (
@@ -39,6 +40,7 @@ export function PieceCountPicker({
   onClose,
   placeholder,
   testIDPrefix,
+  isPortrait,
 }: {
   value: 4 | 6 | 9 | 12 | null;
   onChange: (count: 4 | 6 | 9 | 12) => void;
@@ -47,11 +49,12 @@ export function PieceCountPicker({
   onClose: () => void;
   placeholder: string;
   testIDPrefix: string;
+  isPortrait: boolean;
 }) {
   return (
     <>
       <Pressable testID={`${testIDPrefix}-picker`} onPress={onOpen} style={styles.field}>
-        {value !== null && <MiniGrid count={value} />}
+        {value !== null && <MiniGrid count={value} isPortrait={isPortrait} />}
         <Text style={value === null ? styles.placeholder : styles.value}>
           {value === null ? placeholder : String(value)}
         </Text>
@@ -70,7 +73,7 @@ export function PieceCountPicker({
                 }}
                 style={styles.optionRow}
               >
-                <MiniGrid count={option} />
+                <MiniGrid count={option} isPortrait={isPortrait} />
                 <Text style={styles.optionText}>{option}</Text>
               </Pressable>
             ))}
