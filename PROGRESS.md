@@ -1,28 +1,34 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 8
-- Latest completed improvement: added 1 test to
-  `__tests__/coloring/floodFill.test.ts` covering the tolerance-exact-boundary
-  case in `colorsMatch` — a color difference exactly equal to `tolerance`
-  must be treated as a match (the `<=` comparison is inclusive), not just
-  diffs strictly less than tolerance. Built a 1x3 image with a seed pixel, a
-  neighbor whose red channel differs by exactly the given `tolerance` (5),
-  and a third pixel differing by more (15); asserted the tolerance-boundary
-  pixel gets filled while the beyond-tolerance pixel does not. No production
-  code changed — verified via a temporary TDD sabotage (changed `colorsMatch`
-  from `<=` to `<`), confirmed the new test failed for the intended reason
-  (the boundary pixel stayed unfilled), then restored the original file
-  exactly; `git diff --stat` on the production file showed no change
-  afterward. A code-review subagent independently re-traced the flood-fill
-  stack order for the 1x3 buffer and confirmed the filled/filled/unfilled
-  pattern could only arise from the intended `<=` boundary check (not an
-  unrelated traversal-order coincidence), confirmed it's the only test in the
-  file passing a custom (non-default) tolerance, and approved with no
-  required changes (one optional nit — extracting a shared `setPixel` helper
-  — not applied, judged not worth it for a one-off fixture).
-- Test status: 22/22 suites passing, 155/155 tests passing (was 22/22 suites,
-  154/154 tests before this iteration's 1 added test).
+- Phase: 1 (baseline verification + inventory), Iteration: 9
+- Latest completed improvements (iteration 9, two commits):
+  1. Added 1 test to `__tests__/coloring/floodFill.test.ts` covering the
+     previously-uncovered 1x1 image case (`width=1, height=1`, seed `(0,0)`)
+     — asserts the single pixel gets filled, the result is a distinct copy,
+     and the input buffer is untouched. TDD-verified (temporarily made the
+     traversal stack seed empty for the 1x1 case, confirmed the test failed
+     for the intended reason, restored the original file exactly; `git diff
+     --stat` showed no production change afterward). A code-review subagent
+     independently confirmed the test is non-tautological (distinct from all
+     other 3x3/1x3 fixtures) and correctly asserts fill/copy/non-mutation.
+     This closes the last named gap in the floodFill pure-logic inventory.
+  2. Phase 1 item 9 (TODO/lint-smell audit): grepped `src/` and `__tests__/`
+     for TODO/FIXME/HACK/TEMP/XXX, `eslint-disable`, `ts-ignore`/
+     `ts-expect-error`, `: any`/`as any`, `console.log`, and commented-out
+     code. Found zero TODO-style markers, zero `eslint-disable`, zero
+     `ts-ignore`/`ts-expect-error`, zero `console.log`, and no real
+     commented-out code (the two `//` hits that matched the heuristic were
+     genuine prose comments, not dead code). Found 8 `as any` occurrences: 5
+     in production code (`src/quiz/loadQuestions.ts`) and 3 in
+     `src/navigation/RootNavigator.tsx` route-prop render callbacks, plus 3
+     more in test-helper parameter signatures (not production risk). Fixed
+     the `loadQuestions.ts` ones (see Completed #12 below); investigated and
+     deliberately deferred the `RootNavigator.tsx` ones (see Technical
+     Decisions).
+- Test status: 22/22 suites passing, 156/156 tests passing (was 22/22
+  suites, 155/155 tests before this iteration's 1 added test; the
+  `as any` refactor was test-count-neutral, pure type-safety change).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -322,12 +328,95 @@
     - Commit: see `git log` on `overnight-improvements` branch, message
       `loop: add floodFill tolerance-exact-boundary coverage`.
 
+11. **loop: add floodFill 1x1-image coverage** (iteration 9)
+    - Files: `__tests__/coloring/floodFill.test.ts` (test-only change; no
+      production code modified)
+    - Checked first: read the full existing test file (10 tests as of
+      iteration 8... actually 9 before this addition) and confirmed no test
+      uses a 1x1 image — this was iteration 8's own named `Next`
+      recommendation and was confirmed still genuinely uncovered.
+    - Test added (1): "fills a 1x1 image (single pixel, seed and only pixel
+      are the same)" — a single white pixel filled red; asserts the pixel
+      changes to the fill color, the returned array is a distinct reference
+      (`not.toBe`), and the original input buffer is untouched.
+    - TDD-verified: temporarily changed the traversal stack's initial seed to
+      an empty array specifically when `width === 1 && height === 1` in
+      `src/coloring/floodFill.ts`; the new test failed for the intended
+      reason (pixel stayed white instead of turning red). Restored the
+      original production file exactly afterward; `git diff --stat` confirmed
+      zero production-code change remained. The test passes against the
+      real, unmodified implementation — no bug found, pure coverage addition.
+      This closes the last named gap in the floodFill pure-logic inventory
+      (see table below).
+    - A code-review subagent independently confirmed: the test exercises a
+      genuinely distinct code path from all other fixtures (which are all
+      3x3 or 1x3); all three assertions (fill color, copy semantics,
+      non-mutation) are correct and non-redundant; no regression risk since
+      1x1 dimensions can't trigger any special-cased behavior in the
+      algorithm. Approved with no required changes (one optional nit — an
+      explicit `result.length === 4` byte-count assertion — not applied,
+      judged redundant with the existing `getPixel` read).
+    - Commit: `8a940bb` — `loop: add floodFill 1x1-image coverage`.
+
+12. **loop: replace as-any casts in loadQuestions with Record<string, unknown>**
+    (iteration 9, Phase 1 item 9 — TODO/lint-smell audit)
+    - Files: `src/quiz/loadQuestions.ts` (production code; test-only-adjacent
+      in effect since it's a pure type-safety refactor with zero behavior
+      change)
+    - Audit method: grepped `src/` and `__tests__/` for
+      `TODO|FIXME|HACK|TEMP|XXX`, `eslint-disable`, `ts-ignore`/
+      `ts-expect-error`, `: any\b|as any\b`, `console.log`, and a
+      commented-out-code heuristic (`^\s*//\s*(const|let|...)`). Findings:
+      - Zero TODO-style markers anywhere in `src/` or `__tests__/`.
+      - Zero `eslint-disable`, zero `ts-ignore`/`ts-expect-error`, zero
+        `console.log` anywhere.
+      - Two commented-out-code heuristic hits, both false positives on
+        inspection (`src/coloring/ColoringScreen.tsx:29` and `:204`,
+        `src/storage/folderAccess.ts:38` — all genuine explanatory prose
+        comments, not dead code).
+      - 8 `as any` occurrences total: 5 in `src/quiz/loadQuestions.ts`
+        (production, untrusted-JSON type guards), 3 in
+        `src/navigation/RootNavigator.tsx` (`({ route }: any) => ...` render
+        props for `coloring-detail`/`puzzle-detail`/`video-detail` screens),
+        and 3 more in test-helper parameter type annotations (not a
+        production risk, left as-is — test-file `any` for loosely-typed
+        mock/DOM-traversal helpers is a normal, low-risk pattern and out of
+        scope for this audit's "safe, in-scope, minimal fix" bar).
+    - Fix applied: replaced all 5 production `as any` casts in
+      `loadQuestions.ts`'s type-guard functions (`isBilingualText`,
+      `isValidOption`, `isValidQuestion`, `parseQuestionsFile`) with
+      `as Record<string, unknown>`, which forces every property access to
+      still go through an explicit `typeof`/`undefined` check (same as
+      before) but gives the compiler real signal instead of blanket-silencing
+      it. Also dropped two now-redundant `(o: QuestionOption)` parameter
+      annotations on `.map`/`.some` calls that follow
+      `q.options.every(isValidOption)` — confirmed (via `npx tsc --noEmit`
+      staying clean with the annotations removed) that TypeScript 6.0.3's
+      `Array.prototype.every` type-predicate narrowing flows `QuestionOption[]`
+      through automatically, so the manual annotations were redundant, not
+      load-bearing.
+    - Verified zero behavior change: all 12 pre-existing tests in
+      `__tests__/quiz/loadQuestions.test.ts` pass unchanged, `npx tsc
+      --noEmit` clean, full suite 22/22 suites and 156/156 tests passing.
+    - A code-review subagent independently ran `tsc` and the test file
+      itself, confirmed the type-predicate narrowing is genuine (not an
+      accidental `any` reappearing — proved by the fact that strict-mode
+      property access on the narrowed array compiles, which is impossible on
+      `unknown`), confirmed the refactor is behavior-identical, and confirmed
+      no `as any` remains in the file. Approved with no required changes.
+    - Explicitly did NOT touch `RootNavigator.tsx`'s three `any` route-prop
+      casts in this pass — see Technical Decisions below for why (a quick
+      experiment showed the narrow local fix doesn't type-check without a
+      larger, riskier navigator-wide typing change).
+    - Commit: `f258268` — `loop: replace as-any casts in loadQuestions with
+      Record<string, unknown>`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
 | Module | Purpose | Existing tests | Possible future edge cases |
 |---|---|---|---|
-| `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (9 tests as of iteration 8) — now also covers out-of-range seed coordinates and the tolerance-exact-boundary case (`Math.abs(diff) === tolerance` treated as a match) | 1x1 image (`width=1, height=1`); fully-filled image (no border) |
+| `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (10 tests as of iteration 9) — now also covers out-of-range seed coordinates, the tolerance-exact-boundary case, and the 1x1-image case | no further named gaps identified; a "fully-filled image, no border at all" case would be redundant with the existing no-op/re-tap tests (same code path) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
 | `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
 | `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (34 tests as of iteration 6) — now also covers `groupPiecesIntoRows`'s ragged-final-row and shorter-than-`cols` cases | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. No further known gaps in this module as of iteration 6. |
@@ -352,22 +441,39 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 9 priority: `src/coloring/floodFill.ts`'s one remaining named gap
-— a 1x1 image (`width=1, height=1`, seed `(0,0)`). First read
-`__tests__/coloring/floodFill.test.ts` in full to confirm it's still
-uncovered (as of iteration 8 the file has 9 tests, none using a 1x1 image),
-then add a test if genuinely uncovered. If already covered by the time
-iteration 9 checks, fall back to (in priority order): `src/coloring/base64.ts`'s
-malformed-input cases (non-multiple-of-4 length, empty string,
-whitespace-only), or `src/quiz/loadQuestions.ts`'s `minAge > maxAge`
-rejection and missing-both-text-and-image rejection. If the pure-logic
-inventory has no remaining genuinely-uncovered items by the time iteration 9
-checks, start Phase 1 item 8 (error-state audit): review each screen under
-`src/*/​*Screen.tsx` for loading/empty/error/success state handling,
-uncaught async errors, and setState-after-unmount risk (note the
-pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning under
-BLOCKED below is a related but separate test-hygiene item, not itself the
-audit).
+Iteration 10 priority: the floodFill/puzzleGrid pure-logic micro-edge-case
+mining is now exhausted (no further named gaps in either module — see
+inventory table) and the TODO/lint-smell audit (Phase 1 item 9) found no
+further safely-fixable production issues this pass beyond the `loadQuestions`
+`as any` cleanup already done. Two concrete options, in priority order:
+1. **Finish the `as any` audit's deferred item**: design and apply a proper
+   `RootStackParamList` type for `src/navigation/RootNavigator.tsx`'s
+   `createNativeStackNavigator()` call (currently untyped), then remove the
+   three `({ route }: any) => ...` casts on the `coloring-detail`/
+   `puzzle-detail`/`video-detail` screens. This is a real but larger-scoped
+   fix than a single iteration's "minimal" bar comfortably allows alone —
+   scope it carefully (it will also let `navigation.navigate(destination)`
+   calls in `HomeScreen`/`ColoringGallery`/`PuzzleGallery`/`VideoGallery`
+   become type-checked instead of stringly-typed) and budget time to run the
+   full suite + tsc + a careful review, since navigation is a
+   user-facing-crash-risk area if a param-list typo slips through.
+2. **Phase 1 item 8 (error-state audit)**: review each screen under
+   `src/*/​*Screen.tsx` for loading/empty/error/success state handling,
+   uncaught async errors, and setState-after-unmount risk. Note:
+   `RootNavigator.tsx` itself was read closely this iteration while
+   investigating the `any` casts and already looks solid on this front (both
+   its async `useEffect`s use a `cancelled` flag guard and a `.catch()` that
+   falls through to a safe UI state rather than an unhandled rejection or a
+   stuck spinner) — so a fresh screen not yet audited (e.g. `QuizScreen`,
+   `ColoringScreen`, or `PuzzleScreen`) is likely more fruitful than
+   re-checking `RootNavigator`.
+3. If both of the above turn out unfruitful or too large to safely scope in
+   one iteration, move toward Phase 2 (accessibility/child-safety): the
+   Phase 1 baseline, pure-logic inventory, and TODO/lint-smell audit are now
+   all substantially covered.
+(The pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning
+under BLOCKED below is a related but separate test-hygiene item, not itself
+part of the error-state audit.)
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -438,6 +544,32 @@ None found that affect correctness. Notes:
   all, with only 2 possible permutations), and it's cheap regression
   insurance if a future "very easy" 2-piece mode is ever added.
 
+- Iteration 9: investigated fixing `RootNavigator.tsx`'s three
+  `({ route }: any) => ...` casts as part of the TODO/lint-smell audit's
+  `as any` findings. Tried the narrowest possible local fix — typing just the
+  destructured `route` param inline as `{ route: { params: { imageUri:
+  string } } }` without touching `createNativeStackNavigator()`'s generic —
+  and confirmed via `npx tsc --noEmit` that it does NOT type-check: React
+  Navigation's `Stack.Screen` children prop type is `(props: { route:
+  RouteProp<ParamListBase, "...">; navigation: any }) => ReactNode`, and
+  `RouteProp<ParamListBase, ...>`'s `params` is `Readonly<object | undefined>`
+  — not assignable to a concrete `{ imageUri: string }` shape without
+  widening the whole navigator's generic. A real fix requires defining a
+  `RootStackParamList` type and passing it to
+  `createNativeStackNavigator<RootStackParamList>()`, which would also
+  affect every other `Stack.Screen`/`navigation.navigate(...)` call site in
+  the file (7 screens total) — correctly typing all of them in one
+  iteration, verifying no regression, and getting a careful review is more
+  scope than this iteration's "minimal, focused fix" budget allows safely.
+  Reverted the experiment (confirmed `git diff --stat` showed no change
+  remaining) and documented it as iteration 10's top option instead of
+  forcing a partial or unsafe fix. The 3 `any` casts remain in production
+  code but are low-risk as-is: they're narrowly scoped to 3 read-only
+  `route.params` destructures with a stable, hand-verified shape (both
+  `navigation.navigate(...)` call sites and the screens that read them
+  agree on `{ imageUri: string }` / `{ videoUri: string }`), not a
+  general-purpose unsafe cast.
+
 ## BLOCKED
 None. No pre-existing uncommitted changes were found (`git status` was clean
 before starting), so no developer-owned-changes conflict exists. No test or
@@ -455,6 +587,33 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
+- What changed (iteration 9, two commits): (1) one test-only commit adding 1
+  test to `__tests__/coloring/floodFill.test.ts` covering the 1x1-image case
+  — closes the last named gap in the floodFill inventory; (2) one small
+  production-code commit replacing 5 `as any` casts with
+  `as Record<string, unknown>` in `src/quiz/loadQuestions.ts`'s untrusted-JSON
+  type guards, a pure type-safety refactor with zero behavior change (all 12
+  pre-existing tests pass unchanged). Also did a full TODO/FIXME/eslint-
+  disable/ts-ignore/console.log audit across `src/` and `__tests__/` — found
+  nothing else needing action, and documented 3 remaining `any` casts in
+  `RootNavigator.tsx` (route-prop typing) as a deliberately deferred,
+  larger-scoped fix for iteration 10 rather than forcing a narrow fix that a
+  quick experiment showed doesn't type-check.
+- What's valuable: the `loadQuestions.ts` change makes the parser's defenses
+  against malformed on-device `questions.json` data (a file a parent could
+  in principle hand-edit or a sync tool could corrupt) real compiler-checked
+  property access instead of blanket-silenced `any`, with no behavior
+  change — safer to extend in future iterations without an `any` cast
+  silently accepting a typo.
+- What needs visual testing: nothing from this iteration (test-only +
+  internal type-safety refactor, no UI or runtime behavior touched).
+- Risks: none identified. Both changes were verified test-count-neutral or
+  test-count-increasing, tsc-clean, and independently code-reviewed.
+- Open questions for the developer: none blocking. If you'd like the
+  `RootNavigator.tsx` route-typing fix done as its own dedicated task rather
+  than an overnight-loop iteration, it's a good candidate — see Technical
+  Decisions above for the exact scope (a `RootStackParamList` type touching
+  all 7 screens in that file).
 - What changed (iteration 8): one test-only commit adding 1 test to
   `__tests__/coloring/floodFill.test.ts` covering the tolerance-exact-boundary
   case in `colorsMatch` (a color diff exactly equal to `tolerance` must
