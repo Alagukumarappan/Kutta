@@ -1,9 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useLanguage } from '../i18n/LanguageContext';
-import { colors, spacing, radii, shadow } from '../theme/tokens';
+import { colors, spacing, typography, getActivityPalette, RaisedCard, RaisedPrimaryButton } from '../design-system';
+
+// Video's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
+// getActivityPalette) — used for the player frame's border and the error
+// card/retry CTA so this screen reads as "the video one" at a glance,
+// matching VideoGallery.
+const palette = getActivityPalette('video');
 
 export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const { t } = useLanguage();
@@ -41,66 +47,83 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
 
   if (error) {
     return (
-      <View
-        testID="video-player-error"
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors.background,
-          paddingLeft: insets.left,
-          paddingRight: insets.right,
-          paddingBottom: insets.bottom,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 22,
-            fontWeight: 'bold',
-            color: colors.ink,
-            textAlign: 'center',
-            marginBottom: spacing.md,
-          }}
-        >
-          {t('videoLoadError')}
-        </Text>
-        <Pressable
-          testID="video-player-retry"
-          onPress={handleRetry}
-          accessibilityRole="button"
-          accessibilityLabel={t('retry')}
-          style={{
-            backgroundColor: colors.coral,
-            borderColor: colors.coralDark,
-            borderWidth: 2,
-            borderRadius: radii.xl,
-            paddingVertical: spacing.sm,
-            paddingHorizontal: spacing.xl,
-            ...shadow,
-            elevation: 4,
-          }}
-        >
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.white }}>{t('retry')}</Text>
-        </Pressable>
+      <View testID="video-player-error" style={[styles.centered, insetStyle(insets)]}>
+        <RaisedCard color={colors.surface} borderColor={palette.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
+          <View style={styles.errorCardInner}>
+            <Text style={styles.errorTitle}>{t('videoLoadError')}</Text>
+            <RaisedPrimaryButton
+              testID="video-player-retry"
+              label={t('retry')}
+              onPress={handleRetry}
+              color={palette.accent}
+              textColor={colors.ink}
+              accessibilityLabel={t('retry')}
+            />
+          </View>
+        </RaisedCard>
       </View>
     );
   }
 
   return (
-    <View
-      style={{
-        flex: 1,
-        paddingLeft: insets.left,
-        paddingRight: insets.right,
-        paddingBottom: insets.bottom,
-        justifyContent: 'center',
-      }}
-    >
-      <VideoView
-        player={player}
-        style={{ width: '100%', height: 300 }}
-        nativeControls
-      />
+    <View style={[styles.container, insetStyle(insets)]}>
+      <RaisedCard color={colors.surfaceRaised} borderColor={palette.accentDark} elevationLevel="level3" style={styles.playerFrame}>
+        <View style={styles.playerInner}>
+          <VideoView player={player} style={styles.videoView} nativeControls />
+        </View>
+      </RaisedCard>
     </View>
   );
 }
+
+function insetStyle(insets: { left: number; right: number; bottom: number }) {
+  return {
+    paddingLeft: insets.left,
+    paddingRight: insets.right,
+    paddingBottom: insets.bottom,
+  };
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+    padding: spacing.md,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+    padding: spacing.md,
+  },
+  playerFrame: {
+    width: '100%',
+    maxWidth: 700,
+  },
+  playerInner: {
+    padding: spacing.sm,
+  },
+  videoView: {
+    width: '100%',
+    height: 300,
+  },
+  errorCardOuter: {
+    width: '100%',
+    maxWidth: 420,
+  },
+  errorCardInner: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: colors.ink,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+});
