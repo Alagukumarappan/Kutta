@@ -6,10 +6,14 @@ import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as folderMigration from '../../src/storage/folderMigration';
+import * as FileSystem from 'expo-file-system/legacy';
 
 jest.mock('../../src/storage/profileStore');
 jest.mock('../../src/storage/folderAccess');
 jest.mock('../../src/storage/folderMigration');
+jest.mock('expo-file-system/legacy', () => ({
+  StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+}));
 
 const initialProfile = { name: 'Sam', age: 4, language: 'en' as const, rootFolderUri: 'content://tree/old' };
 
@@ -217,5 +221,131 @@ describe('SettingsScreen', () => {
     const folderHitSlop = folderButton.props.hitSlop ?? {};
     expect(folderHitSlop.top).toBeGreaterThanOrEqual(4);
     expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
+  });
+
+  describe('profile picture', () => {
+    beforeEach(() => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+      ]);
+    });
+
+    it('does not show a "Choose a picture" button when no pictures folder is available', async () => {
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      expect(queryByTestId('settings-picture-choose')).toBeNull();
+      // No picture ever set -> the placeholder avatar shows, not a broken image.
+      expect(await findByTestId('settings-picture-placeholder')).toBeTruthy();
+    });
+
+    it('lets the parent pick a picture from the pictures folder and stages it (not yet saved)', async () => {
+      (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(await findByTestId('settings-picture-choose'));
+
+      const item = await findByTestId('profile-picture-item-content://tree/pictures/beach.jpg');
+      await fireEvent.press(item);
+
+      // Picking closes the modal and shows the preview immediately...
+      expect(queryByTestId('profile-picture-picker-list')).toBeNull();
+      expect(await findByTestId('settings-picture-preview')).toBeTruthy();
+      // ...but nothing is persisted until Save changes is pressed.
+      expect(profileStore.saveProfile).not.toHaveBeenCalled();
+
+      await fireEvent.press(await findByTestId('settings-save'));
+      await waitFor(() =>
+        expect(profileStore.saveProfile).toHaveBeenCalledWith(
+          expect.objectContaining({ pictureUri: 'content://tree/pictures/beach.jpg' })
+        )
+      );
+    });
+
+    it('lets the parent remove a previously-set picture, reverting to the placeholder avatar', async () => {
+      (profileStore.getProfile as jest.Mock).mockResolvedValue({
+        ...initialProfile,
+        pictureUri: 'content://tree/pictures/old.jpg',
+      });
+      (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      expect(await findByTestId('settings-picture-preview')).toBeTruthy();
+
+      await fireEvent.press(await findByTestId('settings-picture-remove'));
+      expect(await findByTestId('settings-picture-placeholder')).toBeTruthy();
+      expect(queryByTestId('settings-picture-preview')).toBeNull();
+
+      await fireEvent.press(await findByTestId('settings-save'));
+      // The saved *object* still carries an explicit `pictureUri: undefined`
+      // key at this layer — profileStore.saveProfile's own JSON.stringify is
+      // what actually drops it from persisted storage entirely (already
+      // covered by __tests__/storage/profileStore.test.ts's dedicated
+      // round-trip test), so the correct assertion here is just that the
+      // value itself is gone, not that the key is structurally absent.
+      await waitFor(() => {
+        const saved = (profileStore.saveProfile as jest.Mock).mock.calls[0][0];
+        expect(saved.pictureUri).toBeUndefined();
+      });
+    });
+
+    it('falls back to the placeholder avatar instead of a broken image if the saved picture fails to load', async () => {
+      (profileStore.getProfile as jest.Mock).mockResolvedValue({
+        ...initialProfile,
+        pictureUri: 'content://tree/pictures/missing.jpg',
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      const preview = await findByTestId('settings-picture-preview');
+      await act(async () => {
+        preview.props.onError();
+      });
+
+      expect(await findByTestId('settings-picture-placeholder')).toBeTruthy();
+      expect(queryByTestId('settings-picture-preview')).toBeNull();
+    });
+
+    it('cancelling the picker leaves the previous picture untouched', async () => {
+      (profileStore.getProfile as jest.Mock).mockResolvedValue({
+        ...initialProfile,
+        pictureUri: 'content://tree/pictures/old.jpg',
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(await findByTestId('settings-picture-choose'));
+      await findByTestId('profile-picture-picker-list');
+      await fireEvent.press(await findByTestId('profile-picture-picker-cancel'));
+
+      expect(queryByTestId('profile-picture-picker-list')).toBeNull();
+      const preview = await findByTestId('settings-picture-preview');
+      expect(preview.props.source).toEqual({ uri: 'content://tree/pictures/old.jpg' });
+    });
   });
 });

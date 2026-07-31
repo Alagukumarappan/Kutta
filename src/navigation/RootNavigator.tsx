@@ -149,7 +149,7 @@ function AppStack({
         )}
       </Stack.Screen>
       <Stack.Screen name="settings" options={{ title: titleFor('settingsTitle') }}>
-        {() => <SettingsScreen onProfileChanged={onProfileChanged} />}
+        {() => <SettingsScreen onProfileChanged={onProfileChanged} picturesFolderUri={folderUris.pictures} />}
       </Stack.Screen>
       <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
         {({ navigation }) => (

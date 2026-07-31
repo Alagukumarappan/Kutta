@@ -116,6 +116,20 @@ export const UI_STRINGS = {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
   },
+  // Generic Cancel label, deliberately separate from
+  // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped
+  // to their own specific confirmation flows) — this one backs the new
+  // profile-picture picker modal, and is written generically enough that
+  // any future dismiss-a-modal-without-side-effects action could reuse it.
+  cancel: { en: 'Cancel', de: 'Abbrechen' },
+  // Settings screen's optional profile-picture section (iteration 29 — see
+  // PROGRESS.md). Reuses the already-granted "pictures" content folder, the
+  // same one PuzzleGallery lists from — no new permission, no camera, no
+  // upload.
+  settingsProfilePicture: { en: 'Profile Picture', de: 'Profilbild' },
+  profilePictureChoose: { en: 'Choose a picture', de: 'Bild auswählen' },
+  profilePictureRemove: { en: 'Remove picture', de: 'Bild entfernen' },
+  profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
   splashTagline: {
     en: 'Where learning feels like play',
     de: 'Wo Lernen sich wie Spielen anfühlt',
