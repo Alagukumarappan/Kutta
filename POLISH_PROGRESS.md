@@ -49,12 +49,30 @@ once instead of needing to be re-applied by hand in N places.
 **Tests:** No behavior change — all 23 existing PuzzleScreen tests still
 pass unmodified (502 total tests passing).
 
+### Iteration 3 — Accessibility label for image-only quiz answer options
+**Screen:** Quiz (QuestionRenderer).
+**Problem:** An answer option with an image but no text (a structurally
+supported shape — the quiz explicitly supports image-only options
+elsewhere, e.g. the correct-answer reveal path) rendered
+`accessibilityLabel={undefined}` on its Pressable. A screen-reader/TalkBack
+user got an unlabeled "Button" announced for the option — for a
+picture-matching question, that could mean all four answers are
+indistinguishable and effectively unusable without sight.
+**Fix:** Added a positional fallback label ("Answer option 1", "Answer
+option 2", ...) via a new `quizAnswerOptionLabel` i18n key, used only when
+`option.text` is absent; text options are completely unaffected (still get
+their own text as the label).
+**Tests:** New regression test verifying all 4 image-only options get
+distinct, correctly-numbered labels (503 total tests passing, up from 502).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
   part of iteration 1.
 - `PuzzleScreen.tsx` had two byte-for-byte duplicated loading-state
   branches (dead code smell, not a user-visible bug) — fixed in iteration 2.
+- Image-only quiz answer options had no accessibility label at all — fixed
+  in iteration 3.
 
 ## Performance improvements
 _(none yet)_
@@ -64,8 +82,20 @@ _(none yet)_
 - Puzzle gallery (loading state)
 - Video gallery (loading state)
 - Puzzle board screen (loading state deduplicated + unified)
+- Quiz (accessibility label for image-only options)
 
 ## Remaining polish opportunities (not yet done)
+- Accessibility audit found two more real gaps, not yet fixed (one per
+  future iteration, to keep each commit single-purpose):
+  - `PuzzleScreen.tsx`'s puzzle-piece slot Pressables (~line 360) have NO
+    `accessibilityRole` or `accessibilityLabel` at all — every piece is a
+    pure image fragment, so this is a genuine screen-reader dead end for
+    the core puzzle interaction.
+  - `TicTacToeScreen.tsx`'s board cell Pressables (~line 158) have no
+    `accessibilityRole`/label either — filled cells are semi-usable (RN
+    reads the "X"/"O" Text child as an implicit name) but EMPTY cells have
+    no label, so a screen-reader user can't tell which of the 9 squares
+    they're about to tap.
 - OnboardingScreen's "saving" overlay is a full-screen dark scrim + spinner
   + text — visually distinct from the new lighter gallery `LoadingPanel`;
   worth a future pass to decide if that's intentional (blocking modal

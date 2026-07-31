@@ -449,7 +449,16 @@ export function QuestionRenderer({
           highlight === 'correct' && styles.optionCorrect,
           highlight === 'incorrect' && styles.optionIncorrect,
         ]}
-        accessibilityLabel={option.text ? option.text[language] : undefined}
+        // Image-only options (no `option.text`) previously fell through to
+        // `undefined` here, leaving a screen-reader user with an unlabeled
+        // "Button" for every one of a question's four picture answers — the
+        // entire interaction for that question type. Falls back to a plain
+        // positional label ("Answer option 2") so it's at least
+        // distinguishable and announced as tappable, same idea as
+        // quizProgressLabel's own `{number}`-templated announcement above.
+        accessibilityLabel={
+          option.text ? option.text[language] : tFormat('quizAnswerOptionLabel', language, { number: index + 1 })
+        }
       >
         <SurfaceWash />
         {option.image && (

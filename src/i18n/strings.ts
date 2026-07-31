@@ -75,6 +75,7 @@ export const UI_STRINGS = {
   // the screen — see QuestionRenderer's progressRow). {current} is always
   // 1-based (currentIndex + 1) to match how a person would count aloud.
   quizProgressLabel: { en: 'Question {current} of {total}', de: 'Frage {current} von {total}' },
+  quizAnswerOptionLabel: { en: 'Answer option {number}', de: 'Antwortoption {number}' },
   quizCorrect: { en: 'Correct!', de: 'Richtig!' },
   // Age-tiered wrong-answer feedback (replaces the old single `quizIncorrect`
   // wording — see QuestionRenderer). Never harsh/shaming; younger children

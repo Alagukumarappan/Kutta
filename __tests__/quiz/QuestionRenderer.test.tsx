@@ -40,9 +40,50 @@ const combinedQuestion: Question = {
   correctOptionId: 'a',
 };
 
+// Options with an image but no text are still a structurally-supported
+// shape (see e.g. the "correct-answer reveal" describe block below, which
+// exercises "a correct option with an image but no text") even though the
+// bundled sample content always pairs image+text — this fixture exercises
+// that path directly for accessibility.
+const imageOnlyOptionsQuestion: Question = {
+  id: 'q3',
+  category: 'image',
+  minAge: 2,
+  maxAge: 8,
+  question: { image: 'content://tree/quiz/images/apple.png', text: { en: 'Which one is red?', de: 'Welches ist rot?' } },
+  options: [
+    { id: 'a', image: 'content://tree/quiz/images/apple.png' },
+    { id: 'b', image: 'content://tree/quiz/images/banana.png' },
+    { id: 'c', image: 'content://tree/quiz/images/grape.png' },
+    { id: 'd', image: 'content://tree/quiz/images/pear.png' },
+  ],
+  correctOptionId: 'a',
+};
+
 describe('QuestionRenderer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  // Regression test for the premium-polish accessibility pass: an
+  // image-only option previously got `accessibilityLabel={undefined}`,
+  // leaving a screen-reader user with an unlabeled "Button" for every one
+  // of a question's four picture answers.
+  it('gives every image-only option a positional accessibility label instead of none at all', async () => {
+    const { findByLabelText } = await render(
+      <QuestionRenderer
+        question={imageOnlyOptionsQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    expect(await findByLabelText('Answer option 1')).toBeTruthy();
+    expect(await findByLabelText('Answer option 2')).toBeTruthy();
+    expect(await findByLabelText('Answer option 3')).toBeTruthy();
+    expect(await findByLabelText('Answer option 4')).toBeTruthy();
   });
 
   it('falls back to a placeholder when the question image fails to load', async () => {
