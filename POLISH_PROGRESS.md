@@ -758,6 +758,46 @@ occurrences (6 needing the fix, 1 already safe) were accounted for.
 the 6 test-file fixes (no new test count from those, since they only
 correct existing tests' cleanup) — 548 total tests passing, up from 547.
 
+### Iteration 31 — Extend reduce-motion support to PuzzleScreen's piece-snap pop, completing the sweep
+**Screen:** Puzzle.
+**Problem:** The last remaining un-audited spot in the app's reduce-motion
+sweep. `PuzzleScreen.tsx`'s "piece-snap celebratory pop" — the moment a
+piece is swapped into its correct slot, its scale plays an `Animated.
+sequence` overshoot (1 -> 1.15 -> 1) — still used this unconditionally,
+ignoring the OS reduce-motion setting, the same bouncy-pop category
+already fixed everywhere else in the app.
+**Fix:** Added `useReducedMotion()`; the `order`-watching effect's per-slot
+pop now checks it before starting the sequence — when enabled, jumps
+straight to `scale.setValue(1)` for that slot instead. The piece's own
+instant position-snap already conveys that a correct placement just
+happened, on its own. Also added an optional `testID` prop to the internal
+`PuzzlePiece` component, threaded onto its inner `Animated.View` (distinct
+from the outer Pressable's own `puzzle-slot-N` testID) — the same "give
+the animated wrapper its own testID for testability" convention
+ColoringScreen's swatch/toolbar faces already established, needed since
+this screen had no existing way to read a piece's settled scale directly.
+**Verified as a real bug, not a hypothetical:** confirmed via `git stash`
+that the new test genuinely fails without the fix (the new testID doesn't
+exist on the un-fixed component).
+**Extra diligence:** self-review specifically confirmed the `return`
+inside the per-slot `forEach` callback only skips that one slot (not the
+whole effect, which would incorrectly leave other newly-correct slots in
+the same render un-popped even in normal-motion mode), and that adding
+`reducedMotion` to the effect's dependency array can't cause a toggle-only
+false-positive pop, since `prevCorrectRef` already matches `order` from
+the prior run. Independently re-verified by a dispatched review agent,
+including re-tracing the same `forEach`-scoping question.
+**Significance:** this completes the app-wide reduce-motion sweep started
+in iteration 14 — every bouncy/overshooting animation in the app
+(CelebrationOverlay, Quiz's score card + progress dots, useTiltPress's
+app-wide press feedback, EmptyStatePanel's looping bounce, Coloring's
+swatch pop + toolbar buttons, and now Puzzle's piece-snap pop) now
+respects the OS setting. See the note in Remaining polish opportunities
+below.
+**Tests:** New regression test mocking the OS reduce-motion setting on and
+asserting the swapped piece lands directly on its resting scale (549
+total tests passing, up from 548).
+
 ## Bugs fixed
 - White text on 3 of 5 Home activity cards (jade/marigold/sky) failed
   WCAG AA contrast badly (as low as 1.8:1 against a 3:1 minimum) — fixed
@@ -831,14 +871,16 @@ correct existing tests' cleanup) — 548 total tests passing, up from 547.
   accessibilityState.busy while a pick is in flight)
 - Coloring (palette-swatch selection pop now respects reduce-motion)
 - Coloring (toolbar button press feedback now respects reduce-motion)
+- Puzzle (piece-snap celebratory pop now respects reduce-motion)
 
 ## Remaining polish opportunities (not yet done)
-- PuzzleScreen's piece-swap spring: confirmed real, user-action-triggered
-  (not on-mount) one-shot spring that still ignores reduce-motion — same
-  category as iterations 24/25/26/29/30, the last remaining un-audited
-  spot. Confirmed as easy/low-risk to test (unlike iteration 26's on-mount
-  case) if picked up later — likely completes the reduce-motion sweep
-  entirely.
+- Reduce-motion sweep: CONFIRMED FULLY COMPLETE as of iteration 31. Every
+  bouncy/overshooting animation in the app now respects the OS setting —
+  CelebrationOverlay (14), Quiz's score card (16) + progress dots (25),
+  useTiltPress's app-wide press feedback (24), EmptyStatePanel's looping
+  bounce (26), Coloring's palette-swatch pop (29) + toolbar buttons (30),
+  and Puzzle's piece-snap pop (31). No further un-audited springs/loops are
+  known to remain in actively-used code.
 - `src/components/EmptyState.tsx` (the old, pre-redesign empty-state
   component, superseded by `EmptyStatePanel`) is confirmed dead code —
   never imported anywhere in the app. Same category as `PieceCountPicker`;
@@ -922,21 +964,12 @@ correct existing tests' cleanup) — 548 total tests passing, up from 547.
   next accessibility candidate, but iteration 13 found it's actually dead
   code (never imported anywhere) — the live component fixed instead was
   `PuzzleGallery.tsx`'s inline difficulty modal. See iteration 13's entry.
-- Reduce-motion support: CONFIRMED COMPLETE as of iteration 26. Iterations
-  14, 16, 24, 25, and 26 covered `CelebrationOverlay`, Quiz's score-card
-  pop-in, `useTiltPress` (app-wide press feedback), the progress-dots pop,
-  and `EmptyStatePanel`'s looping bounce, respectively. Iteration 26's own
-  confirmation pass grepped every remaining `Animated.spring`/
-  `Animated.timing` call site in `src/` and found no further gaps in
-  actively-used code (the only other hits — `ColoringScreen.tsx`'s palette
-  swatch pop and toolbar press feedback, `PuzzleScreen.tsx`'s piece-swap
-  spring — are all one-shot, sub-second transitions like the ones already
-  fixed, not yet individually audited but lower priority than the
-  continuous loop iteration 26 closed; `SettingsScreen.tsx`'s `FadeInBanner`
-  is a plain opacity fade with no scale/translate/rotate, which reduce-motion
-  guidance doesn't discourage). If a future iteration wants full coverage
-  of every remaining one-shot spring, ColoringScreen/PuzzleScreen are the
-  next candidates.
+- Reduce-motion support: see the fuller, up-to-date note earlier in this
+  section — CONFIRMED FULLY COMPLETE as of iteration 31 (superseding this
+  note's earlier iteration-26 snapshot). `SettingsScreen.tsx`'s
+  `FadeInBanner` remains correctly out of scope: a plain opacity fade with
+  no scale/translate/rotate, which reduce-motion guidance doesn't
+  discourage.
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a
