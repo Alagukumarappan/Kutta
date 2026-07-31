@@ -239,8 +239,8 @@ describe('QuestionRenderer', () => {
       expect(onNext).not.toHaveBeenCalled();
     });
 
-    it('does NOT show a retry action once the answer is correct', async () => {
-      const { queryByTestId } = await render(
+    it('also shows the retry action once the answer is correct, so a child can replay the question for fun', async () => {
+      const { getByTestId } = await render(
         <QuestionRenderer
           question={imageQuestion}
           language="en"
@@ -251,7 +251,30 @@ describe('QuestionRenderer', () => {
         />
       );
 
-      expect(queryByTestId('quiz-retry-answer')).toBeNull();
+      expect(getByTestId('quiz-retry-answer')).toBeTruthy();
+      expect(getByTestId('quiz-next')).toBeTruthy();
+    });
+
+    it('calls onRetry (and not onSelect/onNext) when Retry is pressed after a CORRECT answer', async () => {
+      const onRetry = jest.fn();
+      const onSelect = jest.fn();
+      const onNext = jest.fn();
+
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={onSelect}
+          onNext={onNext}
+          onRetry={onRetry}
+        />
+      );
+
+      await fireEvent.press(getByTestId('quiz-retry-answer'));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(onNext).not.toHaveBeenCalled();
     });
   });
 
