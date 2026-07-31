@@ -382,7 +382,32 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           paddingTop: spacing.sm,
         }}
       >
-        <View style={{ flexDirection: 'row', marginBottom: spacing.sm }}>
+        <View
+          testID="coloring-toolbar-row"
+          style={{
+            flexDirection: 'row',
+            // See the "toolbar row screen-fit" note in Technical Decisions
+            // (iteration 28): with up to 4 buttons visible at once (Fill,
+            // Pen, Undo, Clear drawing — reachable together after both a
+            // fill and a pen stroke) and German text running noticeably
+            // longer than English (`clearDrawing`'s "Zeichnung löschen" is
+            // the longest), a hand-computed worst case leaves only a
+            // moderate safety margin against a narrow landscape phone's
+            // width once notch/gesture-bar insets are subtracted — not the
+            // huge, confidently-safe margin the quiz's progress-dots row
+            // had (iteration 20). `flexWrap: 'wrap'` costs nothing visually
+            // in the common one-row case and removes the overflow risk
+            // entirely by dropping excess buttons to a second line instead
+            // of clipping them off-screen. `gap` (RN 0.86 supports it,
+            // already used elsewhere in this codebase, e.g.
+            // QuizScreen.tsx/SettingsScreen.tsx) replaces the old
+            // per-button `marginRight` so wrapped rows get consistent
+            // vertical spacing too, not just horizontal.
+            flexWrap: 'wrap',
+            gap: spacing.sm,
+            marginBottom: spacing.sm,
+          }}
+        >
           <Pressable
             testID="tool-fill"
             onPress={() => setToolMode('fill')}
@@ -392,7 +417,6 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               paddingVertical: spacing.xs,
               paddingHorizontal: spacing.md,
               borderRadius: radii.md,
-              marginRight: spacing.sm,
               backgroundColor: toolMode === 'fill' ? colors.sky : colors.white,
               borderWidth: 2,
               borderColor: toolMode === 'fill' ? colors.skyDark : colors.disabledBorder,
@@ -409,7 +433,6 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               paddingVertical: spacing.xs,
               paddingHorizontal: spacing.md,
               borderRadius: radii.md,
-              marginRight: spacing.sm,
               backgroundColor: toolMode === 'pen' ? colors.sky : colors.white,
               borderWidth: 2,
               borderColor: toolMode === 'pen' ? colors.skyDark : colors.disabledBorder,
@@ -427,7 +450,6 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                 paddingVertical: spacing.xs,
                 paddingHorizontal: spacing.md,
                 borderRadius: radii.md,
-                marginRight: spacing.sm,
                 backgroundColor: colors.white,
                 borderWidth: 2,
                 borderColor: colors.disabledBorder,

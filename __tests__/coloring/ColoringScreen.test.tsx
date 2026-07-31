@@ -490,4 +490,46 @@ describe('ColoringScreen', () => {
       await findByLabelText('Rückgängig');
     });
   });
+
+  describe('toolbar row screen-fit', () => {
+    // See iteration 28's Technical Decisions note: hand-computed worst-case
+    // button widths (4 buttons visible together — Fill, Pen, Undo, Clear
+    // drawing — in German, whose text runs noticeably longer than English)
+    // leave only a moderate safety margin against a narrow landscape
+    // phone's real width once notch/gesture-bar insets are subtracted,
+    // unlike the quiz progress-dots row's confidently-huge margin
+    // (iteration 20). Text pixel width can't be measured in this Jest
+    // environment (no real font metrics), so — unlike iteration 20's
+    // pixel-sum test — this pins down the layout-level fix instead: the
+    // toolbar row must be able to wrap onto a second line rather than
+    // clip buttons off-screen, checked at the point where all 4 buttons
+    // are genuinely reachable together.
+    it('lets the toolbar row wrap instead of overflowing when all 4 buttons are visible together', async () => {
+      const { StyleSheet } = require('react-native');
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      // Get all 4 buttons on screen simultaneously: a flood fill reveals
+      // Undo, and a pen stroke reveals Clear drawing — the two are
+      // independent (see the 'undo last flood fill' describe block above),
+      // so doing both stacks all 4 toolbar buttons together.
+      await fireFillTap(getByTestId);
+      await drawOnePenStroke(getByTestId);
+      expect(await findByTestId('undo-fill')).toBeTruthy();
+      expect(await findByTestId('clear-drawing')).toBeTruthy();
+      expect(await findByTestId('tool-fill')).toBeTruthy();
+      expect(await findByTestId('tool-pen')).toBeTruthy();
+
+      const row = await findByTestId('coloring-toolbar-row');
+      const flattened = StyleSheet.flatten(row.props.style);
+      expect(flattened.flexWrap).toBe('wrap');
+    });
+  });
 });
