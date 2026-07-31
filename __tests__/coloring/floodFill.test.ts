@@ -67,4 +67,28 @@ describe('floodFill', () => {
     expect(getPixel(result, 3, 2, 0)).toEqual([255, 255, 255, 255]);
     expect(getPixel(result, 3, 1, 0)).toEqual([0, 0, 0, 255]);
   });
+
+  it('does not throw and returns an unchanged copy when the seed coordinates are negative, including single-axis-only cases', () => {
+    const px = makeTestImage();
+    // Both axes negative.
+    expect(floodFill(px, 3, 3, -1, -1, [255, 0, 0, 255])).toEqual(px);
+    // X-only negative (Y in range) — the out-of-range seed can never match
+    // any real pixel color (it reads past the buffer), so nothing should
+    // ever be filled, regardless of which single axis is out of range.
+    expect(floodFill(px, 3, 3, -1, 0, [255, 0, 0, 255])).toEqual(px);
+    // Y-only negative (X in range).
+    expect(floodFill(px, 3, 3, 0, -1, [255, 0, 0, 255])).toEqual(px);
+    expect(() => floodFill(px, 3, 3, -1, 0, [255, 0, 0, 255])).not.toThrow();
+  });
+
+  it('does not throw and returns an unchanged copy when the seed coordinates are >= width/height, including single-axis-only cases', () => {
+    const px = makeTestImage();
+    // Both axes out of range.
+    expect(floodFill(px, 3, 3, 3, 3, [255, 0, 0, 255])).toEqual(px);
+    // X-only out of range (Y in range).
+    expect(floodFill(px, 3, 3, 3, 0, [255, 0, 0, 255])).toEqual(px);
+    // Y-only out of range (X in range).
+    expect(floodFill(px, 3, 3, 0, 3, [255, 0, 0, 255])).toEqual(px);
+    expect(() => floodFill(px, 3, 3, 3, 0, [255, 0, 0, 255])).not.toThrow();
+  });
 });

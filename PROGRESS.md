@@ -1,20 +1,27 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 6
+- Phase: 1 (baseline verification + inventory), Iteration: 7
 - Latest completed improvement: added 2 tests to
-  `__tests__/puzzle/puzzleGrid.test.ts` covering `groupPiecesIntoRows` when
-  `items.length` is NOT an exact multiple of `cols` — a ragged final row
-  (7 items / cols=3 → `[[0,1,2],[3,4,5],[6]]`) and an input entirely shorter
-  than `cols` (2 items / cols=3 → `[[0,1]]`, not an empty extra row). Every
-  prior test in that describe block used an exact multiple. No production
-  code changed — verified via a temporary TDD revert (swapped the loop for a
-  `Math.floor(items.length / cols)`-bounded version that drops the
-  remainder, confirmed both new tests failed for the intended reason, then
-  restored the original file exactly; `git diff --stat` on the production
-  file showed no change afterward).
-- Test status: 22/22 suites passing, 152/152 tests passing (was 22/22 suites,
-  150/150 tests before this iteration's 2 added tests).
+  `__tests__/coloring/floodFill.test.ts` covering out-of-range seed
+  coordinates (`startX`/`startY` negative or `>= width`/`height`) passed to
+  `floodFill`, including single-axis-only combinations (X-only out of range
+  with Y in range, and vice versa), asserting no throw and an unchanged
+  output copy. No production code changed — verified via a temporary TDD
+  sabotage (clamped `startX`/`startY` into valid range both when computing
+  `targetColor` and when seeding the traversal stack, confirmed all 6
+  equality assertions across both new tests failed for the intended reason —
+  the sabotaged version incorrectly started a real flood-fill from a
+  clamped boundary pixel instead of no-op'ing — then restored the original
+  file exactly; `git diff --stat` on the production file showed no change
+  afterward). A code-review subagent caught that the first draft only
+  asserted equality for both-axes-out-of-range combos (`(-1,-1)`, `(3,3)`)
+  and left single-axis combos checked only with a weak `not.toThrow()`; this
+  was fixed before committing by adding `toEqual(px)` assertions for the
+  single-axis cases too, and the TDD sabotage was re-run to confirm those
+  specific assertions also catch the same class of regression.
+- Test status: 22/22 suites passing, 154/154 tests passing (was 22/22 suites,
+  152/152 tests before this iteration's 2 added tests).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -227,12 +234,65 @@
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add groupPiecesIntoRows ragged-row boundary coverage`.
 
+9. **loop: add floodFill out-of-range-seed coverage** (iteration 7)
+   - Files: `__tests__/coloring/floodFill.test.ts` (test-only change; no
+     production code modified)
+   - Checked first: confirmed iteration 6's `Next` top recommendation
+     (`floodFill`'s out-of-range seed coordinates) was genuinely uncovered —
+     read the full existing test file and confirmed none of the 6 existing
+     tests pass a `startX`/`startY` outside `[0, width)`/`[0, height)`. The
+     other two candidates named in the `Next` note (tolerance-exact-boundary,
+     1x1-image) were not needed since this one was confirmed uncovered first.
+   - Tests added (2, 6 assertions total):
+     - "...negative, including single-axis-only cases" — asserts an
+       unchanged copy for both-axes-negative `(-1,-1)`, X-only-negative
+       `(-1,0)`, and Y-only-negative `(0,-1)`, plus a `not.toThrow()` check.
+     - "...>= width/height, including single-axis-only cases" — same
+       structure for `(3,3)`, `(3,0)`, `(0,3)` on the 3x3 test image.
+   - Rationale for "unchanged copy, no throw" being the correct contract
+     (hand-traced, not assumed): with an out-of-range seed, `result[
+     startIndex]` reads past the real `Uint8ClampedArray` bounds and returns
+     `undefined`, so `targetColor` becomes `[undefined,undefined,undefined,
+     undefined]`; every `colorsMatch` comparison then computes `Math.abs(px -
+     undefined)` → `NaN`, and `NaN <= tolerance` is always `false`, so no
+     pixel can ever match and nothing is ever painted. The traversal stack's
+     own bounds check (`x < 0 || x >= width || y < 0 || y >= height →
+     continue`) also immediately discards the out-of-range seed without
+     touching a real pixel. Both mechanisms independently guarantee safety
+     today; the tests exist to pin this down so a future change to either
+     one (e.g. someone "helpfully" clamping the seed into range) is caught.
+   - TDD-verified (twice — see code-review note below): temporarily clamped
+     `startX`/`startY` via `Math.max(0, Math.min(dim - 1, coord))` both when
+     computing `startIndex`/`targetColor` and when seeding the initial stack
+     entry in `src/coloring/floodFill.ts`. First attempt (clamping only the
+     `startIndex` computation, not the stack seed) did NOT fail the tests —
+     caught this and fixed the sabotage to also clamp the stack seed, after
+     which all 6 equality assertions across both new tests failed for the
+     intended reason (a real flood-fill started from the clamped boundary
+     pixel and changed real pixels). Restored the original production file
+     exactly afterward; `git diff --stat` confirmed zero production-code
+     change remained.
+   - A code-review subagent reviewed the diff and found the reasoning sound
+     but flagged a real gap: the first draft only had `toEqual(px)` equality
+     assertions for the both-axes-out-of-range combos, leaving the
+     single-axis-only combos checked with just `not.toThrow()` (a regression
+     that mishandled only one axis, e.g. clamping Y but not X, could have
+     slipped through undetected). Fixed by adding `toEqual(px)` assertions
+     for the single-axis cases too, and re-ran the TDD sabotage to confirm
+     those specific new assertions also catch the same class of regression
+     (they did — the failure surfaced on the very first `toEqual` call in
+     each test). No production bug was found; this is pure coverage
+     addition, now closing the out-of-range-seed gap without a partial-
+     coverage blind spot.
+   - Commit: see `git log` on `overnight-improvements` branch, message
+     `loop: add floodFill out-of-range-seed coverage`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
 | Module | Purpose | Existing tests | Possible future edge cases |
 |---|---|---|---|
-| `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (6 tests after this iteration) | out-of-range `startX`/`startY` (negative or >= width/height) passed as the initial seed before the loop begins — currently only guarded inside the stack loop, not at entry; tolerance boundary (`tolerance` exactly matching a diff); 1x1 image; fully-filled image (no border) |
+| `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (8 tests as of iteration 7) — now also covers out-of-range seed coordinates (negative and `>= width`/`height`, including single-axis-only combinations) | tolerance boundary (`tolerance` exactly matching a diff); 1x1 image; fully-filled image (no border) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
 | `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
 | `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (34 tests as of iteration 6) — now also covers `groupPiecesIntoRows`'s ragged-final-row and shorter-than-`cols` cases | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. No further known gaps in this module as of iteration 6. |
@@ -257,18 +317,26 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 7 priority: `src/coloring/floodFill.ts`'s out-of-range seed
-(negative or >= width/height `startX`/`startY` passed as the initial seed
-before the loop begins — currently only guarded inside the stack loop, not
-at entry), tolerance-boundary (`tolerance` exactly matching a diff), or
-1x1-image cases — first read `__tests__/coloring/floodFill.test.ts` in full
-to confirm none of these three are already covered (iteration 1 added
-early-return no-op/border-start coverage but did not appear to touch these
-three), then pick the first genuinely uncovered one. If all three turn out
-covered, fall back to (in priority order): `src/coloring/base64.ts`'s
-malformed-input cases (non-multiple-of-4 length, empty string,
-whitespace-only), or `src/quiz/loadQuestions.ts`'s `minAge > maxAge`
-rejection and missing-both-text-and-image rejection.
+Iteration 8 priority: `src/coloring/floodFill.ts`'s remaining two named gaps
+— tolerance-exact-boundary (`tolerance` exactly matching a color diff, i.e.
+`Math.abs(diff) === tolerance`, which the `<=` comparison in `colorsMatch`
+should treat as a match, not just diffs strictly less than tolerance) or a
+1x1 image (`width=1, height=1`, seed `(0,0)`) — first read
+`__tests__/coloring/floodFill.test.ts` in full to confirm neither is already
+covered (as of iteration 7 the file has 8 tests: 4 basic-fill/border tests,
+2 already-fill-colored no-op tests, and 2 out-of-range-seed tests added this
+iteration — none appear to touch tolerance-exact-boundary or a 1x1 image),
+then add whichever is genuinely uncovered. If both turn out covered, fall
+back to (in priority order): `src/coloring/base64.ts`'s malformed-input
+cases (non-multiple-of-4 length, empty string, whitespace-only), or
+`src/quiz/loadQuestions.ts`'s `minAge > maxAge` rejection and
+missing-both-text-and-image rejection. If the pure-logic inventory has no
+remaining genuinely-uncovered items by the time iteration 8 checks, start
+Phase 1 item 8 (error-state audit): review each screen under `src/*/​*Screen.tsx`
+for loading/empty/error/success state handling, uncaught async errors, and
+setState-after-unmount risk (note the pre-existing, already-documented
+`PuzzleScreen.test.tsx` act() warning under BLOCKED below is a related but
+separate test-hygiene item, not itself the audit).
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -356,19 +424,28 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
-- What changed (iteration 6): one test-only commit adding 2 tests to
-  `__tests__/puzzle/puzzleGrid.test.ts` covering `groupPiecesIntoRows`'s
-  ragged-final-row behavior (item count not an exact multiple of `cols`) and
-  its shorter-than-`cols` single-row case. No production/runtime code
+- What changed (iteration 7): one test-only commit adding 2 tests (6
+  assertions) to `__tests__/coloring/floodFill.test.ts` covering out-of-range
+  seed coordinates passed to `floodFill` (negative and `>= width`/`height`,
+  including single-axis-only combinations). No production/runtime code
   changed. No UI changed.
-- What's valuable: pins down the row-grouping helper's general slicing
-  contract beyond the exact-multiple shapes the live puzzle UI currently
-  uses; documents (Completed #8) that this exact ragged shape isn't
-  currently reachable via the real 4/6/9/12-piece UI, same caveat pattern as
-  iteration 5's `pieceCount === 2` shuffle test — cheap future-proofing.
+- What's valuable: confirms (by hand-tracing the actual read-past-bounds →
+  `undefined` → `NaN` comparison mechanism, not just by running it) that a
+  bad/out-of-range coordinate reaching `floodFill` — e.g. from a rounding
+  bug or a bad touch-to-pixel mapping elsewhere in the coloring screen —
+  cannot crash the app or corrupt the canvas; it safely no-ops instead. This
+  is a real child-safety-adjacent guarantee (a coloring-page crash mid-tap is
+  a bad experience for a young child) that was previously unverified by any
+  test. Also worth noting for reviewers: a code-review subagent caught a
+  real gap in the first draft (single-axis-out-of-range combos were only
+  checked with `not.toThrow()`, not equality) before it was committed — see
+  Completed #9 for the full trace.
 - What needs visual testing: nothing from this iteration (test-only, pure
-  array-grouping logic, no rendered UI touched).
+  buffer-algorithm logic, no rendered UI touched).
 - Risks: none identified — intentionally conservative, test-only iteration.
+  Two rounds of TDD sabotage-and-restore were run against
+  `src/coloring/floodFill.ts`; `git diff --stat` confirmed no production
+  change remains either time.
 - Open questions for the developer: none blocking. Java version note (still
   applies from earlier iterations): your default global `java -version`
   reports JDK 25; the project needs JDK 17 for Android/Gradle builds
