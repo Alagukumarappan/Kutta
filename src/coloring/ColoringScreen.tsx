@@ -404,6 +404,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               <Pressable
                 key={i}
                 testID={`palette-color-${i}`}
+                accessibilityRole="button"
+                accessibilityLabel={t(paletteColor.nameKey)}
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => {
                   setSelectedColor(paletteColor.fill);
                   setSelectedDisplayColor(paletteColor.display);

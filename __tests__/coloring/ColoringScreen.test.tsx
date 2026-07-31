@@ -118,6 +118,47 @@ describe('ColoringScreen', () => {
     await findByTestId('coloring-canvas-touch-area');
   });
 
+  it('labels each palette swatch with its localized color name and marks the selected one for screen readers', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+    const { findByTestId, findByLabelText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-canvas-touch-area');
+
+    // Red is PALETTE[0], the initially-selected color.
+    const redSwatch = await findByLabelText('Red');
+    expect(redSwatch.props.accessibilityRole).toBe('button');
+    expect(redSwatch.props.accessibilityState?.selected).toBe(true);
+
+    // A non-selected swatch is labeled but not marked selected.
+    const blueSwatch = await findByLabelText('Blue');
+    expect(blueSwatch.props.accessibilityState?.selected).toBe(false);
+
+    // Pressing a swatch by its accessible name flips which one is selected.
+    await fireEvent.press(blueSwatch);
+    expect((await findByLabelText('Blue')).props.accessibilityState?.selected).toBe(true);
+    expect((await findByLabelText('Red')).props.accessibilityState?.selected).toBe(false);
+  });
+
+  it('labels palette swatches in German with warm, child-friendly color names', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+    const { findByTestId, findByLabelText } = await render(
+      <LanguageProvider initialLanguage="de">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-canvas-touch-area');
+    await findByLabelText('Rot');
+    await findByLabelText('Grün');
+    await findByLabelText('Grau');
+  });
+
   it('does not update state (and does not warn) when the load resolves after the screen has been unmounted', async () => {
     let resolveRead!: (value: string) => void;
     (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(
