@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { HomeScreen } from '../../src/home/HomeScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as profilePicture from '../../src/storage/profilePicture';
+import { getActivityPalette } from '../../src/design-system';
 
 jest.mock('../../src/storage/profilePicture');
 
@@ -123,6 +124,82 @@ describe('HomeScreen', () => {
       expect(onNavigate).toHaveBeenCalledTimes(2);
       expect(onNavigate).toHaveBeenNthCalledWith(1, 'coloring');
       expect(onNavigate).toHaveBeenNthCalledWith(2, 'quiz');
+    });
+  });
+
+  describe('redesigned layout (horizontal scrolling carousel, design-system cards)', () => {
+    it('lays out all four cards at the same fixed width, inside a horizontally-scrolling row', async () => {
+      const { getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      // Width is set on the wrapper Animated.View one level above each
+      // RaisedCard's own testID (see HomeScreen.tsx's carousel: the
+      // RaisedCard fills a fixed-size wrapper via flex:1) — a static style
+      // check, not an animation replay, matching this file's existing
+      // convention of reading rendered style rather than driving/asserting
+      // on Animated values directly. All four cards now share one constant
+      // width so the row can grow to fit more cards later without ever
+      // needing to shrink the existing ones.
+      const coloringWidth = getByTestId('home-card-coloring').parent?.props.style.width;
+      const quizWidth = getByTestId('home-card-quiz').parent?.props.style.width;
+      const puzzleWidth = getByTestId('home-card-puzzle').parent?.props.style.width;
+      const videoWidth = getByTestId('home-card-video').parent?.props.style.width;
+
+      expect(coloringWidth).toBeCloseTo(quizWidth, 5);
+      expect(quizWidth).toBeCloseTo(puzzleWidth, 5);
+      expect(quizWidth).toBeCloseTo(videoWidth, 5);
+
+      const scrollRow = getByTestId('home-card-row');
+      expect(scrollRow.props.horizontal).toBe(true);
+    });
+
+    it('shows each card with its own tagline copy', async () => {
+      const { getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      expect(getByText("Let's create!")).toBeTruthy();
+      expect(getByText('Test your smarts')).toBeTruthy();
+      expect(getByText('Piece it together')).toBeTruthy();
+      expect(getByText('Watch & learn')).toBeTruthy();
+    });
+
+    it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video each distinct)', async () => {
+      const { toJSON } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      // RaisedCard renders its `color` prop as the accent backgroundColor
+      // somewhere in its inner tree — rather than depend on RaisedCard's own
+      // internal DOM shape, just confirm each activity's expected accent hex
+      // (from design-system's getActivityPalette, per REDESIGN_PROGRESS.md's
+      // Coloring->bubblegum/Quiz->violet/Puzzle->jade/Video->marigold mapping)
+      // appears in the rendered tree — i.e. this is a real four-color grid,
+      // not four identical rectangles.
+      const rendered = JSON.stringify(toJSON());
+      expect(rendered).toContain(getActivityPalette('coloring').accent);
+      expect(rendered).toContain(getActivityPalette('quiz').accent);
+      expect(rendered).toContain(getActivityPalette('puzzle').accent);
+      expect(rendered).toContain(getActivityPalette('video').accent);
+    });
+
+    it('gives the settings icon button a touch target that meets the design system\'s 48dp minimum', async () => {
+      const { getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const hitArea = getByTestId('home-settings-icon').props.style;
+      expect(hitArea.width).toBeGreaterThanOrEqual(48);
+      expect(hitArea.height).toBeGreaterThanOrEqual(48);
     });
   });
 

@@ -7,12 +7,13 @@ import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as folderMigration from '../../src/storage/folderMigration';
 import * as FileSystem from 'expo-file-system/legacy';
+import { colors as dsColors } from '../../src/design-system';
 
 jest.mock('../../src/storage/profileStore');
 jest.mock('../../src/storage/folderAccess');
 jest.mock('../../src/storage/folderMigration');
 jest.mock('expo-file-system/legacy', () => ({
-  StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+  StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
 }));
 
 const initialProfile = { name: 'Sam', age: 4, language: 'en' as const, rootFolderUri: 'content://tree/old' };
@@ -107,7 +108,8 @@ describe('SettingsScreen', () => {
     await fireEvent.changeText(getByTestId('settings-name-input'), 'Samuel');
     await fireEvent.press(getByTestId('settings-age-picker'));
     await fireEvent.press(getByTestId('settings-age-option-5'));
-    await fireEvent.press(getByTestId('settings-lang-de'));
+    await fireEvent.press(getByTestId('settings-lang-picker'));
+    await fireEvent.press(getByTestId('settings-lang-option-de'));
     await fireEvent.press(getByText('Save changes'));
 
     await waitFor(() =>
@@ -190,7 +192,7 @@ describe('SettingsScreen', () => {
     await waitFor(() => expect(profileStore.saveProfile).toHaveBeenCalled());
   });
 
-  it('gives the language pills and folder-change button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
+  it('gives the language dropdown field and folder-change button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
     const { getByTestId, findByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <SettingsScreen />
@@ -199,19 +201,10 @@ describe('SettingsScreen', () => {
 
     await findByTestId('settings-loaded');
 
-    // Both pills render at roughly 39px tall (paddingVertical 8*2 + a
-    // fontSize-16 line + borderWidth 4) — under the ~44px guideline. They
-    // sit side-by-side with only an 8px horizontal gap between them, so
-    // ONLY vertical hitSlop is safe here (horizontal hitSlop would risk
-    // the two pills' hit zones overlapping); there's no interactive
-    // sibling directly above/below either pill, so vertical hitSlop is
-    // safe on that axis.
-    for (const testID of ['settings-lang-en', 'settings-lang-de']) {
-      const pill = getByTestId(testID);
-      const hitSlop = pill.props.hitSlop ?? {};
-      expect(hitSlop.top).toBeGreaterThanOrEqual(4);
-      expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
-    }
+    const languageField = getByTestId('settings-lang-picker');
+    const hitSlop = languageField.props.hitSlop ?? {};
+    expect(hitSlop.top).toBeGreaterThanOrEqual(4);
+    expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
 
     // The folder-change button (~38px tall: paddingVertical 8*2 + a
     // fontSize-18 line) has no interactive sibling directly above/below it
@@ -349,6 +342,146 @@ describe('SettingsScreen', () => {
     });
   });
 
+  describe('save confirmation and navigate home', () => {
+    it('shows a "Saved successfully" toast and then navigates home after a short delay', async () => {
+      jest.useFakeTimers();
+      (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+      const onGoHome = jest.fn();
+
+      const { getByText, findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onGoHome={onGoHome} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await act(async () => {
+        fireEvent.press(getByText('Save changes'));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(await findByTestId('settings-saved-toast')).toBeTruthy();
+      expect(onGoHome).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1200);
+      });
+
+      expect(onGoHome).toHaveBeenCalledTimes(1);
+      expect(queryByTestId('settings-saved-toast')).toBeNull();
+      jest.useRealTimers();
+    });
+
+    it('does not blow up when Save is pressed with no onGoHome handler provided', async () => {
+      jest.useFakeTimers();
+      (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByText, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await act(async () => {
+        fireEvent.press(getByText('Save changes'));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(await findByTestId('settings-saved-toast')).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1200);
+      });
+      jest.useRealTimers();
+    });
+  });
+
+  describe('reset everything', () => {
+    it('asks for confirmation, then deletes the Kutta-games folder, clears the profile, and calls onReset', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue('content://tree/old/Kutta-games');
+      (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
+      (profileStore.clearProfile as jest.Mock).mockResolvedValue(undefined);
+      const onReset = jest.fn();
+
+      const { getByText, getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={onReset} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(getByTestId('settings-reset'));
+
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith(
+          'Reset everything?',
+          expect.any(String),
+          expect.any(Array),
+          expect.any(Object)
+        )
+      );
+      expect(profileStore.clearProfile).not.toHaveBeenCalled();
+
+      await confirmAlertWith('Reset everything');
+
+      await waitFor(() =>
+        expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(
+          'content://tree/old/Kutta-games',
+          { idempotent: true }
+        )
+      );
+      await waitFor(() => expect(profileStore.clearProfile).toHaveBeenCalled());
+      expect(onReset).toHaveBeenCalledTimes(1);
+
+      // Alert button label doubles as the destructive option here.
+      expect(getByText('Reset everything')).toBeTruthy();
+    });
+
+    it('does NOT reset anything if the parent cancels the confirmation', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue('content://tree/old/Kutta-games');
+      const onReset = jest.fn();
+
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={onReset} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(getByTestId('settings-reset'));
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+      await confirmAlertWith('Cancel');
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+      expect(profileStore.clearProfile).not.toHaveBeenCalled();
+      expect(onReset).not.toHaveBeenCalled();
+    });
+
+    it('still clears the profile and calls onReset even if the content folder can no longer be found', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue(null);
+      (profileStore.clearProfile as jest.Mock).mockResolvedValue(undefined);
+      const onReset = jest.fn();
+
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={onReset} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(getByTestId('settings-reset'));
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+      await confirmAlertWith('Reset everything');
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+      await waitFor(() => expect(profileStore.clearProfile).toHaveBeenCalled());
+      expect(onReset).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('landscape screen-fit', () => {
     // This screen stacks a title, two half-card rows, a profile-picture
     // card, and a save button inside a ScrollView on a landscape-locked
@@ -370,6 +503,62 @@ describe('SettingsScreen', () => {
       expect(title.fontSize).toBeLessThanOrEqual(24);
       expect(title.marginTop).toBeLessThanOrEqual(8);
       expect(title.marginBottom).toBeLessThanOrEqual(8);
+    });
+  });
+
+  describe('calmer parent-facing redesign', () => {
+    // This screen deliberately switched to the desaturated `colors.parent`
+    // family (see src/design-system/tokens.ts) instead of the playful
+    // bubblegum/violet/jade child-facing palette used elsewhere in this
+    // redesign — pinning a couple of these choices stops a future edit from
+    // silently reverting Settings back to a toy-colored look.
+    it('renders the selected option in the language dropdown with the calmer parent accent color, not the child-facing palette', async () => {
+      const { StyleSheet } = require('react-native');
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+      await findByTestId('settings-loaded');
+
+      await fireEvent.press(getByTestId('settings-lang-picker'));
+
+      const selected = StyleSheet.flatten(getByTestId('settings-lang-option-en').props.style);
+      expect(selected.backgroundColor).toBe(dsColors.parent.accentSoft);
+      expect(selected.backgroundColor).not.toBe(dsColors.violetSoft);
+
+      const unselected = StyleSheet.flatten(getByTestId('settings-lang-option-de').props.style);
+      expect(unselected.backgroundColor).not.toBe(dsColors.parent.accentSoft);
+    });
+
+    it('gives the enabled Save button a minimum touch target of 48dp', async () => {
+      const { StyleSheet } = require('react-native');
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+      await findByTestId('settings-loaded');
+
+      const save = StyleSheet.flatten(getByTestId('settings-save').props.style);
+      expect(save.minHeight).toBeGreaterThanOrEqual(48);
+    });
+
+    it('gives the "Remove picture" button clear destructive styling using the shared error hue', async () => {
+      (profileStore.getProfile as jest.Mock).mockResolvedValue({
+        ...initialProfile,
+        pictureUri: 'content://tree/pictures/old.jpg',
+      });
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      const removeButton = StyleSheet.flatten((await findByTestId('settings-picture-remove')).props.style);
+      expect(removeButton.borderColor).toBe(dsColors.berry);
     });
   });
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Animated, View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
@@ -8,6 +8,29 @@ import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionSt
 import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
+import {
+  colors as dsColors,
+  spacing as dsSpacing,
+  typography,
+  motion,
+  getActivityPalette,
+  RaisedCard,
+  RaisedPrimaryButton,
+  RaisedSecondaryButton,
+} from '../design-system';
+
+// REDESIGN (matches QuestionRenderer.tsx's iteration 2 pass onto
+// src/design-system/): only the completion screen below (score card + Play
+// Again/Home) is rebuilt on the new design-system foundation — the
+// loading/error/empty states above still intentionally use the OLD
+// src/theme/tokens.ts palette, since redesigning those is out of this
+// iteration's scope (same "one screen/moment at a time" precedent
+// QuestionRenderer's own file-header comment set). Both `colors`/`spacing`
+// imports (old theme + new design-system) therefore coexist in this file on
+// purpose, aliased as `dsColors`/`dsSpacing` to keep every existing
+// loading/error-state usage of the old, unprefixed `colors`/`spacing`
+// unambiguous and untouched.
+const quizPalette = getActivityPalette('quiz');
 
 export function QuizScreen({
   quizFolderUri,
@@ -53,6 +76,41 @@ export function QuizScreen({
   useEffect(() => {
     if (state?.isFinished) playAgainFiredRef.current = false;
   }, [state?.isFinished]);
+
+  // Brief pop-in entrance for the completion screen's score card, mirroring
+  // QuestionRenderer's own feedbackCard/cardScaleAnim+cardOpacityAnim recipe
+  // exactly (same spring/timing config via the shared `motion` tokens) so
+  // finishing a quiz feels consistent with answering one. Declared here
+  // (above every early return below) per the Rules of Hooks — same reason
+  // playAgainFiredRef's own effect already lives up here rather than beside
+  // the `state.isFinished` JSX branch further down.
+  const scoreCardScaleAnim = useRef(new Animated.Value(0.85)).current;
+  const scoreCardOpacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!state?.isFinished) {
+      // Reset to the pre-entrance state whenever the completion screen isn't
+      // showing, so the NEXT time it appears (a fresh finish, including
+      // after Play Again -> a later finish) the pop-in plays again from
+      // scratch instead of resuming from wherever it last landed.
+      scoreCardScaleAnim.setValue(0.85);
+      scoreCardOpacityAnim.setValue(0);
+      return;
+    }
+
+    const animation = Animated.parallel([
+      Animated.spring(scoreCardScaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
+      Animated.timing(scoreCardOpacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
+    ]);
+    animation.start();
+
+    // Mirrors QuestionRenderer's own cleanup: stop (don't leave running) if
+    // this screen re-renders away from the finished state (e.g. Play Again)
+    // or unmounts mid-animation.
+    return () => {
+      animation.stop();
+    };
+  }, [state?.isFinished, scoreCardScaleAnim, scoreCardOpacityAnim]);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +177,11 @@ export function QuizScreen({
     // feels like an accomplishment rather than a "failure" grade.
     const ratio = total > 0 ? state.score / total : 0;
     const starCount = ratio >= 0.9 ? 3 : ratio >= 0.5 ? 2 : 1;
+    // A small decorative badge on top of the existing star row, reflecting
+    // the score tier — every tier still gets a warm, celebratory emoji
+    // (never a neutral/negative one), so this can't read as shaming even at
+    // the lowest 1-star tier. Reuses only existing emoji, no new assets.
+    const badgeEmoji = starCount === 3 ? '🏆' : starCount === 2 ? '🌟' : '🎉';
 
     function handlePlayAgain() {
       if (playAgainFiredRef.current) return;
@@ -139,34 +202,56 @@ export function QuizScreen({
 
     return (
       <View style={[styles.centeredScreen, insetStyle]}>
-        <View style={styles.scoreCard}>
-          <Text style={styles.scoreEmoji}>🎉</Text>
-          <Text style={styles.starsRow}>
-            {[1, 2, 3].map((n) => (n <= starCount ? '⭐' : '☆')).join(' ')}
-          </Text>
-          <Text style={styles.scoreText}>
-            {tFormat('quizScore', language, { score: state.score, total })}
-          </Text>
-        </View>
+        <Animated.View
+          style={[
+            styles.scoreCardEntrance,
+            { opacity: scoreCardOpacityAnim, transform: [{ scale: scoreCardScaleAnim }] },
+          ]}
+        >
+          {/* RaisedCard (design-system) rather than a hand-built bordered
+              View: unlike QuestionRenderer's questionCard/feedbackCard, this
+              completion panel doesn't need to fill an exact flex-ratio share
+              of the screen (see QuestionRenderer's own top-of-file comment on
+              why IT can't use RaisedCard) — it's simply centered, so
+              RaisedCard's static (no-onPress) panel shape fits directly. */}
+          <RaisedCard
+            testID="quiz-score-card"
+            borderColor={quizPalette.accentDark}
+            elevationLevel="level5"
+            style={styles.scoreCard}
+          >
+            <View style={styles.scoreCardContent}>
+              <Text style={styles.scoreBadgeEmoji}>{badgeEmoji}</Text>
+              <Text style={styles.starsRow}>
+                {[1, 2, 3].map((n) => (n <= starCount ? '⭐' : '☆')).join(' ')}
+              </Text>
+              <Text style={styles.scoreText}>
+                {tFormat('quizScore', language, { score: state.score, total })}
+              </Text>
+            </View>
+          </RaisedCard>
+        </Animated.View>
         <View style={styles.completionActionsRow}>
-          <Pressable
+          {/* Filled/jade "forward" action vs. outlined/violet "leave" action —
+              the same filled-vs-outlined + color-role distinction
+              QuestionRenderer's own Next/Retry pair already established —
+              rather than two same-shaped buttons differing only by label. */}
+          <RaisedPrimaryButton
             testID="quiz-play-again"
+            label={t('quizPlayAgain')}
             onPress={handlePlayAgain}
-            style={styles.playAgainButton}
-            accessibilityRole="button"
+            size="large"
+            color={dsColors.jade}
             accessibilityLabel={t('quizPlayAgain')}
-          >
-            <Text style={styles.playAgainButtonText}>{t('quizPlayAgain')}</Text>
-          </Pressable>
-          <Pressable
+          />
+          <RaisedSecondaryButton
             testID="quiz-home"
+            label={t('quizGoHome')}
             onPress={handleGoHome}
-            style={styles.homeButton}
-            accessibilityRole="button"
+            size="large"
+            color={quizPalette.accent}
             accessibilityLabel={t('quizGoHome')}
-          >
-            <Text style={styles.homeButtonText}>{t('quizGoHome')}</Text>
-          </Pressable>
+          />
         </View>
       </View>
     );
@@ -240,76 +325,45 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.white,
   },
+  // Wraps RaisedCard purely to carry the entrance opacity/scale transform —
+  // RaisedCard's own static-panel path renders a plain (non-Animated) View,
+  // so the pop-in has to live one level up on a real Animated.View instead.
+  scoreCardEntrance: {
+    alignItems: 'center',
+  },
   scoreCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    borderWidth: 4,
-    borderColor: colors.sunDark,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.xl,
+    minWidth: 280,
+  },
+  // RaisedCard's own cardClip carries no padding by default (content is
+  // free to size itself) — this inner wrapper supplies it, plus the
+  // vertical stack of badge/stars/score-text.
+  scoreCardContent: {
+    paddingVertical: dsSpacing.xl,
+    paddingHorizontal: dsSpacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow,
-    elevation: 4,
   },
-  scoreEmoji: {
+  scoreBadgeEmoji: {
     fontSize: 48,
-    marginBottom: spacing.xs,
+    marginBottom: dsSpacing.xs,
   },
   starsRow: {
     fontSize: 40,
-    marginBottom: spacing.sm,
+    marginBottom: dsSpacing.sm,
     textAlign: 'center',
   },
   scoreText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: colors.ink,
+    fontSize: typography.h2.fontSize,
+    fontWeight: typography.h2.fontWeight,
+    color: dsColors.ink,
     textAlign: 'center',
   },
   // A row (not a stack) so the two new buttons cost minimal extra vertical
   // space — this screen must never scroll, and landscape width is plentiful.
   completionActionsRow: {
     flexDirection: 'row',
-    marginTop: spacing.lg,
-    gap: spacing.md,
-  },
-  playAgainButton: {
-    minHeight: 48,
-    minWidth: 48,
-    backgroundColor: colors.mint,
-    borderColor: colors.mintDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
     alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow,
-    elevation: 4,
-  },
-  playAgainButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.white,
-  },
-  homeButton: {
-    minHeight: 48,
-    minWidth: 48,
-    backgroundColor: colors.sky,
-    borderColor: colors.skyDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow,
-    elevation: 4,
-  },
-  homeButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.white,
+    marginTop: dsSpacing.lg,
+    columnGap: dsSpacing.md,
   },
 });

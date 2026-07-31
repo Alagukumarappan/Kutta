@@ -3,6 +3,16 @@ import { seedSampleColoring, seedSamplePictures, seedSampleQuizImages, getSample
 
 const SUBFOLDERS = ['pictures', 'videos', 'coloring', 'quiz'] as const;
 
+// All of this app's own content lives inside one clearly-named folder nested
+// under whatever folder the parent picks, rather than scattering
+// pictures/videos/coloring/quiz directly into it. This means switching to a
+// different picked folder later (Settings -> Change content folder) always
+// finds — or recreates — this same prefilled structure instead of an empty
+// folder, and it keeps the app from cluttering a folder a parent might
+// already use for other things (e.g. picking their whole "DCIM" or "Download"
+// folder).
+export const KUTTA_GAMES_FOLDER_NAME = 'Kutta-games';
+
 export async function requestFolderAccess(): Promise<string | null> {
   const result = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
   if (!result.granted) return null;
@@ -44,13 +54,28 @@ async function ensureSubfolder(parentUri: string, name: string): Promise<string>
   return FileSystem.StorageAccessFramework.makeDirectoryAsync(parentUri, name);
 }
 
-export async function ensureContentStructure(rootUri: string): Promise<void> {
+// Ensures the picked folder has a "Kutta-games" folder directly inside it
+// (creating it if this is the first time), and returns its URI — the actual
+// root that `pictures`/`videos`/`coloring`/`quiz` live under.
+export async function ensureKuttaGamesFolder(rootUri: string): Promise<string> {
+  return ensureSubfolder(rootUri, KUTTA_GAMES_FOLDER_NAME);
+}
+
+// Returns the "Kutta-games" folder URI, and prefills it with the same
+// pictures/videos/coloring/quiz structure + bundled sample content that a
+// brand-new folder would get — every call is idempotent (each step is gated
+// on "not already there" / "destination is empty"), so this can be re-run
+// freely, including from FolderErrorScreen's Retry after a SAF grant was
+// revoked or a subfolder deleted outside the app.
+export async function ensureContentStructure(rootUri: string): Promise<string> {
+  const gamesUri = await ensureKuttaGamesFolder(rootUri);
+
   const subfolderUris: Record<(typeof SUBFOLDERS)[number], string> = {} as Record<
     (typeof SUBFOLDERS)[number],
     string
   >;
   for (const folder of SUBFOLDERS) {
-    subfolderUris[folder] = await ensureSubfolder(rootUri, folder);
+    subfolderUris[folder] = await ensureSubfolder(gamesUri, folder);
   }
 
   const quizUri = subfolderUris.quiz;
@@ -75,4 +100,6 @@ export async function ensureContentStructure(rootUri: string): Promise<void> {
   await seedSampleColoring(subfolderUris.coloring);
   await seedSamplePictures(subfolderUris.pictures);
   await seedSampleQuizImages(quizImagesUri);
+
+  return gamesUri;
 }

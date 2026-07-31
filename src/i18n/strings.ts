@@ -7,14 +7,26 @@ export const UI_STRINGS = {
   onboardingLanguage: { en: 'Language', de: 'Sprache' },
   onboardingPickFolder: { en: 'Choose content folder', de: 'Inhaltsordner wählen' },
   onboardingSave: { en: 'Save', de: 'Speichern' },
+  onboardingSavingMessage: { en: 'First time setup can take a little while — please wait...', de: 'Die Ersteinrichtung kann etwas dauern - bitte warten...' },
   onboardingSelectAge: { en: 'Select age', de: 'Alter wählen' },
   onboardingNameMissing: { en: 'Please enter a name', de: 'Bitte gib einen Namen ein' },
   onboardingAgeMissing: { en: 'Please select an age', de: 'Bitte wähle ein Alter aus' },
   onboardingFolderMissing: { en: 'Please choose a content folder', de: 'Bitte wähle einen Inhaltsordner' },
+  // Short welcoming line under the onboarding title (see OnboardingScreen's
+  // redesigned header) — purely introductory copy, not a validation message.
+  onboardingSubtitle: {
+    en: "Let's set up your child's profile",
+    de: 'Richten wir das Profil deines Kindes ein',
+  },
   homeColoring: { en: 'Coloring', de: 'Malen' },
   homeQuiz: { en: 'Quiz', de: 'Quiz' },
   homePuzzle: { en: 'Photo Puzzle', de: 'Fotopuzzle' },
   homeVideo: { en: 'Videos', de: 'Videos' },
+  homeColoringTagline: { en: "Let's create!", de: 'Los geht’s!' },
+  homeQuizTagline: { en: 'Test your smarts', de: 'Teste dein Wissen' },
+  homePuzzleTagline: { en: 'Piece it together', de: 'Setz es zusammen' },
+  homeVideoTagline: { en: 'Watch & learn', de: 'Schauen & lernen' },
+  homeGreetingHi: { en: 'Hi,', de: 'Hallo,' },
   coloringDetailTitle: { en: 'Coloring Page', de: 'Malvorlage' },
   puzzleDetailTitle: { en: 'Puzzle', de: 'Puzzle' },
   videoDetailTitle: { en: 'Video', de: 'Video' },
@@ -22,6 +34,13 @@ export const UI_STRINGS = {
   settingsFolder: { en: 'Content folder', de: 'Inhaltsordner' },
   settingsChangeFolder: { en: 'Change content folder', de: 'Inhaltsordner ändern' },
   settingsSave: { en: 'Save changes', de: 'Änderungen speichern' },
+  settingsSavedToast: { en: 'Saved successfully', de: 'Erfolgreich gespeichert' },
+  settingsReset: { en: 'Reset everything', de: 'Alles zurücksetzen' },
+  settingsResetConfirmTitle: { en: 'Reset everything?', de: 'Alles zurücksetzen?' },
+  settingsResetConfirmBody: {
+    en: 'This deletes all coloring pages, quiz questions, puzzle pictures, and videos in the content folder, and takes you back to the setup screen. This cannot be undone.',
+    de: 'Dadurch werden alle Ausmalbilder, Quizfragen, Puzzlebilder und Videos im Inhaltsordner gelöscht und du kehrst zum Einrichtungsbildschirm zurück. Dies kann nicht rückgängig gemacht werden.',
+  },
   migrationInProgress: { en: 'Moving your content…', de: 'Inhalte werden verschoben…' },
   migrationFailed: {
     en: 'Could not move content. Your old folder is unchanged.',
@@ -41,6 +60,11 @@ export const UI_STRINGS = {
   emptyPictures: { en: 'No pictures yet — add some to the pictures folder!', de: 'Noch keine Bilder — füge welche zum Bilderordner hinzu!' },
   emptyVideos: { en: 'No videos yet — add some to the videos folder!', de: 'Noch keine Videos — füge welche zum Videoordner hinzu!' },
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },
+  // Title for ColoringGallery's redesigned EmptyStatePanel (design-system);
+  // `emptyColoring` above is reused unchanged as the panel's `message`, so
+  // this is purely an ADDITIONAL headline, not a replacement/rename of that
+  // existing key (which other code/tests may still rely on verbatim).
+  emptyColoringTitle: { en: 'No pictures yet', de: 'Noch keine Bilder' },
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   // Screen-reader-only accessible name for the progress-dots row in
@@ -57,6 +81,14 @@ export const UI_STRINGS = {
   // language, not a literal translation of the other.
   quizIncorrectYoung: { en: "Good try! Let's try again.", de: "Gut versucht! Versuchen wir's noch mal." },
   quizIncorrectOlder: { en: 'Nice try! Take another look.', de: 'Netter Versuch! Schau noch mal genau hin.' },
+  // Deliberate, developer-requested behavior change: on a wrong answer, this
+  // now labels a second line in the feedback card that names the correct
+  // option's own text (see QuestionRenderer's correctAnswerText), e.g. "The
+  // correct answer is: 4" — shown alongside, never instead of, the
+  // encouraging quizIncorrectYoung/Older line above it. Only rendered when
+  // the correct option actually has `.text` (image-only options render
+  // nothing extra), so this key is never shown standing alone.
+  quizCorrectAnswerLabel: { en: 'The correct answer is:', de: 'Die richtige Antwort ist:' },
   // Shown in a brief, auto-fading celebration pop (see QuestionRenderer)
   // alongside quizCorrect — kept intentionally short (a few characters) so
   // it can never cause the child-facing quiz screen to need scrolling.
@@ -67,6 +99,7 @@ export const UI_STRINGS = {
   quizPlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
   quizGoHome: { en: 'Home', de: 'Start' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
+  puzzleDifficultyLabel: { en: 'Difficulty: {count}', de: 'Schwierigkeit: {count}' },
   puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },
   puzzleComplete: { en: 'Great job!', de: 'Super gemacht!' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
@@ -133,8 +166,25 @@ export const UI_STRINGS = {
   addPuzzlePicture: { en: '+ Add puzzle picture', de: '+ Puzzlebild hinzufügen' },
   addVideo: { en: '+ Add video', de: '+ Video hinzufügen' },
   addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
+  gallerySelectedCount: { en: '{count} selected', de: '{count} ausgewählt' },
+  galleryRemove: { en: 'Remove', de: 'Entfernen' },
+  galleryRemoveConfirmTitle: { en: 'Remove selected items?', de: 'Ausgewählte Elemente entfernen?' },
+  galleryRemoveConfirmBody: {
+    en: "Items you added yourself will just be removed from here. Items from the folder will be deleted for good.",
+    de: 'Selbst hinzugefügte Elemente werden nur hier entfernt. Elemente aus dem Ordner werden endgültig gelöscht.',
+  },
+  galleryRemoveError: {
+    en: "Some items couldn't be removed — please try again.",
+    de: 'Einige Elemente konnten nicht entfernt werden — bitte erneut versuchen.',
+  },
   penSizeLabel: { en: 'Pen size', de: 'Stiftgröße' },
   profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
+  // Lets a parent pick a profile picture from anywhere on the device (not
+  // just the configured "pictures" folder listed above it in the same
+  // modal), via the system file picker in single-select mode — mirrors
+  // AddFilesButton's picker invocation but picks exactly one image.
+  profilePictureBrowseAnywhere: { en: 'Browse anywhere on your device', de: 'Auf dem ganzen Gerät suchen' },
+  profilePictureBrowseError: { en: "Couldn't open that picture — please try again.", de: 'Konnte das Bild nicht öffnen — bitte erneut versuchen.' },
   // {name}'s Home-screen avatar accessible name/fallback — decorative only
   // (not tappable), but still needs a real label for screen readers per
   // this feature's own accessibility requirement.

@@ -2,6 +2,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const SUBFOLDERS = ['pictures', 'videos', 'coloring', 'quiz'] as const;
 
+// Kept in sync with folderAccess.ts's own KUTTA_GAMES_FOLDER_NAME rather than
+// importing it, matching this file's existing convention of redefining
+// SUBFOLDERS locally instead of sharing it.
+const KUTTA_GAMES_FOLDER_NAME = 'Kutta-games';
+
 function leafName(uri: string): string {
   const decoded = decodeURIComponent(uri);
   return decoded.substring(decoded.lastIndexOf('/') + 1);
@@ -40,6 +45,12 @@ async function findChild(parentUri: string, name: string): Promise<string | null
   return entries.find((entryUri) => leafName(entryUri) === name) ?? null;
 }
 
+async function ensureChild(parentUri: string, name: string): Promise<string> {
+  const existing = await findChild(parentUri, name);
+  if (existing) return existing;
+  return FileSystem.StorageAccessFramework.makeDirectoryAsync(parentUri, name);
+}
+
 async function listNames(uri: string): Promise<Set<string>> {
   const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(uri);
   return new Set(entries.map(leafName));
@@ -71,10 +82,19 @@ export async function migrateContent(
   }
 
   try {
-    const topLevelEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(oldRootUri);
+    // The actual pictures/videos/coloring/quiz content lives one level down,
+    // inside "Kutta-games" (see folderAccess.ts's ensureContentStructure) —
+    // migrate that folder's contents, not the raw picked-folder's. Falls
+    // back to the old root itself for a profile from before this nesting
+    // existed, so an in-progress migration on an already-set-up device
+    // still finds its content.
+    const oldGamesUri = (await findChild(oldRootUri, KUTTA_GAMES_FOLDER_NAME)) ?? oldRootUri;
+    const newGamesUri = await ensureChild(newRootUri, KUTTA_GAMES_FOLDER_NAME);
+
+    const topLevelEntries = await FileSystem.StorageAccessFramework.readDirectoryAsync(oldGamesUri);
 
     for (const entryUri of topLevelEntries) {
-      await FileSystem.StorageAccessFramework.copyAsync({ from: entryUri, to: newRootUri });
+      await FileSystem.StorageAccessFramework.copyAsync({ from: entryUri, to: newGamesUri });
     }
 
     // Deep verification: for each of the 4 known subfolders, confirm every
@@ -84,10 +104,10 @@ export async function migrateContent(
     // subfolder's contents. For "quiz" we also recurse one level further
     // into "images" and confirm "questions.json" made it across.
     for (const folder of SUBFOLDERS) {
-      const oldChild = await findChild(oldRootUri, folder);
+      const oldChild = await findChild(oldGamesUri, folder);
       if (!oldChild) continue; // nothing to verify/migrate for this subfolder
 
-      const newChild = await findChild(newRootUri, folder);
+      const newChild = await findChild(newGamesUri, folder);
       if (!newChild) {
         return { success: false, error: `Copy verification failed: missing "${folder}" folder in destination.` };
       }
@@ -113,7 +133,7 @@ export async function migrateContent(
     // content a user might have had there if they picked an existing,
     // non-empty folder (e.g. DCIM) as their content root.
     for (const folder of SUBFOLDERS) {
-      const oldChild = await findChild(oldRootUri, folder);
+      const oldChild = await findChild(oldGamesUri, folder);
       if (oldChild) {
         await FileSystem.StorageAccessFramework.deleteAsync(oldChild);
       }

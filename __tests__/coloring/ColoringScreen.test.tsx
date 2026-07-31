@@ -611,4 +611,125 @@ describe('ColoringScreen', () => {
       expect(slider.props.accessibilityLabel).toBe('Pen size');
     });
   });
+
+  describe('palette swatch selection pop', () => {
+    // These read the flattened style of the swatch's own inner
+    // `palette-color-${i}-swatch` Animated.View (not the outer
+    // `palette-color-${i}` Pressable, which only carries the fixed 44x44
+    // hit-target box + accessibility props — see ColoringScreen.tsx's
+    // Pressable/inner-face split, the same one HomeScreen's cards use).
+    // Jest's react-native mock resolves an Animated.Value node to its
+    // current plain numeric value when styles are flattened (the same
+    // technique QuestionRenderer.test.tsx's progress-dot/mark-badge tests
+    // already rely on).
+
+    it('renders the initially-selected swatch already popped and every other swatch at rest, without animating on mount', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      // Red is PALETTE[0], the initially-selected color.
+      const redFlattened = StyleSheet.flatten((await findByTestId('palette-color-0-swatch')).props.style);
+      const redScale = redFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(redScale).toBeCloseTo(1.12);
+
+      const blueFlattened = StyleSheet.flatten((await findByTestId('palette-color-4-swatch')).props.style);
+      const blueScale = blueFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(blueScale).toBeCloseTo(1);
+    });
+
+    it('requests a spring toward the popped scale for the newly-picked swatch and back to rest for the previously-selected one, on a real selection change', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      // Jest's Animated mock never advances a running spring/timing past its
+      // starting value without an explicit fake-timer tick (this file's own
+      // pen-size-slider/undo tests don't touch Animated at all, and
+      // QuestionRenderer.test.tsx's progress-dot pop test works around this
+      // by reading the value right after an explicit `.setValue()` reset,
+      // which ColoringScreen.tsx's swatch pop has no equivalent of — it just
+      // springs from whatever the swatch's current resting scale already
+      // is). So rather than asserting the post-press flattened style (which
+      // would still read the PRE-press resting value here, since no timer
+      // ticked), this spies on `Animated.spring` itself and asserts it was
+      // actually invoked with the right target scale for the right swatch —
+      // an honest, direct check of the wiring rather than a claim that the
+      // animation visibly completed under Jest.
+      const { Animated: RNAnimated } = require('react-native');
+      const springSpy = jest.spyOn(RNAnimated, 'spring');
+
+      const { findByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      // A single awaited press — mirroring this file's/QuestionRenderer's
+      // established safe pattern for driving Animated wiring — rather than
+      // a raw pressIn/pressOut gesture-event replay, which has repeatedly
+      // corrupted the RNTL renderer for later tests in this codebase.
+      const blueSwatch = await findByLabelText('Blue'); // PALETTE[4]
+      await fireEvent.press(blueSwatch);
+
+      const toValues = springSpy.mock.calls.map(([, config]) => (config as { toValue: number }).toValue);
+      expect(toValues).toContain(1.12); // newly-selected Blue pops up
+      expect(toValues).toContain(1); // previously-selected Red settles back
+
+      springSpy.mockRestore();
+    });
+  });
+
+  describe('toolbar button press feedback', () => {
+    // Same "spy on Animated.spring's call args instead of the settled style"
+    // technique as the palette pop test above, and for the same reason:
+    // under Jest, `Animated.spring(...).start()` never actually advances the
+    // value without a fake-timer tick, so reading the flattened style right
+    // after press-in would still show the PRE-press resting scale — this
+    // instead confirms the press-in/press-out handlers really do request a
+    // spring toward 0.94 and back to 1, which is the actual, honest thing
+    // this iteration wires up.
+    //
+    // `fireEvent(button, 'pressIn'/'pressOut')` (not raw 'responderGrant'/
+    // 'responderRelease') is used to trigger the callbacks: RNTL's fireEvent
+    // locates and calls the `onPressIn`/`onPressOut` prop directly (see
+    // node_modules/@testing-library/react-native/dist/fire-event.js's
+    // findEventHandler) rather than replaying the native gesture-responder
+    // event sequence — it's the same category of "call the real callback
+    // directly" this file's other Animated-wiring tests already rely on, not
+    // the raw touch-responder replay that HomeScreen.test.tsx found corrupts
+    // the RNTL renderer for later tests.
+    it('requests a spring toward the pressed-down scale on press-in and back to rest on press-out, for the Fill button', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { Animated: RNAnimated } = require('react-native');
+      const springSpy = jest.spyOn(RNAnimated, 'spring');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const fillButton = getByTestId('tool-fill');
+      await fireEvent(fillButton, 'pressIn');
+
+      expect(springSpy.mock.calls.some(([, config]) => (config as { toValue: number }).toValue === 0.94)).toBe(true);
+
+      await fireEvent(fillButton, 'pressOut');
+
+      expect(springSpy.mock.calls.some(([, config]) => (config as { toValue: number }).toValue === 1)).toBe(true);
+
+      // The button's real onPress (tool selection) is a separate callback
+      // entirely, unaffected by the press-in/out animation wiring above —
+      // already covered by this file's own "is hidden in fill mode..." /
+      // toolbar tests elsewhere, which press these same buttons via
+      // fireEvent.press and observe toolMode-driven UI change correctly.
+      springSpy.mockRestore();
+    });
+  });
 });

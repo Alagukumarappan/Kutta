@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ColoringGallery } from '../../src/coloring/ColoringGallery';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -8,21 +9,35 @@ import * as DocumentPicker from 'expo-document-picker';
 import { addFileReferences } from '../../src/storage/fileReferenceStore';
 
 jest.mock('expo-file-system/legacy', () => ({
-  StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+  StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
   getInfoAsync: jest.fn(),
 }));
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-document-picker');
 
+// Simulates tapping the destructive button of the remove-confirmation
+// Alert — same pattern already established by SettingsScreen.test.tsx's
+// own confirmAlertWith helper for its migration-confirmation Alert.
+async function confirmRemoval() {
+  const alertSpy = Alert.alert as jest.Mock;
+  const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+  const confirmButton = buttons.find((b: { text: string }) => b.text === 'Remove');
+  await act(async () => {
+    await confirmButton.onPress();
+  });
+}
+
 describe('ColoringGallery', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     await AsyncStorage.clear();
     // pruneMissingFileReferences (used to merge individually-added files
     // into every gallery load) calls this — most tests below have no
     // individually-added files at all, so it's harmless either way, but a
     // default keeps every existing test's mock setup unchanged.
     (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+    (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
   it('lists images from the coloring folder and calls onSelect when tapped', async () => {
@@ -75,10 +90,11 @@ describe('ColoringGallery', () => {
     await findByTestId('coloring-item-content://tree/coloring/cat-outline.png');
   });
 
-  it('gives the retry button a hitSlop so its small text-only tap target meets the ~44x44 guideline', async () => {
+  it('gives the retry button a real >=48dp tap target (a raised design-system card, not a bare text label)', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(
       new Error('SAF grant revoked')
     );
+    const { StyleSheet } = require('react-native');
 
     const { findByTestId } = await render(
       <LanguageProvider initialLanguage="en">
@@ -86,17 +102,14 @@ describe('ColoringGallery', () => {
       </LanguageProvider>
     );
 
-    const retryButton = await findByTestId('coloring-gallery-retry');
-    // The button has no style/padding of its own — just an unstyled "Retry"
-    // Text — so its rendered box is well under the touch-target guideline.
-    // It's the only interactive element in this error state (no sibling
-    // Pressable directly above/below it), so hitSlop is a safe way to
-    // enlarge the tap target without any overlap risk.
-    const { top, bottom, left, right } = retryButton.props.hitSlop ?? {};
-    expect(top).toBeGreaterThanOrEqual(12);
-    expect(bottom).toBeGreaterThanOrEqual(12);
-    expect(left).toBeGreaterThanOrEqual(12);
-    expect(right).toBeGreaterThanOrEqual(12);
+    // Redesigned onto the shared design-system's RaisedCard: rather than a
+    // bare, unstyled "Retry" Text needing hitSlop to reach the ~44x44
+    // guideline (this test's previous form), the button now carries a real
+    // minHeight/minWidth box of its own — assert that directly.
+    const target = await findByTestId('coloring-gallery-retry-target');
+    const flattened = StyleSheet.flatten(target.props.style);
+    expect(flattened.minHeight).toBeGreaterThanOrEqual(48);
+    expect(flattened.minWidth).toBeGreaterThanOrEqual(48);
   });
 
   describe('individually-added pictures', () => {
@@ -168,6 +181,110 @@ describe('ColoringGallery', () => {
       await fireEvent.press(await findByTestId('coloring-gallery-add'));
 
       await findByTestId('coloring-item-content://picked/new.png');
+    });
+  });
+
+  describe('long-press multi-select removal', () => {
+    it('enters selection mode on long-press, shows a check badge, and does not call onSelect', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/coloring/cat.png',
+      ]);
+      const onSelect = jest.fn();
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={onSelect} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('coloring-item-content://tree/coloring/cat.png');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('coloring-gallery-selection-bar');
+      const check = await findByTestId('coloring-item-check-content://tree/coloring/cat.png');
+      expect(check.props.children).toBeTruthy();
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('tapping a tile while selecting toggles it instead of opening it, and exits selection mode once nothing is selected', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/coloring/cat.png',
+      ]);
+      const onSelect = jest.fn();
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={onSelect} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('coloring-item-content://tree/coloring/cat.png');
+      await fireEvent(item, 'longPress');
+      await findByTestId('coloring-gallery-selection-bar');
+
+      await fireEvent.press(item); // toggles it back off — the only selected item
+      expect(queryByTestId('coloring-gallery-selection-bar')).toBeNull();
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('Cancel exits selection mode without removing anything', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/coloring/cat.png',
+      ]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('coloring-item-content://tree/coloring/cat.png'), 'longPress');
+      await fireEvent.press(await findByTestId('coloring-gallery-cancel-selection'));
+
+      expect(queryByTestId('coloring-gallery-selection-bar')).toBeNull();
+      await findByTestId('coloring-item-content://tree/coloring/cat.png');
+    });
+
+    it('removing a folder-sourced item deletes the real file and reloads the gallery', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock)
+        .mockResolvedValueOnce(['content://tree/coloring/cat.png'])
+        .mockResolvedValueOnce([]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('coloring-item-content://tree/coloring/cat.png'), 'longPress');
+      await fireEvent.press(await findByTestId('coloring-gallery-remove-selected'));
+      await confirmRemoval();
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(
+        'content://tree/coloring/cat.png',
+        { idempotent: true }
+      );
+      await findByTestId('coloring-gallery-empty');
+      expect(queryByTestId('coloring-item-content://tree/coloring/cat.png')).toBeNull();
+    });
+
+    it('removing a reference-sourced item only drops the reference, never calling deleteAsync', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      await addFileReferences('coloring', ['content://picked/dog.png']);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await fireEvent(await findByTestId('coloring-item-content://picked/dog.png'), 'longPress');
+      await fireEvent.press(await findByTestId('coloring-gallery-remove-selected'));
+      await confirmRemoval();
+
+      expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+      await findByTestId('coloring-gallery-empty');
+      expect(queryByTestId('coloring-item-content://picked/dog.png')).toBeNull();
     });
   });
 });

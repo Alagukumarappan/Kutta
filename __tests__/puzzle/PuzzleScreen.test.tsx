@@ -46,17 +46,19 @@ function readOrder(getByTestId: (id: string) => any): number[] {
   return [0, 1, 2, 3].map((slotIndex) => pieceIndexInSlot(getByTestId(`puzzle-slot-${slotIndex}`)));
 }
 
-async function renderPuzzleScreen(imageUri: string = IMAGE_URI) {
+async function renderPuzzleScreen(imageUri: string = IMAGE_URI, pieceCount: 4 | 6 | 9 | 12 = 4) {
   return render(
     <LanguageProvider initialLanguage="en">
-      <PuzzleScreen imageUri={imageUri} />
+      <PuzzleScreen imageUri={imageUri} pieceCount={pieceCount} />
     </LanguageProvider>
   );
 }
 
+// pieceCount is now a required prop (chosen once in PuzzleGallery's header
+// dropdown, see puzzleDifficultyStore.ts) rather than picked via an
+// in-screen picker every time — so "starting" a puzzle is just waiting for
+// the initial shuffle + real photo size to resolve.
 async function startFourPiecePuzzle(utils: Awaited<ReturnType<typeof renderPuzzleScreen>>) {
-  await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-  await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
   await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
   return utils;
 }
@@ -74,27 +76,13 @@ describe('PuzzleScreen', () => {
     getSizeSpy.mockRestore();
   });
 
-  it('shows the piece-count picker and starts the puzzle when a count is selected', async () => {
-    const utils = await renderPuzzleScreen();
+  it('starts the puzzle immediately with the pieceCount passed in as a prop, no in-screen picker', async () => {
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
     const { findByTestId, queryByTestId } = utils;
 
-    expect(queryByTestId('puzzle-slot-0')).toBeNull();
-    const picker = await findByTestId('puzzle-piece-count-picker');
-    expect(picker).toBeTruthy();
-
-    await fireEvent.press(picker);
-    const option4 = await findByTestId('puzzle-piece-count-option-4');
-    const option6 = await findByTestId('puzzle-piece-count-option-6');
-    const option9 = await findByTestId('puzzle-piece-count-option-9');
-    const option12 = await findByTestId('puzzle-piece-count-option-12');
-    expect(option4).toBeTruthy();
-    expect(option6).toBeTruthy();
-    expect(option9).toBeTruthy();
-    expect(option12).toBeTruthy();
-
-    await fireEvent.press(option4);
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
 
+    expect(queryByTestId('puzzle-piece-count-picker')).toBeNull();
     expect(await findByTestId('puzzle-slot-0')).toBeTruthy();
     expect(await findByTestId('puzzle-slot-3')).toBeTruthy();
   });
@@ -117,18 +105,11 @@ describe('PuzzleScreen', () => {
     expect(after[3]).toBe(before[3]);
   });
 
-  it('shows the completion indicator once the pieces are restored to the correct order', async () => {
-    const utils = await renderPuzzleScreen();
-    await startFourPiecePuzzle(utils);
-    const { getByTestId, queryByTestId } = utils;
-
-    // Sanity: shufflePieceOrder guarantees a non-identity order for >1 piece, so the
-    // puzzle must not already read as complete.
-    expect(queryByTestId('puzzle-complete')).toBeNull();
-
-    // Selection-sort the current order back to identity (0,1,2,3) by tapping pairs of
-    // slots — this exercises the real swap logic and the real completion check, with no
-    // dependency on the shuffle's random outcome.
+  // Selection-sorts the currently rendered order back to identity (0,1,2,3)
+  // by tapping pairs of slots — exercises the real swap logic and the real
+  // completion check, with no dependency on the shuffle's random outcome.
+  async function solveFourPiecePuzzle(utils: Awaited<ReturnType<typeof renderPuzzleScreen>>) {
+    const { getByTestId } = utils;
     for (let target = 0; target < 4; target++) {
       const order = readOrder(getByTestId);
       const currentIndex = order.indexOf(target);
@@ -137,9 +118,179 @@ describe('PuzzleScreen', () => {
         await fireEvent.press(getByTestId(`puzzle-slot-${currentIndex}`));
       }
     }
+  }
+
+  it('shows a completion Modal overlay (message + Retry + Next) once the pieces are restored to the correct order', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+    const { getByTestId, queryByTestId, findByTestId, getByText } = utils;
+
+    // Sanity: shufflePieceOrder guarantees a non-identity order for >1 piece, so the
+    // puzzle must not already read as complete.
+    expect(queryByTestId('puzzle-complete')).toBeNull();
+    expect(queryByTestId('puzzle-retry')).toBeNull();
+    expect(queryByTestId('puzzle-next')).toBeNull();
+
+    await solveFourPiecePuzzle(utils);
 
     expect(readOrder(getByTestId)).toEqual([0, 1, 2, 3]);
     expect(getByTestId('puzzle-complete')).toBeTruthy();
+    expect(getByText('Great job!')).toBeTruthy();
+    expect(await findByTestId('puzzle-retry')).toBeTruthy();
+    expect(await findByTestId('puzzle-next')).toBeTruthy();
+  });
+
+  describe('completion Modal Retry/Next', () => {
+    it('Retry re-shuffles the current puzzle (a genuinely fresh, non-identity order) and closes the modal', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId, queryByTestId } = utils;
+
+      await solveFourPiecePuzzle(utils);
+      expect(readOrder(getByTestId)).toEqual([0, 1, 2, 3]);
+      expect(getByTestId('puzzle-complete')).toBeTruthy();
+
+      await fireEvent.press(getByTestId('puzzle-retry'));
+
+      // shufflePieceOrder guarantees a non-identity permutation for >1 piece,
+      // so a genuine fresh reshuffle can never leave the board still solved —
+      // this is the same "prove it's really fresh, not just re-rendered"
+      // technique the quiz's Play Again test uses, applied here via the
+      // guaranteed-non-identity property instead of a controlled RNG.
+      expect(readOrder(getByTestId)).not.toEqual([0, 1, 2, 3]);
+      expect(queryByTestId('puzzle-complete')).toBeNull();
+      expect(queryByTestId('puzzle-retry')).toBeNull();
+    });
+
+    it('guards Retry against a rapid double-press, only reshuffling once', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      await solveFourPiecePuzzle(utils);
+
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      const retryButton = getByTestId('puzzle-retry');
+
+      // Press the SAME captured element twice without re-querying — the
+      // "stale double-tap" shape this codebase's other double-fire guards
+      // (e.g. QuizScreen's Play Again) are tested with. shufflePieceOrder(4)
+      // consumes exactly 3 Math.random() calls per shuffle (Fisher-Yates over
+      // 4 items) — a second, unguarded shuffle would consume 3 more.
+      await fireEvent.press(retryButton);
+      await fireEvent.press(retryButton);
+
+      expect(randomSpy.mock.calls.length).toBe(3);
+      randomSpy.mockRestore();
+    });
+
+    it('Next calls the provided onNext callback', async () => {
+      const onNext = jest.fn();
+      const utils = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleScreen imageUri={IMAGE_URI} pieceCount={4} onNext={onNext} />
+        </LanguageProvider>
+      );
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      await fireEvent.press(utils.getByTestId('puzzle-next'));
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('guards Next against a rapid double-press, only calling onNext once', async () => {
+      const onNext = jest.fn();
+      const utils = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleScreen imageUri={IMAGE_URI} pieceCount={4} onNext={onNext} />
+        </LanguageProvider>
+      );
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      const nextButton = utils.getByTestId('puzzle-next');
+      await fireEvent.press(nextButton);
+      await fireEvent.press(nextButton);
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not crash when Next is pressed without an onNext prop (defensive no-op default)', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      expect(() => fireEvent.press(utils.getByTestId('puzzle-next'))).not.toThrow();
+    });
+  });
+
+  // Redesign requirement: the board should read as a dimensional "game
+  // board" with strong piece separation — checked statically off each
+  // slot's own declared border width (same static-style-inspection idiom as
+  // the row-grouping tests above), rather than any visual snapshot.
+  it('draws a strong border around each piece slot for clear piece separation', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+
+    const slot0 = utils.getByTestId('puzzle-slot-0');
+    const pieceView = slot0.children[0] as any;
+    const flatStyle = [pieceView.props.style].flat(Infinity).reduce((acc, s) => ({ ...acc, ...s }), {});
+    expect(flatStyle.borderWidth).toBeGreaterThanOrEqual(4);
+  });
+
+  describe('piece-snap celebratory pop', () => {
+    // Same "spy on Animated.spring's call args instead of the settled style"
+    // technique established in ColoringScreen.test.tsx (jest's Animated mock
+    // never advances a spring past its starting value without an explicit
+    // fake-timer tick, so reading the flattened scale right after a press
+    // would still show the pre-press resting value) — this instead confirms
+    // the real placement-detection logic (order[slotIndex] === slotIndex,
+    // read via the existing `order`/`readOrder` helpers, completely untouched
+    // here) really does request a pop spring toward 1.15 for a slot the
+    // instant it becomes correct, driven by a single awaited fireEvent.press
+    // pair rather than any pressIn/pressOut or rapid rerender sequence.
+    it('requests a pop spring (scale 1.15) for a slot the moment its piece is swapped into the correct position', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      const { Animated: RNAnimated } = require('react-native');
+      const springSpy = jest.spyOn(RNAnimated, 'spring');
+
+      // Pick any slot that isn't already correct (shufflePieceOrder guarantees
+      // at least one exists for a non-identity permutation) and swap in its
+      // correct piece — mirrors the selection-sort step used by the
+      // completion test above, applied to just one target.
+      const before = readOrder(getByTestId);
+      const target = before.findIndex((pieceIndex, slotIndex) => pieceIndex !== slotIndex);
+      expect(target).toBeGreaterThanOrEqual(0);
+      const currentIndex = before.indexOf(target);
+
+      await fireEvent.press(getByTestId(`puzzle-slot-${target}`));
+      await fireEvent.press(getByTestId(`puzzle-slot-${currentIndex}`));
+
+      // Sanity: the swap really did place the target piece correctly.
+      expect(readOrder(getByTestId)[target]).toBe(target);
+
+      const toValues = springSpy.mock.calls.map(([, config]) => (config as { toValue: number }).toValue);
+      expect(toValues).toContain(1.15);
+
+      springSpy.mockRestore();
+    });
+
+    it('does not request any pop spring on initial mount, even though the shuffle may coincidentally place a piece correctly', async () => {
+      const { Animated: RNAnimated } = require('react-native');
+      const springSpy = jest.spyOn(RNAnimated, 'spring');
+
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+
+      const toValues = springSpy.mock.calls.map(([, config]) => (config as { toValue: number }).toValue);
+      expect(toValues).not.toContain(1.15);
+
+      springSpy.mockRestore();
+    });
   });
 
   it('shows a loading indicator while the real photo size is still loading, then renders the board', async () => {
@@ -149,9 +300,7 @@ describe('PuzzleScreen', () => {
       resolveGetSize = success;
     });
 
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
 
     expect(utils.queryByTestId('puzzle-loading')).toBeTruthy();
     expect(utils.queryByTestId('puzzle-slot-0')).toBeNull();
@@ -168,9 +317,7 @@ describe('PuzzleScreen', () => {
       failure?.(new Error('failed to load'));
     });
 
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-4'));
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
 
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
     expect(await utils.findByTestId('puzzle-slot-0')).toBeTruthy();
@@ -223,9 +370,7 @@ describe('PuzzleScreen', () => {
       .mockImplementation((_uri: string, success: (w: number, h: number) => void) => {
         success(photoWidth, photoHeight);
       });
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId(`puzzle-piece-count-option-${pieceCount}`));
+    const utils = await renderPuzzleScreen(IMAGE_URI, pieceCount);
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
     return utils;
   }
@@ -264,9 +409,7 @@ describe('PuzzleScreen', () => {
       success(300, 600);
     });
 
-    const utils = await renderPuzzleScreen();
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
-    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-option-6'));
+    const utils = await renderPuzzleScreen(IMAGE_URI, 6);
     await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
 
     // 6 pieces, portrait -> computeGridDimensions(6, true) = {rows: 3, cols: 2} = 6 slots.

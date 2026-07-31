@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { Animated } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QuizScreen } from '../../src/quiz/QuizScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -275,6 +275,37 @@ describe('QuizScreen', () => {
       expect(queryByText(/try harder/i)).toBeNull();
     });
 
+    it('requests a spring pop-in animation for the score card when the completion screen appears', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      const { findByText, getByText, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+      await fireEvent.press(getByTestId('quiz-next'));
+
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      // Static check only (matches this codebase's established
+      // safe-testing idiom for Animated-driven entrances, e.g.
+      // __tests__/design-system/Buttons.test.tsx's own spring assertion):
+      // confirms the score card's entrance requests a spring toward its
+      // resting scale of 1, never replays a gesture sequence.
+      const toValues = springSpy.mock.calls.map(([, config]) => (config as { toValue: number }).toValue);
+      expect(toValues).toContain(1);
+
+      springSpy.mockRestore();
+    });
+
     it('"Play Again" starts a genuinely fresh session — new shuffle, score and progress reset to zero', async () => {
       (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
       const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.999999);
@@ -409,10 +440,32 @@ describe('QuizScreen', () => {
       await fireEvent.press(getByTestId('quiz-next'));
       await findByText('Quiz done! Your score: 2 / 2');
 
-      const playAgainStyle = StyleSheet.flatten(getByTestId('quiz-play-again').props.style);
-      const homeStyle = StyleSheet.flatten(getByTestId('quiz-home').props.style);
-      expect(playAgainStyle.minHeight).toBeGreaterThanOrEqual(48);
-      expect(homeStyle.minHeight).toBeGreaterThanOrEqual(48);
+      // Both completion buttons are now design-system RaisedPrimaryButton/
+      // RaisedSecondaryButton (built on react-native-paper's <Button>), which
+      // carries its minHeight on a nested content View (`contentStyle`)
+      // rather than on the outer node the testID itself resolves to — so
+      // this walks the whole rendered subtree for a minHeight, the same
+      // "search descendants" idiom __tests__/video/VideoGallery.test.tsx
+      // already uses for its own touch-target check, rather than reading
+      // `.props.style` directly off the testID'd node.
+      const collectMinHeights = (node: any): number[] => {
+        if (!node || typeof node !== 'object') return [];
+        const nodeStyles = Array.isArray(node.props?.style)
+          ? node.props.style.flat(Infinity)
+          : node.props?.style
+          ? [node.props.style]
+          : [];
+        const own = nodeStyles
+          .filter((s: any) => s && typeof s.minHeight === 'number')
+          .map((s: any) => s.minHeight as number);
+        const children: any[] = Array.isArray(node.children) ? node.children : [];
+        return [...own, ...children.flatMap(collectMinHeights)];
+      };
+
+      const playAgainMinHeights = collectMinHeights(getByTestId('quiz-play-again').toJSON());
+      const homeMinHeights = collectMinHeights(getByTestId('quiz-home').toJSON());
+      expect(playAgainMinHeights.some((h) => h >= 48)).toBe(true);
+      expect(homeMinHeights.some((h) => h >= 48)).toBe(true);
     });
   });
 });

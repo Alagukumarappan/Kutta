@@ -89,10 +89,28 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
       if (!assetUri) continue;
       const cachePath = `${FileSystem.cacheDirectory}kutta-seed-${sample.name}`;
       const { uri: downloadedUri } = await FileSystem.downloadAsync(assetUri, cachePath);
-      // copyAsync onto a SAF *directory* URI copies the source file into it
-      // under its own name (the same primitive folderMigration.ts already
-      // uses for SAF-to-SAF copies) — no manual base64 read/write needed.
-      await FileSystem.StorageAccessFramework.copyAsync({ from: downloadedUri, to: folderUri });
+      // StorageAccessFramework.copyAsync's native Android implementation
+      // (FileSystemLegacyModule.kt) only handles a few specific from/to
+      // scheme combinations, none of which is "a plain app-local file://
+      // source into a SAF content:// directory destination" — every seed
+      // copy silently failed this way on a real device despite passing in
+      // Jest (where copyAsync is mocked). read-as-base64-then-write-base64
+      // is the same technique this app already relies on elsewhere for SAF
+      // writes (e.g. ensureContentStructure's questions.json, and
+      // ColoringScreen's own photo reads), so it's proven to actually work
+      // rather than resting on an untested cross-scheme copyAsync
+      // assumption.
+      const base64 = await FileSystem.readAsStringAsync(downloadedUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
+        folderUri,
+        sample.name,
+        sample.mimeType
+      );
+      await FileSystem.StorageAccessFramework.writeAsStringAsync(destUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
       await FileSystem.deleteAsync(downloadedUri, { idempotent: true });
     } catch {
       // Best-effort: move on to the next sample.

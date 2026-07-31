@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,21 @@ import {
   StyleSheet,
   useWindowDimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
-import { PieceCountPicker } from '../components/PieceCountPicker';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
+import {
+  colors,
+  radii,
+  spacing,
+  elevation,
+  typography,
+  getActivityPalette,
+  RaisedCard,
+  CelebrationOverlay,
+} from '../design-system';
 import {
   computeGridDimensions,
   computePieceRects,
@@ -21,6 +31,12 @@ import {
   groupPiecesIntoRows,
   PieceRect,
 } from './puzzleGrid';
+
+// Puzzle's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
+// getActivityPalette) — used throughout this screen's board chrome instead
+// of the old theme's flat mint/sun pairing, so the board reads as
+// unmistakably "the puzzle activity" even before a child can read the title.
+const PUZZLE_PALETTE = getActivityPalette('puzzle');
 
 // Thin border drawn around every piece slot so young children can see the
 // grid structure (where each piece belongs) even before it's filled in
@@ -34,7 +50,12 @@ import {
 // edges of the crop are left untouched. Not worth insetting the image to
 // compensate, since the crop is small and the border's visual purpose
 // matters more than pixel-perfect image cropping.
-const SLOT_BORDER = 3;
+//
+// Bumped from 3 -> 4px for the redesign: the brief calls for "strong piece
+// separation" on the new, more dimensional board, and a slightly thicker
+// border reads more clearly as "these are separate physical tiles" without
+// eating meaningfully more into the crop.
+const SLOT_BORDER = 4;
 
 function PuzzlePiece({
   imageUri,
@@ -42,28 +63,31 @@ function PuzzlePiece({
   containerWidth,
   containerHeight,
   selected,
+  scale,
 }: {
   imageUri: string;
   rect: PieceRect;
   containerWidth: number;
   containerHeight: number;
   selected: boolean;
+  scale: Animated.Value;
 }) {
   // rects are computed over a containerWidth x containerHeight image (see computePieceRects
   // call below, which is now passed the board's real, aspect-ratio-correct width/height
   // instead of assuming a square source photo), so the piece is a crop of the *full-size*
   // image — no extra scaling is needed. The slot View is sized to the piece's rect and clips
   // (overflow: hidden) the full image, shifted so the correct region lands inside the window.
+  // The outer View is Animated so a piece can pop briefly (scale only — never width/height)
+  // the moment it snaps into its correct slot, without affecting layout/siblings.
   return (
-    <View
+    <Animated.View
       style={[
+        styles.pieceSlot,
         {
           width: rect.width,
           height: rect.height,
-          overflow: 'hidden',
-          borderWidth: SLOT_BORDER,
-          borderColor: selected ? colors.sunDark : colors.mintDark,
-          backgroundColor: colors.white,
+          borderColor: selected ? colors.bubblegum : PUZZLE_PALETTE.accentDark,
+          transform: [{ scale }],
         },
         selected && styles.pieceSelected,
       ]}
@@ -78,11 +102,28 @@ function PuzzlePiece({
           marginTop: -rect.y,
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 
-export function PuzzleScreen({ imageUri }: { imageUri: string }) {
+export function PuzzleScreen({
+  imageUri,
+  pieceCount,
+  onNext = () => {},
+}: {
+  imageUri: string;
+  // Chosen once in PuzzleGallery's header dropdown and remembered as the
+  // parent's default (see puzzleDifficultyStore.ts) — this screen no longer
+  // asks again per-photo, so it's a required prop rather than something
+  // this screen picks itself.
+  pieceCount: PuzzleDifficulty;
+  // Optional so existing call sites/tests that don't need to go back to the
+  // gallery (e.g. ones that never reach the solved state) don't have to pass
+  // one. RootNavigator always wires a real `() => navigation.goBack()` in
+  // the running app (see AppStack's puzzle-detail Stack.Screen). Defaults to
+  // a no-op so a stray Next press can never crash instead of navigating.
+  onNext?: () => void;
+}) {
   const { t } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -93,8 +134,6 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   // account for insets.top itself. Zero out top here so it isn't double-
   // counted on top of what the header already reserved; bottom/left/right
   // still need to be handled since the header doesn't cover those.
-  const [pieceCount, setPieceCount] = useState<4 | 6 | 9 | 12 | null>(null);
-  const [pieceCountModalVisible, setPieceCountModalVisible] = useState(false);
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   // The board's shape and crop rects depend on the ACTUAL picked photo's real
@@ -102,6 +141,76 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   // not a square one) - imageSize is null until Image.getSize resolves.
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [imageSizeFailed, setImageSizeFailed] = useState(false);
+
+  // One lazily-created, cached Animated.Value per SLOT (not per piece id) —
+  // the piece currently sitting in a given slot is what visually pops, and a
+  // slot's occupant only ever changes via handleTapSlot's swap, so keying by
+  // slot position (rather than piece index) is what stays stable across a
+  // swap and lets the SAME Animated.Value keep animating for that slot.
+  const pieceScalesRef = useRef<Map<number, Animated.Value>>(new Map());
+  function getPieceScale(slotIndex: number): Animated.Value {
+    let value = pieceScalesRef.current.get(slotIndex);
+    if (!value) {
+      value = new Animated.Value(1);
+      pieceScalesRef.current.set(slotIndex, value);
+    }
+    return value;
+  }
+
+  // Tracks, per slot, whether it held its correctly-placed piece as of the
+  // last render — null means "no baseline yet" (fresh mount, or a puzzle
+  // just (re)started via startPuzzle), which deliberately suppresses
+  // animating any slot that happens to already be correct: only a real
+  // false -> true transition (a piece actually snapping into place) should
+  // trigger the celebratory pop, never the shuffle's own starting layout.
+  const prevCorrectRef = useRef<boolean[] | null>(null);
+
+  // The puzzle reads as solved the moment `order` is the identity
+  // permutation — computed here (rather than down near the render return,
+  // where it used to live) so the double-fire guard reset effect right below
+  // can depend on it without breaking the rule that every hook in this
+  // component runs unconditionally on every render, ahead of the early
+  // (piece-count-picker / loading) returns further down.
+  const isSolved = order.length > 0 && order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
+
+  // Double-fire guards for the completion overlay's two buttons — same idiom
+  // as QuizScreen's playAgainFiredRef/hasNavigatedHomeRef: a ref survives
+  // across renders and is shared by every closure of this component
+  // instance, so even a second press captured from a stale (pre-close)
+  // render can't slip past it. Both re-arm whenever the puzzle is freshly
+  // (re)solved, so Retry/Next still work the next time the overlay appears.
+  const retryFiredRef = useRef(false);
+  const nextFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (isSolved) {
+      retryFiredRef.current = false;
+      nextFiredRef.current = false;
+    }
+  }, [isSolved]);
+
+  useEffect(() => {
+    if (order.length === 0) {
+      prevCorrectRef.current = null;
+      return;
+    }
+    const currentCorrect = order.map((pieceIndex, slotIndex) => pieceIndex === slotIndex);
+    const prev = prevCorrectRef.current;
+    if (prev) {
+      currentCorrect.forEach((correct, slotIndex) => {
+        if (correct && !prev[slotIndex]) {
+          const scale = getPieceScale(slotIndex);
+          // Brief celebratory pop — scale 1 -> 1.15 -> 1 — instead of the
+          // instant snap that just happened to the piece's position.
+          Animated.sequence([
+            Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, speed: 30, bounciness: 8 }),
+            Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+          ]).start();
+        }
+      });
+    }
+    prevCorrectRef.current = currentCorrect;
+  }, [order]);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,11 +241,23 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
   const board = computePuzzleBoardSize(width, height, imageWidth, imageHeight, { ...insets, top: 0 });
   const isImageSizeReady = imageSize !== null || imageSizeFailed;
 
-  function startPuzzle(count: 4 | 6 | 9 | 12) {
-    setPieceCount(count);
+  function startPuzzle(count: PuzzleDifficulty) {
     setOrder(shufflePieceOrder(count));
     setSelectedSlot(null);
+    // Fresh puzzle: clear the correctness baseline so the new shuffle's
+    // starting layout (even if a slot happens to land correctly by chance)
+    // never triggers the piece-snap pop — only real swaps made from here on
+    // should be able to.
+    prevCorrectRef.current = null;
   }
+
+  // pieceCount is fixed for the lifetime of this screen (chosen once in the
+  // gallery, passed in as a prop) — shuffle exactly once per mounted puzzle
+  // instance, rather than every time this effect's deps happen to change.
+  useEffect(() => {
+    startPuzzle(pieceCount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleTapSlot(slotIndex: number) {
     if (selectedSlot === null) {
@@ -153,50 +274,44 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
     setSelectedSlot(null);
   }
 
-  if (!pieceCount) {
+  function handleRetryPuzzle() {
+    if (retryFiredRef.current) return;
+    retryFiredRef.current = true;
+    // Reshuffles the SAME puzzle (same pieceCount) using the exact
+    // startPuzzle path that set up the board in the first place — not a new
+    // shuffling approach — which also clears selectedSlot and the
+    // correctness baseline, so the completion overlay closes immediately
+    // since shufflePieceOrder guarantees a non-identity (unsolved) order.
+    startPuzzle(pieceCount);
+  }
+
+  function handleNextPuzzle() {
+    if (nextFiredRef.current) return;
+    nextFiredRef.current = true;
+    onNext();
+  }
+
+  if (order.length === 0) {
+    // Briefly true only between mount and the shuffle effect above running —
+    // matches the loading spinner shown below while the photo's real size
+    // is still resolving.
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={{
-          flexGrow: 1,
-          padding: spacing.md,
-          paddingTop: spacing.md + insets.top,
-          paddingBottom: spacing.md + insets.bottom,
-          paddingLeft: spacing.md + insets.left,
-          paddingRight: spacing.md + insets.right,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Text style={styles.pickerEmoji}>🧩</Text>
-        <Text style={styles.pickerTitle}>{t('puzzlePickPieces')}</Text>
-        <View style={{ marginTop: spacing.md, width: '100%', maxWidth: 220 }}>
-          <PieceCountPicker
-            value={pieceCount}
-            onChange={startPuzzle}
-            visible={pieceCountModalVisible}
-            onOpen={() => setPieceCountModalVisible(true)}
-            onClose={() => setPieceCountModalVisible(false)}
-            placeholder={t('puzzlePickPieces')}
-            testIDPrefix="puzzle-piece-count"
-            isPortrait={isPortrait}
-          />
-        </View>
-      </ScrollView>
+      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
+        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
+      </View>
     );
   }
 
   if (!isImageSizeReady) {
     return (
       <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
-        <ActivityIndicator size="large" color={colors.mintDark} />
+        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
       </View>
     );
   }
 
   const { rows, cols } = computeGridDimensions(pieceCount, isPortrait);
   const rects = computePieceRects(board.width, board.height, rows, cols);
-  const isSolved = order.every((pieceIndex, slotIndex) => pieceIndex === slotIndex);
 
   return (
     <ScrollView
@@ -212,12 +327,24 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.row}>
-        <View style={styles.previewCard}>
-          <Image source={{ uri: imageUri }} style={styles.previewImage} testID="puzzle-preview" />
-          <Text style={styles.previewHint}>{t('puzzleMatchHint')}</Text>
-        </View>
+        <RaisedCard
+          color={colors.surface}
+          borderColor={PUZZLE_PALETTE.accentDark}
+          elevationLevel="level3"
+          style={styles.previewCardOuter}
+        >
+          <View style={styles.previewCard}>
+            <Image source={{ uri: imageUri }} style={styles.previewImage} testID="puzzle-preview" />
+            <Text style={styles.previewHint}>{t('puzzleMatchHint')}</Text>
+          </View>
+        </RaisedCard>
 
-        <View style={styles.boardFrame}>
+        {/* The board sits inside a deliberately deep "recessed tray" frame
+            (surfaceSunk fill, a strong accent border, and a heavier
+            elevation than any single piece) so the pieces themselves read as
+            physical tiles sitting IN something, rather than floating flat
+            on the page. */}
+        <View style={[styles.boardFrame, elevation.level4]}>
           {/* Explicit row-by-row rendering instead of a single flexWrap:'wrap'
               container: relying on Yoga to "naturally" break a line after
               exactly `cols` pieces depends on cols*pieceWidth landing on the
@@ -245,6 +372,7 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
                         containerWidth={board.width}
                         containerHeight={board.height}
                         selected={selectedSlot === slotIndex}
+                        scale={getPieceScale(slotIndex)}
                       />
                     </Pressable>
                   );
@@ -255,13 +383,28 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
         </View>
       </View>
 
-      {isSolved && (
-        <View testID="puzzle-complete" style={styles.completeBanner}>
-          <Text style={styles.completeEmoji}>🎉</Text>
-          <Text style={styles.completeText}>{t('puzzleComplete')}</Text>
-          <Text style={styles.completeEmoji}>🎉</Text>
-        </View>
-      )}
+      {/* CelebrationOverlay (design-system) replaces the old hand-rolled
+          completion Modal: it internally renders nothing while
+          `visible={isSolved}` is false, so it's kept mounted here at all
+          times (unlike the old `{isSolved && <CompletionModal .../>}` guard)
+          without ever being present in the query tree before the puzzle is
+          solved — same externally-observable behavior, just backed by the
+          shared component's own visibility check instead of a conditional
+          mount. Retry/Next semantics and their double-fire guards
+          (retryFiredRef/nextFiredRef, re-armed by the isSolved effect above)
+          are completely unchanged — only which component renders the
+          message/buttons has moved. */}
+      <CelebrationOverlay
+        visible={isSolved}
+        tone="success"
+        emoji="🎉"
+        title={t('puzzleComplete')}
+        testID="puzzle-complete"
+        actions={[
+          { label: t('retry'), onPress: handleRetryPuzzle, variant: 'secondary', testID: 'puzzle-retry' },
+          { label: t('quizNext'), onPress: handleNextPuzzle, testID: 'puzzle-next' },
+        ]}
+      />
     </ScrollView>
   );
 }
@@ -269,36 +412,22 @@ export function PuzzleScreen({ imageUri }: { imageUri: string }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvas,
   },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pickerEmoji: {
-    fontSize: 56,
-    marginBottom: spacing.xs,
-  },
-  pickerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.ink,
-    textAlign: 'center',
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  previewCard: {
+  previewCardOuter: {
     marginRight: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 3,
-    borderColor: colors.mintDark,
+  },
+  previewCard: {
     padding: spacing.sm,
     alignItems: 'center',
-    ...shadow,
-    elevation: 4,
   },
   previewImage: {
     width: 80,
@@ -307,50 +436,38 @@ const styles = StyleSheet.create({
   },
   previewHint: {
     marginTop: spacing.xs,
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.ink,
+    fontSize: typography.caption.fontSize,
+    fontWeight: typography.caption.fontWeight,
+    color: PUZZLE_PALETTE.accentDark,
     textAlign: 'center',
     maxWidth: 90,
   },
+  // The "recessed tray" the board sits in — a sunken fill (darker than the
+  // canvas background, lighter than the pieces' own white slots) plus a
+  // thick accent border gives the whole board area a soft dimensional depth
+  // even before any single piece is considered, per the brief's "game
+  // board" feel.
   boardFrame: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 4,
-    borderColor: colors.mintDark,
-    padding: spacing.sm,
-    ...shadow,
-    elevation: 4,
-  },
-  pieceSelected: {
-    ...shadow,
-    elevation: 6,
-  },
-  completeBanner: {
-    // Kept deliberately compact (modest marginTop/paddingVertical, smaller
-    // emoji than a first pass had) so this one-time celebration banner is
-    // less likely to push the board past the available vertical space and
-    // trigger a short scroll right at the moment the child solves it.
-    marginTop: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.sun,
+    backgroundColor: colors.surfaceSunk,
     borderRadius: radii.xl,
     borderWidth: 4,
-    borderColor: colors.sunDark,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    ...shadow,
-    elevation: 5,
+    borderColor: PUZZLE_PALETTE.accentDark,
+    padding: spacing.sm,
   },
-  completeEmoji: {
-    fontSize: 28,
+  pieceSlot: {
+    overflow: 'hidden',
+    borderWidth: SLOT_BORDER,
+    backgroundColor: colors.white,
+    // Android-only elevation (no iOS shadow* fields here) so each piece
+    // reads as a distinct, slightly raised tile against the sunken tray
+    // without the shadow being clipped away by this same View's
+    // overflow:'hidden' (required for the image crop) on iOS — mirrors
+    // RaisedCard's own documented reasoning for splitting shadow vs. clip
+    // across two layers, simplified here since a per-piece shadow doesn't
+    // need to survive a press-tilt transform.
+    elevation: 3,
   },
-  completeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.ink,
+  pieceSelected: {
+    elevation: 6,
   },
 });

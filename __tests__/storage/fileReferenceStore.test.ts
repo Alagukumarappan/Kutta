@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import {
   getFileReferences,
   addFileReferences,
+  removeFileReference,
   pruneMissingFileReferences,
 } from '../../src/storage/fileReferenceStore';
 
@@ -57,6 +58,41 @@ describe('fileReferenceStore', () => {
         JSON.stringify([{ uri: 'content://tree/good.png', addedAt: 1 }, { oops: true }, null, 'not-an-object'])
       );
       expect(await getFileReferences('coloring')).toEqual([{ uri: 'content://tree/good.png', addedAt: 1 }]);
+    });
+  });
+
+  describe('removeFileReference', () => {
+    it('removes only the given uri, leaving the others intact', async () => {
+      await addFileReferences('coloring', ['content://tree/a.png', 'content://tree/b.png', 'content://tree/c.png']);
+
+      const remaining = await removeFileReference('coloring', 'content://tree/b.png');
+
+      expect(remaining.map((r) => r.uri)).toEqual(['content://tree/a.png', 'content://tree/c.png']);
+      expect((await getFileReferences('coloring')).map((r) => r.uri)).toEqual([
+        'content://tree/a.png',
+        'content://tree/c.png',
+      ]);
+    });
+
+    it('is a no-op (and does not rewrite storage) when the uri is not present', async () => {
+      await addFileReferences('video', ['content://tree/a.mp4']);
+      const setItemSpy = jest.spyOn(AsyncStorage, 'setItem');
+      setItemSpy.mockClear();
+
+      const remaining = await removeFileReference('video', 'content://tree/not-there.mp4');
+
+      expect(remaining.map((r) => r.uri)).toEqual(['content://tree/a.mp4']);
+      expect(setItemSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not affect other content types', async () => {
+      await addFileReferences('puzzle', ['content://tree/shared-name.jpg']);
+      await addFileReferences('coloring', ['content://tree/shared-name.jpg']);
+
+      await removeFileReference('puzzle', 'content://tree/shared-name.jpg');
+
+      expect(await getFileReferences('puzzle')).toEqual([]);
+      expect((await getFileReferences('coloring')).map((r) => r.uri)).toEqual(['content://tree/shared-name.jpg']);
     });
   });
 

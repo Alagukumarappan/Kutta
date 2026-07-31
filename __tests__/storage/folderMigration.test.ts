@@ -6,6 +6,7 @@ jest.mock('expo-file-system/legacy', () => ({
     readDirectoryAsync: jest.fn(),
     copyAsync: jest.fn(),
     deleteAsync: jest.fn(),
+    makeDirectoryAsync: jest.fn(async (parentUri: string, dirName: string) => `${parentUri}/${dirName}`),
   },
 }));
 
@@ -21,21 +22,28 @@ function buildFsMock(tree: Record<string, string[]>) {
 
 const OLD = 'old-root';
 const NEW = 'new-root';
+// All real content lives one level down inside "Kutta-games" (see
+// folderAccess.ts's KUTTA_GAMES_FOLDER_NAME) — migrateContent copies/verifies
+// at that level, not directly under the picked root.
+const OLD_GAMES = `${OLD}/Kutta-games`;
+const NEW_GAMES = `${NEW}/Kutta-games`;
 
 function fullTree(newPictures = ['p1.png', 'p2.png']) {
   return {
-    [OLD]: ['pictures', 'videos', 'coloring', 'quiz'],
-    [NEW]: ['pictures', 'videos', 'coloring', 'quiz'],
-    [`${OLD}/pictures`]: ['p1.png', 'p2.png'],
-    [`${NEW}/pictures`]: newPictures,
-    [`${OLD}/videos`]: ['v1.mp4'],
-    [`${NEW}/videos`]: ['v1.mp4'],
-    [`${OLD}/coloring`]: ['c1.png'],
-    [`${NEW}/coloring`]: ['c1.png'],
-    [`${OLD}/quiz`]: ['questions.json', 'images'],
-    [`${NEW}/quiz`]: ['questions.json', 'images'],
-    [`${OLD}/quiz/images`]: ['cat.png', 'dog.png'],
-    [`${NEW}/quiz/images`]: ['cat.png', 'dog.png'],
+    [OLD]: ['Kutta-games'],
+    [NEW]: ['Kutta-games'],
+    [OLD_GAMES]: ['pictures', 'videos', 'coloring', 'quiz'],
+    [NEW_GAMES]: ['pictures', 'videos', 'coloring', 'quiz'],
+    [`${OLD_GAMES}/pictures`]: ['p1.png', 'p2.png'],
+    [`${NEW_GAMES}/pictures`]: newPictures,
+    [`${OLD_GAMES}/videos`]: ['v1.mp4'],
+    [`${NEW_GAMES}/videos`]: ['v1.mp4'],
+    [`${OLD_GAMES}/coloring`]: ['c1.png'],
+    [`${NEW_GAMES}/coloring`]: ['c1.png'],
+    [`${OLD_GAMES}/quiz`]: ['questions.json', 'images'],
+    [`${NEW_GAMES}/quiz`]: ['questions.json', 'images'],
+    [`${OLD_GAMES}/quiz/images`]: ['cat.png', 'dog.png'],
+    [`${NEW_GAMES}/quiz/images`]: ['cat.png', 'dog.png'],
   };
 }
 
@@ -51,12 +59,57 @@ describe('migrateContent', () => {
     expect(result).toEqual({ success: true });
     expect(FileSystem.StorageAccessFramework.copyAsync).toHaveBeenCalled();
 
-    // The root itself must never be deleted — only its known subfolders.
+    // Neither the picked root nor the Kutta-games folder itself is ever
+    // deleted — only the known subfolders inside Kutta-games.
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalledWith(OLD);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalledWith(OLD_GAMES);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD_GAMES}/pictures`);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD_GAMES}/videos`);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD_GAMES}/coloring`);
+    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD_GAMES}/quiz`);
+  });
+
+  it('creates the new "Kutta-games" folder under the newly-picked root when it does not exist yet', async () => {
+    const tree = fullTree();
+    // The freshly-picked new root has nothing in it yet — no Kutta-games,
+    // so migrateContent must create it itself rather than assuming
+    // onboarding/ensureContentStructure already ran there.
+    delete (tree as Record<string, string[]>)[NEW];
+    (tree as Record<string, string[]>)[NEW] = [];
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
+    (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
+
+    const result = await migrateContent(OLD, NEW);
+
+    expect(result).toEqual({ success: true });
+    expect(FileSystem.StorageAccessFramework.makeDirectoryAsync).toHaveBeenCalledWith(NEW, 'Kutta-games');
+  });
+
+  it('falls back to migrating directly from the old root when it has no "Kutta-games" folder yet (pre-existing profile)', async () => {
+    // A profile set up before the Kutta-games nesting existed: content sits
+    // directly under OLD, with no Kutta-games folder there at all.
+    const tree: Record<string, string[]> = {
+      [OLD]: ['pictures', 'videos', 'coloring', 'quiz'],
+      [NEW]: [],
+      [NEW_GAMES]: ['pictures', 'videos', 'coloring', 'quiz'],
+      [`${OLD}/pictures`]: ['p1.png'],
+      [`${NEW_GAMES}/pictures`]: ['p1.png'],
+      [`${OLD}/videos`]: [],
+      [`${NEW_GAMES}/videos`]: [],
+      [`${OLD}/coloring`]: [],
+      [`${NEW_GAMES}/coloring`]: [],
+      [`${OLD}/quiz`]: ['questions.json', 'images'],
+      [`${NEW_GAMES}/quiz`]: ['questions.json', 'images'],
+      [`${OLD}/quiz/images`]: [],
+      [`${NEW_GAMES}/quiz/images`]: [],
+    };
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
+    (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
+
+    const result = await migrateContent(OLD, NEW);
+
+    expect(result).toEqual({ success: true });
     expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/pictures`);
-    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/videos`);
-    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/coloring`);
-    expect(FileSystem.StorageAccessFramework.deleteAsync).toHaveBeenCalledWith(`${OLD}/quiz`);
   });
 
   it('does NOT delete anything if a copy fails', async () => {
@@ -70,8 +123,9 @@ describe('migrateContent', () => {
   });
 
   it('catches a partial copy inside a subfolder that a shallow top-level-name check would have missed', async () => {
-    // Top level: "pictures" exists in both old and new roots (a shallow check
-    // would pass) — but only one of the two files inside actually made it.
+    // Top level: "pictures" exists in both old and new Kutta-games folders (a
+    // shallow check would pass) — but only one of the two files inside
+    // actually made it.
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
       buildFsMock(fullTree(['p1.png']))
     );
@@ -87,7 +141,7 @@ describe('migrateContent', () => {
 
   it('catches a partial copy one level inside quiz/images', async () => {
     const tree = fullTree();
-    tree[`${NEW}/quiz/images`] = ['cat.png']; // dog.png missing at destination
+    tree[`${NEW_GAMES}/quiz/images`] = ['cat.png']; // dog.png missing at destination
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
 
@@ -101,7 +155,7 @@ describe('migrateContent', () => {
 
   it('catches a missing questions.json at the destination', async () => {
     const tree = fullTree();
-    tree[`${NEW}/quiz`] = ['images']; // questions.json missing at destination
+    tree[`${NEW_GAMES}/quiz`] = ['images']; // questions.json missing at destination
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
 
@@ -161,19 +215,23 @@ describe('migrateContent', () => {
     // migration proceed normally.
     const oldRoot = 'content://tree/document/primary%3AKutta';
     const newRoot = 'content://tree/document/primary%3AKuttaBackup';
+    const oldGames = `${oldRoot}/Kutta-games`;
+    const newGames = `${newRoot}/Kutta-games`;
     const tree = {
-      [oldRoot]: ['pictures', 'videos', 'coloring', 'quiz'],
-      [newRoot]: ['pictures', 'videos', 'coloring', 'quiz'],
-      [`${oldRoot}/pictures`]: ['p1.png'],
-      [`${newRoot}/pictures`]: ['p1.png'],
-      [`${oldRoot}/videos`]: [],
-      [`${newRoot}/videos`]: [],
-      [`${oldRoot}/coloring`]: [],
-      [`${newRoot}/coloring`]: [],
-      [`${oldRoot}/quiz`]: ['questions.json', 'images'],
-      [`${newRoot}/quiz`]: ['questions.json', 'images'],
-      [`${oldRoot}/quiz/images`]: [],
-      [`${newRoot}/quiz/images`]: [],
+      [oldRoot]: ['Kutta-games'],
+      [newRoot]: ['Kutta-games'],
+      [oldGames]: ['pictures', 'videos', 'coloring', 'quiz'],
+      [newGames]: ['pictures', 'videos', 'coloring', 'quiz'],
+      [`${oldGames}/pictures`]: ['p1.png'],
+      [`${newGames}/pictures`]: ['p1.png'],
+      [`${oldGames}/videos`]: [],
+      [`${newGames}/videos`]: [],
+      [`${oldGames}/coloring`]: [],
+      [`${newGames}/coloring`]: [],
+      [`${oldGames}/quiz`]: ['questions.json', 'images'],
+      [`${newGames}/quiz`]: ['questions.json', 'images'],
+      [`${oldGames}/quiz/images`]: [],
+      [`${newGames}/quiz/images`]: [],
     };
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(buildFsMock(tree));
     (FileSystem.StorageAccessFramework.copyAsync as jest.Mock).mockResolvedValue(undefined);
