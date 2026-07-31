@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
+import { spacing } from '../theme/tokens';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
 
@@ -94,10 +95,22 @@ export function VideoGallery({
       keyExtractor={(uri) => uri}
       contentContainerStyle={insetStyle}
       renderItem={({ item }) => (
-        <Pressable testID={`video-item-${item}`} onPress={() => onSelect(item)}>
+        <Pressable testID={`video-item-${item}`} onPress={() => onSelect(item)} style={styles.videoRow}>
           <Text>{fileNameFromUri(item)}</Text>
         </Pressable>
       )}
     />
   );
 }
+
+const styles = StyleSheet.create({
+  // Rows are rendered back-to-back with no gap/separator, so a `hitSlop`
+  // fix (as used for the isolated retry button above) would make adjacent
+  // rows' tap zones overlap. A real minHeight instead grows the row itself,
+  // pushing later rows down rather than creating an invisible overlap.
+  videoRow: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+  },
+});

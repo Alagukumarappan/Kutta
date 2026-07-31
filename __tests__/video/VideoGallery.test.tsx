@@ -75,4 +75,29 @@ describe('VideoGallery', () => {
     expect(left).toBeGreaterThanOrEqual(12);
     expect(right).toBeGreaterThanOrEqual(12);
   });
+
+  it('gives each video row a real minHeight so its tap target meets the ~44px guideline', async () => {
+    // Unlike the retry button above, each row is a FlatList item with NO
+    // gap/separator between consecutive rows — a naive hitSlop fix here
+    // would make adjacent rows' hit zones overlap, risking a mis-tap on
+    // the wrong video. A real minHeight (which grows the row itself,
+    // pushing later rows down rather than creating an invisible overlap)
+    // is the safe way to close this gap instead.
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/videos/party.mp4',
+      'content://tree/videos/beach.mp4',
+    ]);
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const item = await findByTestId('video-item-content://tree/videos/party.mp4');
+    const flattenStyle = (style: any): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.map(flattenStyle)) : style || {};
+    const style = flattenStyle(item.props.style);
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+  });
 });
