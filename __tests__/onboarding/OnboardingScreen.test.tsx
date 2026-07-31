@@ -171,4 +171,28 @@ describe('OnboardingScreen', () => {
     expect(confirmText.props.children).toContain('Content');
     expect(confirmText.props.children).not.toBe('Folder selected ✓');
   });
+
+  it('gives the language pills and folder-picker button a vertical hitSlop to reach the ~44px touch-target guideline', async () => {
+    // Same gap, and same fix, as SettingsScreen's identically-styled (but
+    // separately-defined) language pills and folder button, addressed for
+    // OnboardingScreen too so the two nearly-identical screens don't drift
+    // out of consistency with each other.
+    const { getByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <OnboardingScreen onComplete={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    for (const testID of ['onboarding-lang-en', 'onboarding-lang-de']) {
+      const pill = getByTestId(testID);
+      const hitSlop = pill.props.hitSlop ?? {};
+      expect(hitSlop.top).toBeGreaterThanOrEqual(4);
+      expect(hitSlop.bottom).toBeGreaterThanOrEqual(4);
+    }
+
+    const folderButton = getByTestId('onboarding-folder-picker');
+    const folderHitSlop = folderButton.props.hitSlop ?? {};
+    expect(folderHitSlop.top).toBeGreaterThanOrEqual(4);
+    expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
+  });
 });

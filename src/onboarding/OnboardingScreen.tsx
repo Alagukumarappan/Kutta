@@ -97,6 +97,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
               testID="onboarding-lang-en"
               onPress={() => setLanguage('en' as Language)}
               style={[styles.langPill, language === 'en' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text style={[styles.langPillText, language === 'en' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
                 English
@@ -106,6 +107,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
               testID="onboarding-lang-de"
               onPress={() => setLanguage('de' as Language)}
               style={[styles.langPill, language === 'de' ? styles.langPillSelected : styles.langPillUnselected]}
+              hitSlop={{ top: 6, bottom: 6 }}
             >
               <Text style={[styles.langPillText, language === 'de' ? styles.langPillTextSelected : styles.langPillTextUnselected]}>
                 Deutsch
@@ -115,7 +117,12 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         </View>
 
         <View style={[styles.card, styles.halfCard]}>
-          <Pressable onPress={handlePickFolder} style={styles.folderButton}>
+          <Pressable
+            testID="onboarding-folder-picker"
+            onPress={handlePickFolder}
+            style={styles.folderButton}
+            hitSlop={{ top: 6, bottom: 6 }}
+          >
             <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
           </Pressable>
           {folderUri && (
