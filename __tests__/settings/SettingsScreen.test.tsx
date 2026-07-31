@@ -348,4 +348,28 @@ describe('SettingsScreen', () => {
       expect(preview.props.source).toEqual({ uri: 'content://tree/pictures/old.jpg' });
     });
   });
+
+  describe('landscape screen-fit', () => {
+    // This screen stacks a title, two half-card rows, a profile-picture
+    // card, and a save button inside a ScrollView on a landscape-locked
+    // phone with only ~300-360dp of visible height. Font metrics can't be
+    // measured in Jest, so this pins the compact spacing values directly
+    // (rather than a pixel sum) to stop a future edit from silently
+    // reintroducing the original large title/card margins that made this
+    // screen require far more scrolling than intended.
+    it('uses compact title and card spacing to minimize required scrolling', async () => {
+      const { StyleSheet } = require('react-native');
+      const { findByTestId, getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+      await findByTestId('settings-loaded');
+
+      const title = StyleSheet.flatten(getByText('Settings').props.style);
+      expect(title.fontSize).toBeLessThanOrEqual(24);
+      expect(title.marginTop).toBeLessThanOrEqual(8);
+      expect(title.marginBottom).toBeLessThanOrEqual(8);
+    });
+  });
 });

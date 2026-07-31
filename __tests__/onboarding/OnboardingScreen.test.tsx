@@ -195,4 +195,25 @@ describe('OnboardingScreen', () => {
     expect(folderHitSlop.top).toBeGreaterThanOrEqual(4);
     expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
   });
+
+  describe('landscape screen-fit', () => {
+    // Same reasoning as SettingsScreen's screen-fit test: this screen stacks
+    // a title and two half-card rows inside a ScrollView on a
+    // landscape-locked phone with limited visible height. Pins the compact
+    // title spacing so it can't silently regress to the original large
+    // margins that made the first-run screen require excessive scrolling.
+    it('uses compact title spacing to minimize required scrolling', async () => {
+      const { StyleSheet } = require('react-native');
+      const { getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <OnboardingScreen onComplete={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const title = StyleSheet.flatten(getByText('Welcome!').props.style);
+      expect(title.fontSize).toBeLessThanOrEqual(24);
+      expect(title.marginTop).toBeLessThanOrEqual(8);
+      expect(title.marginBottom).toBeLessThanOrEqual(8);
+    });
+  });
 });

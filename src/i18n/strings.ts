@@ -129,6 +129,10 @@ export const UI_STRINGS = {
   settingsProfilePicture: { en: 'Profile Picture', de: 'Profilbild' },
   profilePictureChoose: { en: 'Choose a picture', de: 'Bild auswählen' },
   profilePictureRemove: { en: 'Remove picture', de: 'Bild entfernen' },
+  addColoringPicture: { en: '+ Add coloring picture', de: '+ Malbild hinzufügen' },
+  addPuzzlePicture: { en: '+ Add puzzle picture', de: '+ Puzzlebild hinzufügen' },
+  addVideo: { en: '+ Add video', de: '+ Video hinzufügen' },
+  addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
   profilePicturePickerTitle: { en: 'Choose a profile picture', de: 'Profilbild auswählen' },
   // {name}'s Home-screen avatar accessible name/fallback — decorative only
   // (not tappable), but still needs a real label for screen readers per
@@ -136,8 +140,8 @@ export const UI_STRINGS = {
   homeProfilePictureLabel: { en: "{name}'s picture", de: 'Profilbild von {name}' },
   homeProfilePicturePlaceholderLabel: { en: 'No profile picture set', de: 'Kein Profilbild festgelegt' },
   splashTagline: {
-    en: 'Where learning feels like play',
-    de: 'Wo Lernen sich wie Spielen anfühlt',
+    en: 'Kutta — where learning likes play',
+    de: 'Kutta — wo Lernen Spaß macht',
   },
 } as const;
 

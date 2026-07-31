@@ -1,14 +1,26 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoGallery } from '../../src/video/VideoGallery';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
+import { addFileReferences } from '../../src/storage/fileReferenceStore';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn() },
+  getInfoAsync: jest.fn(),
 }));
+jest.mock('@react-native-async-storage/async-storage');
+jest.mock('expo-document-picker');
 
 describe('VideoGallery', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+  });
+
   it('lists videos and calls onSelect when tapped', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/videos/party.mp4',
@@ -99,5 +111,74 @@ describe('VideoGallery', () => {
       Array.isArray(style) ? Object.assign({}, ...style.map(flattenStyle)) : style || {};
     const style = flattenStyle(item.props.style);
     expect(style.minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  describe('individually-added videos', () => {
+    it('shows the "add video" button', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('video-gallery-add');
+      await findByLabelText('+ Add video');
+    });
+
+    it('merges individually-added videos with the folder content, without duplicates', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/videos/party.mp4',
+      ]);
+      await addFileReferences('video', ['content://picked/holiday.mp4', 'content://tree/videos/party.mp4']);
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('video-item-content://tree/videos/party.mp4');
+      await findByTestId('video-item-content://picked/holiday.mp4');
+    });
+
+    it('silently prunes a reference whose file no longer exists, without affecting the others', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      await addFileReferences('video', ['content://picked/still-there.mp4', 'content://picked/gone.mp4']);
+      (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (uri: string) => ({
+        exists: uri !== 'content://picked/gone.mp4',
+      }));
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('video-item-content://picked/still-there.mp4');
+      expect(queryByTestId('video-item-content://picked/gone.mp4')).toBeNull();
+    });
+
+    it('reloads the gallery to show a newly-picked video after using the Add button', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://picked/new.mp4', name: 'new.mp4', lastModified: 0 }],
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('video-gallery-empty');
+      expect(queryByTestId('video-item-content://picked/new.mp4')).toBeNull();
+
+      await fireEvent.press(await findByTestId('video-gallery-add'));
+
+      await findByTestId('video-item-content://picked/new.mp4');
+    });
   });
 });

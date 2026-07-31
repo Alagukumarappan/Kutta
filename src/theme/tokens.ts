@@ -48,19 +48,24 @@ export interface EdgeInsets {
 
 export const ZERO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
-// Computes a square size (e.g. a canvas or puzzle board) that fits within the
-// current window after reserving room for surrounding UI (palettes, previews,
-// labels, margins). Landscape phones are short-but-wide, so the height axis is
-// usually the binding constraint - this takes whichever axis is tighter.
-export function computeResponsiveSquareSize(
+// Computes a rectangular size (e.g. a drawing canvas) that independently
+// fills the available width and height of the current window, after
+// reserving room for surrounding UI (toolbars, palettes, margins) on each
+// axis. Unlike a square-constrained size, this doesn't shrink one axis down
+// to match whichever axis is tighter — on a landscape phone (short but
+// wide), forcing a square canvas wastes most of the available width to fit
+// the constrained height, leaving the actual working area much smaller than
+// it needs to be.
+export function computeResponsiveRectSize(
   windowWidth: number,
   windowHeight: number,
   reservedHeight: number,
   reservedWidth: number,
-  min: number,
-  max: number
-): number {
-  const maxByHeight = windowHeight - reservedHeight;
-  const maxByWidth = windowWidth - reservedWidth;
-  return clamp(Math.min(maxByHeight, maxByWidth), min, max);
+  minSize: number,
+  maxSize: number
+): { width: number; height: number } {
+  return {
+    width: clamp(windowWidth - reservedWidth, minSize, maxSize),
+    height: clamp(windowHeight - reservedHeight, minSize, maxSize),
+  };
 }

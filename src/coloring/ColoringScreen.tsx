@@ -14,7 +14,7 @@ import {
 } from '@shopify/react-native-skia';
 import { floodFill } from './floodFill';
 import { base64ToUint8Array } from './base64';
-import { computeResponsiveSquareSize } from '../theme/tokens';
+import { computeResponsiveRectSize } from '../theme/tokens';
 import { colors, spacing, radii, shadow } from '../theme/tokens';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -24,10 +24,12 @@ import { useLanguage } from '../i18n/LanguageContext';
 // possible while still leaving room to pick a tool/color. This screen is
 // landscape-only via RootNavigator's runtime orientation lock (app.json
 // itself now uses "default" rather than a manifest-level lock). The footer
-// (toolbar buttons + palette swatches + padding/margins) needs roughly
-// 180-190dp on a typical phone, so 200 leaves a small margin rather than
-// letting the canvas clip against the footer.
-const CANVAS_RESERVED_HEIGHT = 200;
+// (toolbar row ~36dp + its marginBottom 8dp + the 44dp-tall palette strip
+// with 8dp of its own margin + the footer's own paddingTop/paddingBottom
+// 8+16dp) comes out to roughly 120dp; 150 leaves a modest margin for a
+// second toolbar-row wrap (see the "toolbar row screen-fit" note below)
+// without reserving as much dead space as the old flat 200dp estimate did.
+const CANVAS_RESERVED_HEIGHT = 150;
 const CANVAS_RESERVED_WIDTH = 32;
 const CANVAS_MIN_SIZE = 200;
 const CANVAS_MAX_SIZE = 900;
@@ -81,7 +83,13 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // shown with headerShown:true (see RootNavigator), so the native header
   // already consumes the top inset before this component's flex:1 container
   // gets its share of the window — adding it again would double-count it.
-  const canvasSize = computeResponsiveSquareSize(
+  // Rectangular, not square: a landscape phone is short-but-wide, so
+  // constraining the canvas to a square would shrink its width down to
+  // match the tighter height budget, wasting most of the screen's width as
+  // blank margin and leaving the child's actual picture much smaller than
+  // it needs to be. Width and height each get their own full share of the
+  // available space instead.
+  const { width: canvasWidth, height: canvasHeight } = computeResponsiveRectSize(
     width,
     height,
     CANVAS_RESERVED_HEIGHT + insets.bottom,
@@ -107,8 +115,10 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   selectedColorRef.current = selectedColor;
   const selectedDisplayColorRef = useRef(selectedDisplayColor);
   selectedDisplayColorRef.current = selectedDisplayColor;
-  const canvasSizeRef = useRef(canvasSize);
-  canvasSizeRef.current = canvasSize;
+  const canvasWidthRef = useRef(canvasWidth);
+  canvasWidthRef.current = canvasWidth;
+  const canvasHeightRef = useRef(canvasHeight);
+  canvasHeightRef.current = canvasHeight;
   const imageRef = useRef(image);
   imageRef.current = image;
   const pixelsRef = useRef(pixels);

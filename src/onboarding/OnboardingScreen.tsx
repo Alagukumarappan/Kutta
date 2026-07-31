@@ -164,17 +164,17 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   title: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.ink,
     textAlign: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   halfCard: {
     flex: 1,
@@ -183,16 +183,16 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
     ...shadow,
     elevation: 2,
   },
   label: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.ink,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   textInput: {
     borderWidth: 2,
@@ -266,9 +266,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     borderRadius: radii.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     borderWidth: 2,
   },
   saveButtonEnabled: {

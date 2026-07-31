@@ -3,6 +3,9 @@ import { View, Text, FlatList, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
+import { EmptyState } from '../components/EmptyState';
+import { AddFilesButton } from '../components/AddFilesButton';
+import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
@@ -31,8 +34,8 @@ export function PuzzleGallery({
   };
   const [images, setImages] = useState<string[] | null>(null);
   const [error, setError] = useState(false);
-  // Bumped on Retry to force a fresh load attempt even when
-  // picturesFolderUri itself hasn't changed (e.g. a transient failure).
+  // Bumped on Retry (or after adding individually-picked files) to force a
+  // fresh load attempt even when picturesFolderUri itself hasn't changed.
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
@@ -40,9 +43,20 @@ export function PuzzleGallery({
     setError(false);
     setImages(null);
 
-    FileSystem.StorageAccessFramework.readDirectoryAsync(picturesFolderUri)
-      .then((entries) => {
-        if (!cancelled) setImages(entries.filter(isImageFile));
+    Promise.all([
+      FileSystem.StorageAccessFramework.readDirectoryAsync(picturesFolderUri).then((entries) =>
+        entries.filter(isImageFile)
+      ),
+      // Files the parent added individually (outside the configured
+      // folder) via AddFilesButton — pruneMissingFileReferences silently
+      // drops any that have since become unreachable rather than throwing,
+      // so it never causes this Promise.all to reject on its own.
+      pruneMissingFileReferences('puzzle'),
+    ])
+      .then(([folderImages, extraImages]) => {
+        if (cancelled) return;
+        const merged = [...folderImages, ...extraImages.filter((uri) => !folderImages.includes(uri))];
+        setImages(merged);
       })
       .catch(() => {
         // The SAF grant may have been revoked, the folder deleted externally,
@@ -75,24 +89,28 @@ export function PuzzleGallery({
 
   if (images === null) return <View testID="puzzle-gallery-loading" style={insetStyle} />;
 
-  if (images.length === 0) {
-    return (
-      <View style={insetStyle}>
-        <Text>{t('emptyPictures')}</Text>
-      </View>
-    );
-  }
-
   return (
-    <FlatList
-      data={images}
-      keyExtractor={(uri) => uri}
-      contentContainerStyle={insetStyle}
-      renderItem={({ item }) => (
-        <Pressable testID={`puzzle-item-${item}`} onPress={() => onSelect(item)}>
-          <Image source={{ uri: item }} style={{ width: 100, height: 100 }} />
-        </Pressable>
+    <View style={[{ flex: 1 }, insetStyle]}>
+      <AddFilesButton
+        testID="puzzle-gallery-add"
+        label={t('addPuzzlePicture')}
+        contentType="puzzle"
+        mimeType="image/*"
+        onAdded={() => setRetryToken((n) => n + 1)}
+      />
+      {images.length === 0 ? (
+        <EmptyState testID="puzzle-gallery-empty" emoji="🧩" message={t('emptyPictures')} />
+      ) : (
+        <FlatList
+          data={images}
+          keyExtractor={(uri) => uri}
+          renderItem={({ item }) => (
+            <Pressable testID={`puzzle-item-${item}`} onPress={() => onSelect(item)}>
+              <Image source={{ uri: item }} style={{ width: 100, height: 100 }} />
+            </Pressable>
+          )}
+        />
       )}
-    />
+    </View>
   );
 }
