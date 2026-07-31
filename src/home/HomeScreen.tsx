@@ -38,6 +38,28 @@ const CARDS: CardSpec[] = [
   { testID: 'home-card-video', destination: 'video', labelKey: 'homeVideo', emoji: '🎬', bg: colors.orange, border: colors.orangeDark },
 ];
 
+// Fakes a soft diagonal "light source" gradient on top of a flat card color,
+// using two overlapping semi-transparent Views (lighter wash over the top
+// half, darker wash under the bottom half) instead of a real gradient
+// library. `expo-linear-gradient` isn't installed, and this iteration is
+// scoped to NOT add any new dependency; wiring Skia's own <LinearGradient>
+// for what's ultimately a still, four-corner-static color wash on a plain
+// rectangle would mean adding a Skia <Canvas> (and the
+// jest.mock('@shopify/react-native-skia') boilerplate ColoringScreen.test.tsx
+// already needs, see that file) to a screen that has none of that today —
+// a lot of new surface area for a purely decorative background. Pure,
+// static Views also cost nothing on every animation frame below (no re-run
+// per tilt tick), unlike a Canvas repaint would.
+function CardBackground({ color }: { color: string }) {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: color }]} />
+      <View style={styles.cardBackgroundHighlight} />
+      <View style={styles.cardBackgroundShadow} />
+    </View>
+  );
+}
+
 export function HomeScreen({
   childName,
   pictureUri,
@@ -87,6 +109,29 @@ export function HomeScreen({
   // `scaleAnim`/`opacityAnim` convention QuestionRenderer's celebration
   // animation already established (iteration 17) rather than re-creating a
   // fresh Animated.Value on every render.
+  //
+  // This single 0.95 (pressed) -> 1 (rest) value now drives a full 3D
+  // "tilt and lift" (perspective + rotateX + rotateY + a small lift, plus
+  // the original scale squish), not just scale — see cardTiltStyle below,
+  // which derives all of those via .interpolate() off this one value rather
+  // than juggling four separate Animated.Values per card. Deliberately kept
+  // as RN's built-in `Animated` API (bundled with react-native, already
+  // used and already covered by this file's own tests) rather than
+  // react-native-reanimated: reanimated 4 / react-native-worklets 0.10 (the
+  // versions pinned in package.json) need a `react-native-worklets/plugin`
+  // Babel plugin AND jest-side native-module mocking wired up, and neither
+  // exists anywhere in this codebase yet (confirmed by grepping
+  // babel.config.js and every existing screen/test) — see the identical,
+  // pre-existing rationale in QuestionRenderer.tsx's celebration animation
+  // comment. A hands-on spike this iteration confirmed that wiring: even
+  // after adding the Babel plugin and `react-native-reanimated/mock`'s
+  // moduleNameMapper, importing 'react-native-reanimated' under Jest still
+  // throws (`Cannot read properties of undefined (reading 'loadUnpackers')`)
+  // — a real, unresolved incompatibility, not just missing config. Forcing
+  // it through was judged riskier than this focused iteration's scope
+  // warrants, since it could destabilize the whole suite; RN's Animated API
+  // fully supports perspective/rotateX/rotateY/scale together under
+  // useNativeDriver, so it delivers the same tilt effect with zero new risk.
   const cardScales = React.useRef(
     Object.fromEntries(CARDS.map((card) => [card.testID, new Animated.Value(1)])) as Record<string, Animated.Value>
   ).current;
@@ -103,7 +148,12 @@ export function HomeScreen({
 
   function animateCard(testID: string, toValue: number) {
     // Brief, native-driven spring — only ever changes `transform`, so it
-    // never touches layout size (no reflow, no S22 screen-fit risk).
+    // never touches layout size (no reflow, no S22 screen-fit risk). Kept
+    // gentle (low bounciness, no overshoot past the target) since this
+    // plays on every single tap for a 2-8 year old audience: per this app's
+    // motion-safety convention, decorative motion must stay brief and calm,
+    // never bouncy/attention-grabbing enough to distract from the actual
+    // navigation the tap just triggered.
     const animation = Animated.spring(cardScales[testID], {
       toValue,
       useNativeDriver: true,
@@ -112,6 +162,28 @@ export function HomeScreen({
     });
     activeAnimationsRef.current[testID] = animation;
     animation.start();
+  }
+
+  // Derives the full tilt-and-lift transform for one card from its single
+  // driving Animated.Value (0.95 pressed -> 1 rest). `perspective` is a
+  // plain (non-animated) number — Animated's native driver only needs the
+  // *animated* entries in a transform array to be Animated nodes, a static
+  // sibling entry like this is fine and is exactly how RN's own "flip card"
+  // examples set perspective. Rotation stays a few degrees (per this
+  // iteration's "gentle, not extreme" instruction) and the lift is a 3px
+  // translateY, so the whole effect reads as a subtle dimensional press
+  // rather than a showy spin.
+  function cardTiltStyle(testID: string) {
+    const driver = cardScales[testID];
+    return {
+      transform: [
+        { perspective: 900 },
+        { rotateX: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['6deg', '0deg'] }) },
+        { rotateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: ['-4deg', '0deg'] }) },
+        { translateY: driver.interpolate({ inputRange: [0.95, 1], outputRange: [3, 0] }) },
+        { scale: driver },
+      ],
+    };
   }
 
   // Home has no navigation-driven unmount to rely on (unlike e.g. the quiz's
@@ -232,16 +304,23 @@ export function HomeScreen({
             onPress={() => handleCardPress(card)}
             onPressIn={() => animateCard(card.testID, 0.95)}
             onPressOut={() => animateCard(card.testID, 1)}
-            style={[
-              styles.card,
-              { width: cardWidth, height: cardHeight, backgroundColor: card.bg, borderColor: card.border },
-            ]}
+            style={{ width: cardWidth, height: cardHeight }}
           >
-            <Animated.View
-              style={[styles.cardInner, { transform: [{ scale: cardScales[card.testID] }] }]}
-            >
-              <Text style={styles.cardEmoji}>{card.emoji}</Text>
-              <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+            {/* This outer Animated.View ("card face") is what actually
+                tilts, and carries the border + drop shadow. It deliberately
+                does NOT set overflow:'hidden' itself — on iOS, overflow
+                hidden on the same view as a shadow clips the shadow away
+                along with everything else, so the rounded-corner *clipping*
+                for CardBackground below lives one level deeper instead
+                (cardClip), leaving this view free to cast its shadow. */}
+            <Animated.View style={[styles.cardFace, cardTiltStyle(card.testID), { borderColor: card.border }]}>
+              <View style={styles.cardClip}>
+                <CardBackground color={card.bg} />
+                <View style={styles.cardInner}>
+                  <Text style={styles.cardEmoji}>{card.emoji}</Text>
+                  <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+                </View>
+              </View>
             </Animated.View>
           </Pressable>
         ))}
@@ -320,23 +399,53 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  card: {
+  // The tilting "card face": border, shadow, and the transform from
+  // cardTiltStyle all live here, one level below the Pressable itself, so
+  // the press-in/press-out tilt/lift/scale transform never changes the
+  // Pressable's own layout box/hit area — purely a visual effect on what's
+  // inside it, same guarantee the old scale-only version already had.
+  cardFace: {
+    flex: 1,
     borderRadius: radii.xl,
     borderWidth: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.md,
     ...shadow,
     elevation: 4,
   },
-  // Wraps the card's visible content only (not the Pressable itself), so the
-  // press-in/press-out scale transform above never changes the Pressable's
-  // own layout box/hit area — purely a visual "squish" of what's inside it.
+  // A second, inner box purely for overflow:'hidden' clipping (so
+  // CardBackground's layers respect the rounded corners) — kept off
+  // cardFace above because overflow:'hidden' on the same view as a shadow
+  // clips iOS's shadow rendering away too.
+  cardClip: {
+    flex: 1,
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+  },
   cardInner: {
     flex: 1,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cardBackgroundHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    backgroundColor: colors.white,
+    opacity: 0.16,
+  },
+  cardBackgroundShadow: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    backgroundColor: colors.ink,
+    opacity: 0.08,
   },
   cardEmoji: {
     fontSize: 52,
