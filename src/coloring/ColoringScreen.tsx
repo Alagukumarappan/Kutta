@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent } from 'react-native';
+import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -378,7 +378,29 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           {strokes.length > 0 && (
             <Pressable
               testID="clear-drawing"
-              onPress={() => setStrokes([])}
+              onPress={() =>
+                // Clearing wipes every pen stroke a child has drawn with a
+                // single tap and cannot be undone, so — unlike picking a
+                // tool/color, which is trivially reversible — this needs a
+                // confirmation step first. Uses the same Alert.alert
+                // cancel/confirm pattern already established for
+                // SettingsScreen's destructive folder-migration action, for
+                // consistency rather than introducing a second confirmation
+                // UI in this codebase.
+                Alert.alert(
+                  t('clearDrawingConfirmTitle'),
+                  t('clearDrawingConfirmBody'),
+                  [
+                    { text: t('clearDrawingConfirmCancel'), style: 'cancel', onPress: () => {} },
+                    {
+                      text: t('clearDrawingConfirmConfirm'),
+                      style: 'destructive',
+                      onPress: () => setStrokes([]),
+                    },
+                  ],
+                  { cancelable: true }
+                )
+              }
               style={{
                 paddingVertical: spacing.xs,
                 paddingHorizontal: spacing.md,

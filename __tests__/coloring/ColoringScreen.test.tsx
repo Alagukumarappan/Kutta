@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ColoringScreen } from '../../src/coloring/ColoringScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -54,7 +55,52 @@ describe('ColoringScreen', () => {
     // throwing mid-test) can never leak into the next test's call count.
     (FileSystem.readAsStringAsync as jest.Mock).mockReset();
     mockDecodeState.shouldSucceed = true;
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
+
+  // Draws a single pen stroke on the canvas touch area by simulating the raw
+  // native responder events PanResponder listens for directly (there is no
+  // real Skia canvas to actually drag a finger across in Jest) — grant then
+  // release is enough to push one entry into ColoringScreen's `strokes`
+  // state and reveal the `clear-drawing` button, which only renders when
+  // `strokes.length > 0`.
+  const fakeTouchHistory = {
+    touchBank: [],
+    numberActiveTouches: 0,
+    indexOfSingleActiveTouch: -1,
+    mostRecentTimeStamp: 0,
+  };
+
+  async function drawOnePenStroke(getByTestId: (id: string) => any) {
+    await fireEvent.press(getByTestId('tool-pen'));
+    const touchArea = getByTestId('coloring-canvas-touch-area');
+    // PanResponder's onResponderGrant/onResponderRelease handlers read
+    // `event.touchHistory` directly (not `nativeEvent.touches`) to compute
+    // gesture centroids — a bare fake with zero active touches is enough
+    // since ColoringScreen's own onPanResponderGrant/Release callbacks only
+    // read `evt.nativeEvent.locationX/Y`, never the gesture-state centroid.
+    await fireEvent(touchArea, 'responderGrant', {
+      touchHistory: fakeTouchHistory,
+      nativeEvent: { locationX: 10, locationY: 10 },
+    });
+    await fireEvent(touchArea, 'responderRelease', {
+      touchHistory: fakeTouchHistory,
+      nativeEvent: { locationX: 20, locationY: 20 },
+    });
+  }
+
+  // Simulates tapping one of the confirmation Alert's buttons, the same
+  // pattern already established by SettingsScreen.test.tsx's
+  // `confirmAlertWith` for the migration-confirmation Alert.
+  async function pressAlertButton(buttonLabel: string) {
+    const alertSpy = Alert.alert as jest.Mock;
+    const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+    const button = buttons.find((b: { text: string }) => b.text === buttonLabel);
+    await act(async () => {
+      button.onPress();
+      await Promise.resolve();
+    });
+  }
 
   it('shows the canvas once the photo loads and decodes successfully', async () => {
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
@@ -216,5 +262,94 @@ describe('ColoringScreen', () => {
     );
     expect(unmountedWarnings).toHaveLength(0);
     consoleError.mockRestore();
+  });
+
+  describe('clear-drawing confirmation', () => {
+    it('asks for confirmation instead of immediately clearing when Clear drawing is pressed', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      // Clear drawing only renders once there is something to clear.
+      expect(queryByTestId('clear-drawing')).toBeNull();
+      await drawOnePenStroke(getByTestId);
+      const clearButton = await findByTestId('clear-drawing');
+
+      await fireEvent.press(clearButton);
+
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Clear picture?',
+        'This will erase your drawing.',
+        expect.any(Array),
+        expect.any(Object)
+      );
+      // The strokes must still be intact — only a modal prompt should have
+      // appeared, nothing destructive yet.
+      expect(await findByTestId('clear-drawing')).toBeTruthy();
+    });
+
+    it('clears the drawing once the user confirms', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await drawOnePenStroke(getByTestId);
+      await fireEvent.press(await findByTestId('clear-drawing'));
+
+      await pressAlertButton('Clear');
+
+      // The button disappears once strokes is empty again — the real,
+      // observable signal that the drawing was actually cleared.
+      expect(queryByTestId('clear-drawing')).toBeNull();
+    });
+
+    it('leaves the drawing intact if the user cancels', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await drawOnePenStroke(getByTestId);
+      await fireEvent.press(await findByTestId('clear-drawing'));
+
+      await pressAlertButton('Cancel');
+
+      expect(queryByTestId('clear-drawing')).not.toBeNull();
+    });
+
+    it('shows the confirmation localized in German', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="de">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await drawOnePenStroke(getByTestId);
+      await fireEvent.press(await findByTestId('clear-drawing'));
+
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Bild löschen?',
+        'Das löscht dein Bild.',
+        expect.any(Array),
+        expect.any(Object)
+      );
+      const alertSpy = Alert.alert as jest.Mock;
+      const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+      expect(buttons.map((b: { text: string }) => b.text)).toEqual(['Abbrechen', 'Löschen']);
+    });
   });
 });

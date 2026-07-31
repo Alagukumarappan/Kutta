@@ -99,6 +99,13 @@ export const UI_STRINGS = {
   toolFill: { en: 'Fill', de: 'Füllen' },
   toolPen: { en: 'Pen', de: 'Stift' },
   clearDrawing: { en: 'Clear drawing', de: 'Zeichnung löschen' },
+  clearDrawingConfirmTitle: { en: 'Clear picture?', de: 'Bild löschen?' },
+  clearDrawingConfirmBody: {
+    en: 'This will erase your drawing.',
+    de: 'Das löscht dein Bild.',
+  },
+  clearDrawingConfirmConfirm: { en: 'Clear', de: 'Löschen' },
+  clearDrawingConfirmCancel: { en: 'Cancel', de: 'Abbrechen' },
   loadError: {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',

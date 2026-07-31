@@ -1,8 +1,91 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 4 (original-spec fast-follow items), Iteration: 25
-- Latest completed improvement (iteration 25, one commit): Phase 4 item 3
+- Phase: 4 (original-spec fast-follow items), Iteration: 26
+- Latest completed improvement (iteration 26, one commit): Phase 4 item 4
+  — coloring usability's confirmation-before-destructive-clear gap. Read
+  `src/coloring/ColoringScreen.tsx` fully: the `clear-drawing` button
+  (rendered only when `strokes.length > 0`) wiped every pen stroke with a
+  single tap and zero confirmation — a real "accidental destructive
+  action" risk for a 2-8 year old prone to mis-taps, exactly as this
+  iteration's brief flagged. Checked for a lower-risk, distinct undo
+  action first (per the brief's instruction not to gate a safe single-step
+  undo behind confirmation) — there is only ONE clear/undo-type control in
+  the file; the only other `setStrokes([])` call is inside the
+  image-load `useEffect` (resets strokes when a fresh photo is decoded,
+  not a user-tappable action), so nothing needed to stay ungated.
+  Flood-fill taps (the other half of item 4's brief) were deliberately
+  left out of scope per the `Next` section's own guidance — an
+  undo-for-flood-fill is a genuinely larger feature, not a "small, safe,
+  well-bounded slice" fittable in one iteration; noted as a possible
+  future item below rather than half-built.
+  - **Confirmation pattern chosen**: `Alert.alert`, NOT a new custom
+    modal — `src/settings/SettingsScreen.tsx` already established exactly
+    this pattern for its own destructive action (folder-migration
+    `confirmMigration()`, `migrationConfirmTitle/Body/Confirm/Cancel` i18n
+    keys), so this iteration followed the same established convention for
+    consistency rather than introducing a second confirmation UI pattern
+    into the codebase. The `clear-drawing` `Pressable`'s `onPress` now
+    calls `Alert.alert(t('clearDrawingConfirmTitle'),
+    t('clearDrawingConfirmBody'), [Cancel, Clear], { cancelable: true })`,
+    only calling `setStrokes([])` from the Clear button's own `onPress`
+    (`style: 'destructive'`); Cancel (`style: 'cancel'`) does nothing.
+  - **New EN+DE i18n keys** (`src/i18n/strings.ts`, added in the same
+    commit): `clearDrawingConfirmTitle` ("Clear picture?"/"Bild
+    löschen?"), `clearDrawingConfirmBody` ("This will erase your
+    drawing."/"Das löscht dein Bild."), `clearDrawingConfirmConfirm`
+    ("Clear"/"Löschen"), `clearDrawingConfirmCancel`
+    ("Cancel"/"Abbrechen"). Deliberately shorter/gentler wording than the
+    adult-facing `migrationConfirmBody` ("...This cannot be undone.") —
+    this dialog is child-facing, so it states the effect plainly (erases
+    the drawing) without harsher "cannot be undone"/warning-style
+    language, matching the brief's "not scary, this is about lost work,
+    not danger" instruction.
+  - **Double-fire safety**: verified no additional guard was needed —
+    `Alert.alert` is a native, OS-level modal, so a second tap on the
+    already-hidden-behind-the-dialog `clear-drawing` button cannot reach
+    JS while the dialog is open; the confirm callback is a plain
+    synchronous `setStrokes([])`, safe to invoke once by construction.
+  - **Accessibility**: none needed beyond what's automatic —
+    `Alert.alert` is a native OS-level accessible dialog (TalkBack/
+    VoiceOver announce it and its buttons on their own), so no new
+    `accessibilityLabel`/`accessibilityRole` wiring was required.
+  - Baseline before this iteration: tsc clean, 26/26 suites, 228/228
+    tests.
+  - After this iteration: tsc clean, 26/26 suites, **232/232 tests** (+4
+    new, all in a new `describe('clear-drawing confirmation', ...)` block
+    in `__tests__/coloring/ColoringScreen.test.tsx`: pressing Clear shows
+    the confirmation instead of immediately clearing; confirming actually
+    clears (asserted by the button disappearing once `strokes` is empty
+    again — the real observable signal); cancelling leaves the drawing
+    intact; the confirmation is correctly localized in German including
+    button labels. A new `drawOnePenStroke` test helper simulates the raw
+    PanResponder `responderGrant`/`responderRelease` native-event pair
+    directly (with a minimal fake `touchHistory` object, since
+    PanResponder's internal gesture-state math reads `event.touchHistory`
+    directly rather than `nativeEvent.touches`) to get one stroke into
+    state so the `clear-drawing` button renders — no existing test
+    modified, weakened, skipped, or renamed).
+  - A code-review subagent independently reviewed the diff: confirmed via
+    a fresh read of the full file that only one destructive
+    clear/undo-type control exists and it's the one now gated (the other
+    `setStrokes([])` call is a non-user-facing effect reset, correctly
+    left unconfirmed); confirmed EN+DE tone/naturalness including that the
+    shorter child-facing wording vs. the adult-facing migration dialog is
+    an intentional, reasonable distinction, not an inconsistency;
+    confirmed full EN+DE localization coverage with no hardcoded English
+    left in the `Alert.alert` call; confirmed no double-fire risk (native
+    modal by construction, idempotent confirm callback); confirmed no
+    hard-limit violations (no new deps, no unsafe casts/`ts-ignore`, no
+    existing test altered — only new imports/helpers/tests added, no
+    undo/redo history built, staying within this iteration's scoped
+    slice); and confirmed `Alert.alert`'s native accessibility is
+    sufficient with no additional wiring needed. Independently re-ran
+    `npx tsc --noEmit` (clean) and the full suite (26/26 suites, 232/232
+    tests). Approved with no required or optional changes.
+  - Commit: `<see git log — loop: confirm before clearing a child's
+    coloring drawing>`.
+- Previous iteration's completed improvement (iteration 25, one commit): Phase 4 item 3
   — coloring palette completeness. Checked the existing 12-color
   `PALETTE` in `src/coloring/palette.ts` against the spec's full category
   list (basic/light/dark/warm/cool/skin-tone-friendly/neutral) by reading
@@ -1770,6 +1853,42 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
+**Iteration 27 priority**: iteration 26 closed the highest-value slice of
+Phase 4 item 4 (clear-drawing confirmation — see Current Status for full
+detail) but deliberately left two smaller sub-items open, per the brief's
+own "scope down if too large" guidance:
+1. **Flood-fill mis-tap risk (no code change made yet)** — a mis-tap in
+   'fill' mode instantly flood-fills a whole region with the selected
+   color and there is currently NO undo for this at all (only pen strokes
+   have the new clear-with-confirmation flow; flood fills are baked
+   straight into `pixels`/`filledImage` state with no history). This is
+   a genuinely open gap, but building real fill-undo needs at least a
+   one-entry "previous pixel buffer" snapshot restored on tap (Skia
+   `Uint8ClampedArray` buffers are large — a full multi-step undo stack
+   is likely NOT a small addition, but a **single-level "undo last fill"**
+   snapshot might be: worth scoping carefully next iteration by reading
+   `handleCanvasTap`'s current `pixels`/`filledImage` flow before deciding
+   whether even one level is safely small, or whether this should stay
+   deferred to a dedicated "undo/redo" feature iteration instead of being
+   forced into a "just add a click" fix.
+2. **Friendly empty-state check** — this iteration did NOT re-verify the
+   `Next` section's other open question (what the canvas shows before any
+   tool is used) beyond what iteration 25 already implied; a quick look at
+   `ColoringScreen.tsx`'s render logic suggests the source photo itself is
+   always visible immediately once loaded (no blank/empty canvas state
+   exists at all — `displayImage = filledImage ?? image`), so there is
+   likely nothing to fix here, but this should be confirmed explicitly
+   (not just inferred) before closing out item 4 for good.
+If neither of the above turns out fruitful/safely scoped, fall through to
+Phase 4 item 5 (optional child profile picture) per the existing fallback
+ordering below.
+
+Iteration 26 closed out the `clear-drawing` confirmation slice of Phase 4
+item 4 (coloring usability) — see Current Status for full detail. It
+should not be re-treaded without new evidence (e.g. a real device review
+surfacing a specific problem with the new Alert.alert dialog's wording,
+sizing, or timing).
+
 Iteration 24 closed out Phase 4 item 1 (home card press animations) — see
 Current Status / Completed #21 for full detail. It should not be re-treaded
 without new evidence.
@@ -1988,6 +2107,34 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 26's clear-drawing confirmation dialog** (new interaction —
+  a native `Alert.alert` dialog, source-verified but never seen rendered
+  on a real device by this loop):
+  - **Screen**: Coloring (`clear-drawing` testID button, the toolbar row
+    above the palette strip — only visible once at least one pen stroke
+    has been drawn).
+  - **Expected behavior**: draw at least one pen stroke (switch to the
+    pen tool, drag a finger across the canvas), then tap "Clear drawing".
+    A native confirmation dialog should pop up titled "Clear picture?"
+    with the body text "This will erase your drawing." and two buttons,
+    "Cancel" and "Clear". Tapping "Cancel" (or dismissing the dialog, e.g.
+    Android back button) must leave every existing stroke on the canvas
+    untouched. Tapping "Clear" must wipe all pen strokes and make the
+    "Clear drawing" button itself disappear (it only renders when
+    strokes exist). Confirm the dialog cannot be double-triggered by a
+    fast double-tap on "Clear drawing" (should show once, not stack two
+    dialogs).
+  - **EN+DE check**: switch the app to German first and repeat the same
+    flow — the dialog should read "Bild löschen?" / "Das löscht dein
+    Bild." with buttons "Abbrechen" / "Löschen"; confirm neither string
+    reads as awkward machine-translated German and that the tone feels
+    calm/factual rather than alarming for a young child.
+  - **Ages affected**: all ages 2-8 who use the coloring screen's pen
+    tool — this specifically protects a child's already-drawn pen strokes
+    from being lost to an accidental single tap, the exact risk this
+    iteration's brief called out for this age range. (Flood-fill taps are
+    NOT covered by this dialog — see the `Next` section's iteration 27
+    priority for that still-open, deliberately-deferred gap.)
 - **Iteration 25's expanded coloring palette** (5 new swatches, 12 -> 17
   total — a real layout change to a horizontal scroll strip, not a
   logic-only change, so a real-device check is warranted):
