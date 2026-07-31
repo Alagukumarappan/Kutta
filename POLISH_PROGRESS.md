@@ -679,6 +679,33 @@ found.
 **Tests:** New regression test covering the busy→settled transition (546
 total tests passing, up from 545).
 
+### Iteration 29 — Extend reduce-motion support to ColoringScreen's palette-swatch pop
+**Screen:** Coloring.
+**Problem:** Continues the reduce-motion sweep (iterations 14, 16, 24, 25,
+26). ColoringScreen's palette-swatch selection has its own "pop" — the
+newly-picked swatch springs up to scale 1.12 and the previously-picked one
+springs back down to 1 — via `Animated.spring`, the exact same bouncy
+pattern already fixed for the quiz's progress dots (iteration 25), but
+never itself audited since it lives in a different file.
+**Fix:** Added `useReducedMotion()`; the effect's `pop()` helper now checks
+it right after stopping any in-flight animation for that swatch — when
+enabled, jumps straight to `scale.setValue(toValue)` and returns instead of
+starting the spring. The border/shadow swap between selected and
+unselected swatches still conveys the selection change on its own.
+**Verified as a real bug, not a hypothetical:** confirmed via `git stash`
+that the new test genuinely fails without the fix (`blueScale` reads 1
+instead of 1.12).
+**Extra diligence:** self-review specifically confirmed the effect's
+early-return guard (`prevColor === selectedDisplayColor`) still runs before
+any reference to `reducedMotion`, so toggling the OS setting alone (with no
+real color change) can't incorrectly re-fire the pop; also confirmed the
+file's OTHER animation system (`animateToolbarButton`, the Fill/Pen/Undo/
+Clear button press feedback) is untouched and remains a separate, not-yet
+audited candidate. Independently re-verified by a dispatched review agent.
+**Tests:** New regression test mocking the OS reduce-motion setting on and
+asserting both swatches land directly on their resting scale (547 total
+tests passing, up from 546).
+
 ## Bugs fixed
 - White text on 3 of 5 Home activity cards (jade/marigold/sky) failed
   WCAG AA contrast badly (as low as 1.8:1 against a 3:1 minimum) — fixed
@@ -746,14 +773,15 @@ total tests passing, up from 545).
   (multi-select "selected" state now exposed to accessibility)
 - AddFilesButton / Coloring + Video galleries (now exposes
   accessibilityState.busy while a pick is in flight)
+- Coloring (palette-swatch selection pop now respects reduce-motion)
 
 ## Remaining polish opportunities (not yet done)
-- ColoringScreen's palette-swatch pop / toolbar button press feedback, and
-  PuzzleScreen's piece-swap spring: confirmed real, user-action-triggered
-  (not on-mount) one-shot springs that still ignore reduce-motion — same
-  category as iterations 24/25/26 but individually un-audited. Confirmed
-  as easy/low-risk to test (unlike iteration 26's on-mount case) if picked
-  up later.
+- ColoringScreen's toolbar button press feedback (`animateToolbarButton`,
+  the Fill/Pen/Undo/Clear buttons), and PuzzleScreen's piece-swap spring:
+  confirmed real, user-action-triggered (not on-mount) one-shot springs
+  that still ignore reduce-motion — same category as iterations 24/25/26/29
+  but individually un-audited. Confirmed as easy/low-risk to test (unlike
+  iteration 26's on-mount case) if picked up later.
 - `src/components/EmptyState.tsx` (the old, pre-redesign empty-state
   component, superseded by `EmptyStatePanel`) is confirmed dead code —
   never imported anywhere in the app. Same category as `PieceCountPicker`;
