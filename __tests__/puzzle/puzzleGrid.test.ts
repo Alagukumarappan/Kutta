@@ -1,4 +1,10 @@
-import { computeGridDimensions, computePieceRects, shufflePieceOrder, computePuzzleBoardSize } from '../../src/puzzle/puzzleGrid';
+import {
+  computeGridDimensions,
+  computePieceRects,
+  shufflePieceOrder,
+  computePuzzleBoardSize,
+  groupPiecesIntoRows,
+} from '../../src/puzzle/puzzleGrid';
 
 // computePuzzleBoardSize reserves the same fixed chrome (mirrored here, not imported, so
 // these tests catch a regression in either file): reservedHeight=160, reservedWidth=220,
@@ -99,6 +105,106 @@ describe('computeGridDimensions', () => {
       const portrait = computeGridDimensions(pieceCount, true);
       expect(landscape.rows * landscape.cols).toBe(pieceCount);
       expect(portrait.rows * portrait.cols).toBe(pieceCount);
+    }
+  });
+
+  // A square (1:1 aspect ratio) photo is treated as `isPortrait: false` by
+  // PuzzleScreen (its check is `imageWidth < imageHeight`, which is false when
+  // they're equal) - confirm this doesn't error and gives the ordinary
+  // landscape shape for every piece count.
+  it('handles a square (isPortrait: false) photo sensibly for every piece count', () => {
+    expect(computeGridDimensions(4, false)).toEqual({ rows: 2, cols: 2 });
+    expect(computeGridDimensions(6, false)).toEqual({ rows: 2, cols: 3 });
+    expect(computeGridDimensions(9, false)).toEqual({ rows: 3, cols: 3 });
+    expect(computeGridDimensions(12, false)).toEqual({ rows: 3, cols: 4 });
+  });
+});
+
+// groupPiecesIntoRows is the pure logic PuzzleScreen now uses to render the
+// board as explicit per-row <View> containers instead of a single
+// `flexWrap: 'wrap'` container, specifically so the column count is a
+// deterministic property of the array structure rather than something Yoga's
+// float-precision line-breaking decides at layout time. Every case below is
+// hand-computed (not derived from the function under test).
+describe('groupPiecesIntoRows', () => {
+  it('groups a 4-piece (2x2) order into 2 rows of exactly 2', () => {
+    expect(groupPiecesIntoRows([0, 1, 2, 3], 2)).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+  });
+
+  it('groups a 6-piece landscape (2 rows x 3 cols) order into 2 rows of exactly 3', () => {
+    // This is one of the exact configurations at risk of the Yoga float-precision
+    // wrap bug (cols=3): a flexWrap container could wrap after 2 pieces instead
+    // of 3 on a fractional-width device. Explicit grouping makes this impossible.
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5], 3)).toEqual([
+      [0, 1, 2],
+      [3, 4, 5],
+    ]);
+  });
+
+  it('groups a 6-piece portrait (3 rows x 2 cols) order into 3 rows of exactly 2', () => {
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5], 2)).toEqual([
+      [0, 1],
+      [2, 3],
+      [4, 5],
+    ]);
+  });
+
+  it('groups a 9-piece (3x3, both orientations) order into 3 rows of exactly 3', () => {
+    // 9-piece is 3x3 in BOTH orientations, so both are at risk of the cols=3 bug.
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5, 6, 7, 8], 3)).toEqual([
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+    ]);
+  });
+
+  it('groups a 12-piece landscape (3 rows x 4 cols) order into 3 rows of exactly 4', () => {
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 4)).toEqual([
+      [0, 1, 2, 3],
+      [4, 5, 6, 7],
+      [8, 9, 10, 11],
+    ]);
+  });
+
+  it('groups a 12-piece portrait (4 rows x 3 cols) order into 4 rows of exactly 3', () => {
+    // Also a cols=3 configuration - confirmed at risk per the bug report.
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 3)).toEqual([
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [9, 10, 11],
+    ]);
+  });
+
+  it('groups an arbitrary shuffled order (not just identity) the same structural way', () => {
+    const shuffled = [8, 3, 1, 6, 0, 5, 7, 2, 4];
+    expect(groupPiecesIntoRows(shuffled, 3)).toEqual([
+      [8, 3, 1],
+      [6, 0, 5],
+      [7, 2, 4],
+    ]);
+  });
+
+  it('never produces a row with more or fewer than `cols` items across all groups but the last', () => {
+    for (const [length, cols] of [
+      [4, 2],
+      [6, 3],
+      [6, 2],
+      [9, 3],
+      [12, 4],
+      [12, 3],
+    ] as const) {
+      const items = Array.from({ length }, (_, i) => i);
+      const grouped = groupPiecesIntoRows(items, cols);
+      expect(grouped).toHaveLength(length / cols);
+      for (const group of grouped) {
+        expect(group).toHaveLength(cols);
+      }
+      // Flattening back must reproduce the original order exactly.
+      expect(grouped.flat()).toEqual(items);
     }
   });
 });

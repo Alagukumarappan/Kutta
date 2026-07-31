@@ -176,6 +176,87 @@ describe('PuzzleScreen', () => {
     expect(await utils.findByTestId('puzzle-slot-0')).toBeTruthy();
   });
 
+  // These tests prove the board's column count is deterministic - i.e. it comes
+  // from the explicit groupPiecesIntoRows structure PuzzleScreen now renders
+  // (rows of exactly `cols` sibling Pressables each), not from a flexWrap:'wrap'
+  // container's line-breaking, which was float-precision-dependent and could
+  // wrap one piece early on a fractional container width. For each combination,
+  // we pick a photo size/count that produces the given (rows, cols) shape (hand-
+  // computed from the same table as puzzleGrid.test.ts's computeGridDimensions
+  // tests) and then walk the real rendered tree via each slot's `.parent` to
+  // confirm siblings-per-row and total row count exactly, not just slot count.
+  function assertRowGrouping(getByTestId: (id: string) => any, rows: number, cols: number) {
+    for (let r = 0; r < rows; r++) {
+      const parentsInRow = new Set<any>();
+      for (let c = 0; c < cols; c++) {
+        const slotIndex = r * cols + c;
+        const slot = getByTestId(`puzzle-slot-${slotIndex}`);
+        parentsInRow.add(slot.parent);
+      }
+      // Every slot in this row must share the exact same row-container parent...
+      expect(parentsInRow.size).toBe(1);
+      const rowParent = [...parentsInRow][0];
+      // ...and that row-container must hold exactly `cols` Pressable children -
+      // no more (would mean a row swallowed the next row's pieces) and no
+      // fewer (would mean this row got wrapped early, the exact bug being fixed).
+      expect(rowParent.children).toHaveLength(cols);
+    }
+    // The row belonging to the first slot of the *next* row must differ from
+    // the last row's parent, i.e. rows are genuinely separate containers.
+    if (rows > 1) {
+      const lastSlotOfFirstRow = getByTestId(`puzzle-slot-${cols - 1}`);
+      const firstSlotOfSecondRow = getByTestId(`puzzle-slot-${cols}`);
+      expect(firstSlotOfSecondRow.parent).not.toBe(lastSlotOfFirstRow.parent);
+    }
+    // No slot beyond rows*cols should exist.
+    expect(() => getByTestId(`puzzle-slot-${rows * cols}`)).toThrow();
+  }
+
+  async function renderAndPickCount(
+    photoWidth: number,
+    photoHeight: number,
+    pieceCount: 4 | 6 | 9 | 12
+  ) {
+    getSizeSpy.mockRestore();
+    getSizeSpy = jest
+      .spyOn(Image, 'getSize')
+      .mockImplementation((_uri: string, success: (w: number, h: number) => void) => {
+        success(photoWidth, photoHeight);
+      });
+    const utils = await renderPuzzleScreen();
+    await fireEvent.press(await utils.findByTestId('puzzle-piece-count-picker'));
+    await fireEvent.press(await utils.findByTestId(`puzzle-piece-count-option-${pieceCount}`));
+    await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
+    return utils;
+  }
+
+  describe('row grouping is deterministic, not flexWrap-line-break-dependent', () => {
+    it.each([
+      // [photoWidth, photoHeight, pieceCount, expectedRows, expectedCols, label]
+      [300, 200, 4, 2, 2, '4-piece landscape'],
+      [200, 300, 4, 2, 2, '4-piece portrait'],
+      [300, 200, 6, 2, 3, '6-piece landscape (3 cols - at risk of the float-wrap bug)'],
+      [200, 300, 6, 3, 2, '6-piece portrait'],
+      [300, 200, 9, 3, 3, '9-piece landscape (3 cols - at risk)'],
+      [200, 300, 9, 3, 3, '9-piece portrait (3 cols - at risk)'],
+      [300, 200, 12, 3, 4, '12-piece landscape'],
+      [200, 300, 12, 4, 3, '12-piece portrait (3 cols - at risk)'],
+    ] as const)(
+      '%s photo, %i pieces -> %i rows x %i cols, laid out in explicit row containers',
+      async (photoWidth, photoHeight, pieceCount, expectedRows, expectedCols, _label) => {
+        const utils = await renderAndPickCount(photoWidth, photoHeight, pieceCount);
+        assertRowGrouping(utils.getByTestId, expectedRows, expectedCols);
+      }
+    );
+
+    it('a square (1:1) photo does not error and produces the ordinary landscape shape', async () => {
+      // isPortrait is `imageWidth < imageHeight`, which is false for a square photo,
+      // so a square photo should behave exactly like a landscape one (3x3 for 9 pieces).
+      const utils = await renderAndPickCount(400, 400, 9);
+      assertRowGrouping(utils.getByTestId, 3, 3);
+    });
+  });
+
   it('uses a transposed (taller) grid shape for a real portrait photo', async () => {
     getSizeSpy.mockRestore();
     // A clearly portrait photo (taller than wide).
