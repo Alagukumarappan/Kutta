@@ -113,8 +113,23 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   imageRef.current = image;
   const pixelsRef = useRef(pixels);
   pixelsRef.current = pixels;
+  const filledImageRef = useRef(filledImage);
+  filledImageRef.current = filledImage;
 
   const activePathRef = useRef<SkPath | null>(null);
+
+  // Single-level "undo last flood fill" (iteration 27). `floodFill` already
+  // does `pixels.slice()` internally (see floodFill.ts) rather than
+  // mutating its input in place, so the pre-fill `pixels`/`filledImage`
+  // pair is already sitting there, untouched, right before each new fill —
+  // capturing it here for a possible undo is a pointer copy, not an extra
+  // buffer allocation. Deliberately a plain ref (not state) holding at most
+  // ONE snapshot: this is a one-level undo, not a history stack, so there's
+  // never more than one extra pixel buffer alive at a time.
+  const previousFillRef = useRef<{ pixels: Uint8ClampedArray; filledImage: SkImage | null } | null>(null);
+  // Mirrors whether `previousFillRef.current` is set, purely so the Undo
+  // button's visibility can react to it (refs alone don't trigger renders).
+  const [canUndoFill, setCanUndoFill] = useState(false);
 
   // Load the source photo's bytes ourselves (see the comment above the
   // `image` state) and decode them into an SkImage. Runs once per
@@ -169,6 +184,10 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     setFilledImage(null);
     setStrokes([]);
     setCurrentPath(null);
+    // A fresh photo means any previous fill snapshot no longer applies —
+    // there's nothing left to undo back to.
+    previousFillRef.current = null;
+    setCanUndoFill(false);
   }, [image]);
 
   function handleCanvasTap(x: number, y: number) {
@@ -185,6 +204,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height) return;
 
     const updated = floodFill(pixels, width, height, pixelX, pixelY, selectedColorRef.current);
+    // Capture the pre-fill buffer/image for a single-level undo BEFORE
+    // overwriting state below. `pixels`/`filledImageRef.current` here are
+    // exactly what was on screen right before this fill — floodFill never
+    // mutates its input (see floodFill.ts's own `pixels.slice()`), so this
+    // is just holding onto the reference that already existed, not copying
+    // anything new.
+    previousFillRef.current = { pixels, filledImage: filledImageRef.current };
+    setCanUndoFill(true);
     setPixels(updated);
 
     const bytesPerRow = width * 4;
@@ -195,6 +222,21 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       bytesPerRow
     );
     if (newImage) setFilledImage(newImage);
+  }
+
+  // Restores the single most-recent flood fill's pre-fill state and clears
+  // the snapshot — one level of undo only, not a history stack. Deliberately
+  // NOT gated behind a confirmation dialog (unlike `clear-drawing` above):
+  // it only ever reverts the one most recent fill, a much smaller and
+  // cheaper-to-redo action than wiping every pen stroke, so a confirmation
+  // tap here would just be friction, not a real safety need.
+  function handleUndoFill() {
+    const previous = previousFillRef.current;
+    if (!previous) return;
+    setPixels(previous.pixels);
+    setFilledImage(previous.filledImage);
+    previousFillRef.current = null;
+    setCanUndoFill(false);
   }
 
   // Commits the in-progress stroke (if any) into `strokes` and clears the
@@ -375,6 +417,25 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           >
             <Text style={{ color: colors.ink, fontWeight: '600' }}>{'✏️ '}{t('toolPen')}</Text>
           </Pressable>
+          {canUndoFill && (
+            <Pressable
+              testID="undo-fill"
+              onPress={handleUndoFill}
+              accessibilityRole="button"
+              accessibilityLabel={t('undoFill')}
+              style={{
+                paddingVertical: spacing.xs,
+                paddingHorizontal: spacing.md,
+                borderRadius: radii.md,
+                marginRight: spacing.sm,
+                backgroundColor: colors.white,
+                borderWidth: 2,
+                borderColor: colors.disabledBorder,
+              }}
+            >
+              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'↩️ '}{t('undoFill')}</Text>
+            </Pressable>
+          )}
           {strokes.length > 0 && (
             <Pressable
               testID="clear-drawing"

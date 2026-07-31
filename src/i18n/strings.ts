@@ -106,6 +106,12 @@ export const UI_STRINGS = {
   },
   clearDrawingConfirmConfirm: { en: 'Clear', de: 'Löschen' },
   clearDrawingConfirmCancel: { en: 'Cancel', de: 'Abbrechen' },
+  // Single-level "undo last flood fill" (iteration 27) — deliberately not
+  // gated behind a confirmation dialog like clearDrawing above: it only
+  // ever reverts the one most recent fill (a much smaller, cheap-to-redo
+  // action than wiping every pen stroke), so an extra confirmation tap
+  // would just be friction for a 2-8 year old, not a real safety need.
+  undoFill: { en: 'Undo', de: 'Rückgängig' },
   loadError: {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',

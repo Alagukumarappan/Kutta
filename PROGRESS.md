@@ -1,8 +1,101 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 4 (original-spec fast-follow items), Iteration: 26
-- Latest completed improvement (iteration 26, one commit): Phase 4 item 4
+- Phase: 4 (original-spec fast-follow items), Iteration: 27
+- Latest completed improvement (iteration 27, one commit): Phase 4 item 4's
+  remaining flood-fill sub-item — a single-level "undo last flood fill".
+  Iteration 26 deliberately left this open, unsure whether even one level
+  of undo was small enough for one iteration (a full undo/redo history
+  stack over Skia's `Uint8ClampedArray` pixel buffers clearly would NOT
+  be). This iteration read `handleCanvasTap`'s full pixel-buffer flow in
+  `src/coloring/ColoringScreen.tsx` and `floodFill`'s implementation in
+  `src/coloring/floodFill.ts` before deciding: `floodFill` already does
+  `const result = pixels.slice()` as its very first line and only ever
+  mutates `result`, never its input — so the pre-fill `pixels` buffer
+  sitting in `pixelsRef.current` right before a new fill is untouched and
+  free to hold onto. That means a single-level undo needs **zero extra
+  buffer allocation**: just a ref capturing the existing `{ pixels,
+  filledImage }` pair (a pointer copy) right before each fill, restored on
+  one Undo press and then cleared. This is exactly the "genuinely small"
+  case per this iteration's brief, so it was implemented (the profile-
+  picture Phase 4 item 5 fallback was NOT needed this iteration).
+  - **Implementation**: a new `filledImageRef` (mirroring the file's
+    existing `imageRef`/`pixelsRef` ref-mirroring pattern for values read
+    inside the stable `PanResponder` handlers/`handleCanvasTap`) plus a
+    plain `previousFillRef` holding at most one `{ pixels, filledImage }`
+    snapshot (not state — refs don't need to trigger renders themselves)
+    and a `canUndoFill` boolean **state** purely to drive the Undo
+    button's visibility. `handleCanvasTap` captures
+    `previousFillRef.current = { pixels, filledImage: filledImageRef.current }`
+    using the pre-fill closure variables, strictly before `setPixels`/
+    `setFilledImage` run. `handleUndoFill` restores both, then nulls the
+    ref and flips `canUndoFill` false — one use only, no re-use without a
+    fresh fill in between. The existing `[image]`-keyed `useEffect` that
+    already resets `pixels`/`filledImage`/`strokes` on a new photo load
+    now also resets `previousFillRef`/`canUndoFill`, so undo can never
+    reach across photos.
+  - **No confirmation dialog** (unlike `clear-drawing`'s `Alert.alert`
+    flow, kept from iteration 26): reverting one fill is cheap and
+    trivially redoable (tap fill again), unlike wiping every pen stroke,
+    so gating it behind a confirmation would just be friction for a 2-8
+    year old, not a real safety need. Confirmed both flows are fully
+    independent code paths — `handleUndoFill` never touches `strokes`,
+    and the `Alert.alert` clear-drawing flow never touches
+    `pixels`/`filledImage`/`previousFillRef`.
+  - **UI**: a new `undo-fill` `Pressable` (↩️ + localized "Undo" text),
+    rendered only when `canUndoFill` is true, styled byte-for-byte
+    consistent with the sibling `clear-drawing`/`tool-fill`/`tool-pen`
+    buttons in the same toolbar row (same padding/border/radius
+    convention, no dedicated hitSlop needed — matches those existing
+    siblings' established convention rather than introducing a new one).
+  - **New EN+DE i18n key** (`src/i18n/strings.ts`, same commit):
+    `undoFill: { en: 'Undo', de: 'Rückgängig' }` — "Rückgängig" is the
+    standard, natural German word for "Undo" (matches OS/app
+    conventions), not a literal/awkward translation.
+  - **Memory**: bounded to at most ONE extra pixel-buffer snapshot alive
+    at a time — `previousFillRef` is a single object slot overwritten on
+    each new fill (the old snapshot, if any, becomes unreferenced and
+    eligible for GC), never appended to a list/stack.
+  - Baseline before this iteration: tsc clean, 26/26 suites, 232/232 tests.
+  - After this iteration: tsc clean, 26/26 suites, **238/238 tests** (+6
+    new, all in a new `describe('undo last flood fill', ...)` block in
+    `__tests__/coloring/ColoringScreen.test.tsx`: no Undo button before any
+    fill; a pen stroke alone does NOT reveal the Undo-fill button
+    (confirming independence from `clear-drawing`); a flood-fill tap
+    reveals Undo and pressing it hides the button again; undo restores via
+    the stored snapshot rather than recomputing a new fill (asserted by
+    `Skia.Image.MakeImage`'s mock call count staying at 1 across the
+    undo — `MakeImage` is only ever invoked inside `handleCanvasTap`, never
+    inside `handleUndoFill`, so a regression that reimplemented undo via
+    recomputation would be caught); a later fill re-arms a fresh
+    single-level undo; German localization. The existing Skia mock's
+    `readPixels` was extended with an opt-in `mockPixelState.shouldReturnPixels`
+    flag (default `false`, preserving every pre-existing test's original
+    behavior unchanged) so these new tests can exercise the real
+    `handleCanvasTap`/`floodFill` path with an actual 10x10 white RGBA
+    buffer instead of the pre-existing tests' `null` pixels. No existing
+    test modified, weakened, skipped, or renamed.
+  - A code-review subagent independently reviewed the diff: confirmed the
+    pre-fill capture happens strictly before `setPixels`/`setFilledImage`
+    reassign anything and uses the pre-fill closure variables (not the
+    post-fill `updated` buffer); confirmed `floodFill` never mutates its
+    input (`pixels.slice()` as its first line) so holding the old
+    reference is safe; confirmed the `[image]`-keyed reset effect clears
+    the undo snapshot on every new photo; confirmed `handleUndoFill` and
+    the `Alert.alert` clear-drawing flow are fully independent code paths
+    touching disjoint state; confirmed the memory bound (one slot,
+    overwritten not appended); confirmed EN+DE correctness and natural
+    German wording; confirmed accessibility/styling is byte-for-byte
+    consistent with the sibling toolbar buttons; confirmed the new tests
+    are non-tautological (specifically validating the `MakeImage`
+    call-count technique as a real, meaningful "restored vs. recomputed"
+    signal); and confirmed no hard-limit violations (no new deps, no new
+    `ts-ignore`/unsafe casts, no native/config files touched, only
+    `ColoringScreen.tsx`/its test file/`strings.ts` changed). Approved
+    with no required or optional changes.
+  - Commit: `<see git log — loop: add a single-level undo for the last
+    flood fill>`.
+- Previous iteration's completed improvement (iteration 26, one commit): Phase 4 item 4
   — coloring usability's confirmation-before-destructive-clear gap. Read
   `src/coloring/ColoringScreen.tsx` fully: the `clear-drawing` button
   (rendered only when `strokes.length > 0`) wiped every pen stroke with a
@@ -1853,35 +1946,41 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-**Iteration 27 priority**: iteration 26 closed the highest-value slice of
-Phase 4 item 4 (clear-drawing confirmation — see Current Status for full
-detail) but deliberately left two smaller sub-items open, per the brief's
-own "scope down if too large" guidance:
-1. **Flood-fill mis-tap risk (no code change made yet)** — a mis-tap in
-   'fill' mode instantly flood-fills a whole region with the selected
-   color and there is currently NO undo for this at all (only pen strokes
-   have the new clear-with-confirmation flow; flood fills are baked
-   straight into `pixels`/`filledImage` state with no history). This is
-   a genuinely open gap, but building real fill-undo needs at least a
-   one-entry "previous pixel buffer" snapshot restored on tap (Skia
-   `Uint8ClampedArray` buffers are large — a full multi-step undo stack
-   is likely NOT a small addition, but a **single-level "undo last fill"**
-   snapshot might be: worth scoping carefully next iteration by reading
-   `handleCanvasTap`'s current `pixels`/`filledImage` flow before deciding
-   whether even one level is safely small, or whether this should stay
-   deferred to a dedicated "undo/redo" feature iteration instead of being
-   forced into a "just add a click" fix.
-2. **Friendly empty-state check** — this iteration did NOT re-verify the
-   `Next` section's other open question (what the canvas shows before any
-   tool is used) beyond what iteration 25 already implied; a quick look at
+**Iteration 28 priority**: iteration 27 closed the flood-fill undo slice of
+Phase 4 item 4 (see Current Status for full detail — a single-level "undo
+last fill" via a cheap ref snapshot, since `floodFill` already never
+mutates its input). That leaves one small sub-item still open from
+iteration 26's list, plus the existing Phase 4 item 5 fallback:
+1. **Friendly empty-state check (still not re-verified explicitly)** —
+   carried forward unchanged from iteration 26: a quick look at
    `ColoringScreen.tsx`'s render logic suggests the source photo itself is
    always visible immediately once loaded (no blank/empty canvas state
    exists at all — `displayImage = filledImage ?? image`), so there is
    likely nothing to fix here, but this should be confirmed explicitly
-   (not just inferred) before closing out item 4 for good.
-If neither of the above turns out fruitful/safely scoped, fall through to
-Phase 4 item 5 (optional child profile picture) per the existing fallback
-ordering below.
+   (not just inferred) before closing out item 4 for good. This is a
+   quick check, not a full iteration's worth of work on its own — pair it
+   with something else or fall through quickly if it's a non-issue.
+2. **Phase 4 item 5 (optional child profile picture)** — the next real
+   fallback if item 4 is now fully closed out. This is a bigger feature;
+   read `src/storage/profileStore.ts` (the current profile persistence
+   module — see the Pure-Logic Module Inventory below) and
+   `SettingsScreen.tsx`/`OnboardingScreen.tsx`'s existing folder-picker
+   patterns before scoping anything. Only build a full picker+display flow
+   if it safely fits in one iteration; otherwise a safe first slice is a
+   purely additive, optional `pictureUri` field on the profile data type,
+   persisted via the existing store with a test for graceful fallback when
+   the file is missing — deliberately with NO UI wiring yet if a picker
+   can't also be finished in the same pass, since a picker with nothing to
+   set would look broken. No camera access, no cloud/network upload —
+   local file only, matching this app's offline-first/no-tracking
+   constraints.
+
+Iteration 27 closed out the flood-fill-undo slice of Phase 4 item 4 — see
+Current Status for full detail (one commit, single-level undo, no
+confirmation dialog needed since it's cheap/reversible unlike
+clear-drawing). It should not be re-treaded without new evidence (e.g. a
+real device review surfacing a specific problem with the new Undo
+button's sizing/wording, or a request for multi-level undo).
 
 Iteration 26 closed out the `clear-drawing` confirmation slice of Phase 4
 item 4 (coloring usability) — see Current Status for full detail. It
@@ -2107,6 +2206,27 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 27's flood-fill Undo button** (new toolbar button, new toolbar
+  row layout — source-verified but never seen rendered on a real device by
+  this loop):
+  - **Screen**: Coloring (`undo-fill` testID button, same toolbar row as
+    "Fill"/"Pen"/"Clear drawing" above the palette strip — only visible
+    right after a flood-fill tap, and only until used once or a new photo
+    loads).
+  - **Expected behavior**: with the Fill tool active (the default), tap
+    inside the photo to flood-fill a region. An "↩️ Undo" button should
+    appear in the toolbar row. Tapping it should instantly revert that
+    fill (the photo/previous coloring state reappears) and the Undo button
+    should disappear again — a single use, not repeatable without another
+    fill first. Confirm the toolbar row doesn't wrap/overflow oddly with
+    up to 4 buttons visible at once (Fill, Pen, Undo, Clear drawing all
+    showing together, e.g. after both a fill and a pen stroke) — this is a
+    plausible-from-source but real-device-unverified layout combination.
+  - **EN+DE check**: switch to German and repeat — the button should read
+    "↩️ Rückgängig".
+  - **Ages affected**: all ages 2-8 using the coloring screen's fill tool
+    — recovers from an accidental mis-tap flood-fill, the gap iteration 26
+    flagged as still open for this age range.
 - **Iteration 26's clear-drawing confirmation dialog** (new interaction —
   a native `Alert.alert` dialog, source-verified but never seen rendered
   on a real device by this loop):

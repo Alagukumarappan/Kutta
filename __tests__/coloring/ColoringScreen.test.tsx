@@ -11,10 +11,21 @@ import * as FileSystem from 'expo-file-system/legacy';
 // ColoringScreen's load/decode effect to run to completion, without trying
 // to exercise real flood-fill/rendering (that's covered separately by
 // __tests__/coloring/floodFill.test.ts's pure-logic tests).
+// A real 10x10 all-white RGBA buffer, used by the flood-fill/undo tests
+// below so `handleCanvasTap`'s `if (!image || !pixels) return` guard
+// doesn't short-circuit before floodFill ever runs. Left `false` by default
+// so every pre-existing test (none of which cares about pixel data) keeps
+// its original behavior of `readPixels` resolving to `null`.
+const mockPixelState = { shouldReturnPixels: false };
+const WHITE_10X10 = new Uint8Array(10 * 10 * 4).fill(255);
+
 const mockDecodedImage = {
   width: () => 10,
   height: () => 10,
-  readPixels: () => null,
+  readPixels: () =>
+    mockPixelState.shouldReturnPixels
+      ? { buffer: WHITE_10X10.buffer, byteOffset: 0, byteLength: WHITE_10X10.byteLength }
+      : null,
 };
 
 const mockDecodeState = { shouldSucceed: true };
@@ -55,6 +66,7 @@ describe('ColoringScreen', () => {
     // throwing mid-test) can never leak into the next test's call count.
     (FileSystem.readAsStringAsync as jest.Mock).mockReset();
     mockDecodeState.shouldSucceed = true;
+    mockPixelState.shouldReturnPixels = false;
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -86,6 +98,18 @@ describe('ColoringScreen', () => {
     await fireEvent(touchArea, 'responderRelease', {
       touchHistory: fakeTouchHistory,
       nativeEvent: { locationX: 20, locationY: 20 },
+    });
+  }
+
+  // Performs a flood-fill tap: the default `toolMode` is already 'fill', so
+  // unlike `drawOnePenStroke` above this only needs the release event (fill
+  // mode acts on release, not on grant/move — see
+  // `onPanResponderRelease`'s `toolModeRef.current === 'pen'` branch).
+  async function fireFillTap(getByTestId: (id: string) => any, x = 5, y = 5) {
+    const touchArea = getByTestId('coloring-canvas-touch-area');
+    await fireEvent(touchArea, 'responderRelease', {
+      touchHistory: fakeTouchHistory,
+      nativeEvent: { locationX: x, locationY: y },
     });
   }
 
@@ -350,6 +374,120 @@ describe('ColoringScreen', () => {
       const alertSpy = Alert.alert as jest.Mock;
       const [, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
       expect(buttons.map((b: { text: string }) => b.text)).toEqual(['Abbrechen', 'Löschen']);
+    });
+  });
+
+  describe('undo last flood fill', () => {
+    it('shows no Undo button before any fill has happened', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      expect(queryByTestId('undo-fill')).toBeNull();
+    });
+
+    it('does not show an Undo button for pen strokes — only flood fills are undoable this way', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      await drawOnePenStroke(getByTestId);
+      // A pen stroke reveals clear-drawing but must not reveal undo-fill —
+      // the two are independent mechanisms over independent state.
+      expect(await findByTestId('clear-drawing')).toBeTruthy();
+      expect(queryByTestId('undo-fill')).toBeNull();
+    });
+
+    it('reveals an Undo button after a flood-fill tap, and pressing it hides the button again', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      expect(queryByTestId('undo-fill')).toBeNull();
+      await fireFillTap(getByTestId);
+      const undoButton = await findByTestId('undo-fill');
+
+      await fireEvent.press(undoButton);
+
+      expect(queryByTestId('undo-fill')).toBeNull();
+    });
+
+    it('restores the pre-fill image by reusing the stored snapshot, not by recomputing a new fill', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      await fireFillTap(getByTestId);
+      expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
+
+      await fireEvent.press(await findByTestId('undo-fill'));
+      // Undo restores the previously-held image reference directly; it must
+      // NOT call MakeImage again (that would mean it recomputed/regenerated
+      // an image rather than cheaply restoring the one snapshot taken right
+      // before the fill).
+      expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-arms for a fresh single-level undo after a later fill', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      await fireFillTap(getByTestId);
+      await fireEvent.press(await findByTestId('undo-fill'));
+      expect(queryByTestId('undo-fill')).toBeNull();
+
+      await fireFillTap(getByTestId);
+      expect(await findByTestId('undo-fill')).toBeTruthy();
+      expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(2);
+    });
+
+    it('labels the Undo button in German', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+
+      const { findByTestId, getByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="de">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      await fireFillTap(getByTestId);
+
+      await findByLabelText('Rückgängig');
     });
   });
 });
