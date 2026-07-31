@@ -1,19 +1,22 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 1
-- Latest completed improvement: added 2 missing edge-case tests for `floodFill`'s
-  "tapped pixel already matches fill color" early-return path (no production
-  code changed — pre-existing behavior was already correct, just untested).
-- Test status: 21/21 suites passing, 139/139 tests passing (was 137/137 before
-  this iteration's added tests).
+- Phase: 1 (baseline verification + inventory), Iteration: 2
+- Latest completed improvement: added a new test file
+  `__tests__/storage/folderPathDisplay.test.ts` covering `toReadableFolderPath`
+  (previously zero test coverage). No production code changed — all 7 new
+  tests passed against the existing implementation unmodified on first run
+  (confirms the module's parsing/fallback logic is already correct).
+- Test status: 22/22 suites passing, 146/146 tests passing (was 21/21 suites,
+  139/139 tests before this iteration's added tests).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
-  Ran `source ~/.sdkman/bin/sdkman-init.sh && sdk env` at the start of this
-  session to switch to 17 for this shell only — no global Java config changed.
-  Future iterations should do the same before any Android-build-related work
-  (not needed for `tsc`/`jest`, which run fine under either JDK).
+  This iteration did not touch Android/Gradle so `sdk env` was not needed
+  (`sdk` shell function isn't loaded by default — iteration 1 sourced
+  `~/.sdkman/bin/sdkman-init.sh` first). Future iterations should do the same
+  before any Android-build-related work (not needed for `tsc`/`jest`, which
+  run fine under either JDK).
 
 ## Completed
 1. **Baseline verification** (no code changes): confirmed `npx tsc --noEmit`
@@ -40,6 +43,35 @@
      be cheap no-ops, not a full grid traversal).
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add floodFill early-return edge-case tests`.
+4. **loop: add folderPathDisplay coverage** (iteration 2)
+   - Files: `__tests__/storage/folderPathDisplay.test.ts` (new file,
+     test-only change; no production code modified)
+   - Tests added (7 total) for `toReadableFolderPath` in
+     `src/storage/folderPathDisplay.ts`:
+     - primary volume happy path → "Internal storage / Kutta / Content"
+     - non-primary volume (SD card id) passthrough as-is (not relabeled)
+     - malformed percent-encoding (`decodeURIComponent` throws) → falls back
+       to the raw, un-decoded input string
+     - no `/tree/` marker present at all *and* no volume colon either →
+       still produces a readable, slash-joined path from the whole string
+     - path after the volume colon is empty → shows just the volume label
+       ("Internal storage") with no trailing separator
+     - fully empty input string → returns the empty string unchanged
+       (documents the "no usable segments" fallback branch)
+     - accidental doubled slashes in the encoded path collapse to single
+       " / " separators (the `.filter(Boolean)` on split segments)
+   - All 7 tests passed on first run against the unmodified implementation —
+     manually hand-traced each expected value against the function's actual
+     decode → tree-marker-split → colon-split → filter → join logic before
+     writing assertions, and a code-review subagent independently re-traced
+     all 7 and confirmed none were coincidentally passing for the wrong
+     reason. No bug found in `toReadableFolderPath`; this was pure coverage
+     addition for a previously fully-untested module.
+   - One review nit addressed: reworded a test description that overclaimed
+     it exercised colon-splitting when the example URI actually had no colon
+     at all (now says "...and no volume colon either").
+   - Commit: see `git log` on `overnight-improvements` branch, message
+     `loop: add folderPathDisplay coverage`.
 
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
@@ -56,25 +88,26 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/quiz/shuffle.ts` | Fisher-Yates shuffle | `__tests__/quiz/shuffle.test.ts` | empty array, single-element array, custom deterministic `rng` producing a known permutation |
 | `src/storage/folderAccess.ts` | SAF folder helpers: `leafNameOf`, `findChildUri`, `ensureContentStructure` | `__tests__/storage/folderAccess.test.ts` | `leafNameOf` with unencoded/partially-encoded URI, trailing slash, no slash at all |
 | `src/storage/folderMigration.ts` | Copy+verify+delete folder migration, `isSameOrNestedWithin` same/nested detection | `__tests__/storage/folderMigration.test.ts` | `isSameOrNestedWithin` with a volume-root URI ending exactly in `primary:` (boundary char logic at line 31-33); sibling folders with one name being a prefix of another (e.g. "Kutta" vs "KuttaBackup") — should NOT be treated as nested, verify a regression test exists for the boundary-char fix already documented in comments |
-| `src/storage/folderPathDisplay.ts` | SAF URI → human-readable path | none found — **no test file exists for this module** | malformed percent-encoding (`decodeURIComponent` throws — has a try/catch, worth a test); non-`primary` volume (SD card, e.g. `1234-5678:Path`); URI with no `/tree/` marker at all; empty path after volume marker |
+| `src/storage/folderPathDisplay.ts` | SAF URI → human-readable path | `__tests__/storage/folderPathDisplay.test.ts` (7 tests, added iteration 2) — covers primary/non-primary volumes, malformed encoding, missing `/tree/` marker, empty path after volume, fully empty input, doubled-slash collapsing | well covered now; could add a Windows-style/UNC-ish edge case if one is ever reported, but not a known real-world SAF shape |
 | `src/storage/profileStore.ts` | AsyncStorage get/save profile with JSON parse guard | `__tests__/storage/profileStore.test.ts` | corrupted/non-JSON stored value (should return `null`, not throw) — verify covered |
 | `src/types/*.ts` | Type-only, no runtime logic | n/a | n/a |
 | `src/i18n/strings.ts` | Bilingual string dictionary | `__tests__/i18n/strings.test.ts` | probably fine as-is; could check every key has both `en`/`de` present if not already asserted |
 
-**Highest-value gap identified:** `src/storage/folderPathDisplay.ts` has zero
-dedicated tests despite non-trivial parsing logic and multiple fallback paths
-(malformed encoding, missing `/tree/` marker, non-primary volumes). Recommend
-this as the iteration 2 focus.
+**Highest-value gap identified (resolved iteration 2):** `src/storage/folderPathDisplay.ts`
+had zero dedicated tests; now has 7 covering all documented fallback paths.
+No remaining zero-coverage pure-logic modules found in the inventory table
+above as of iteration 2.
 
 ## Next
-Iteration 2 priority: add a test file `__tests__/storage/folderPathDisplay.test.ts`
-covering `toReadableFolderPath` — primary volume happy path (already implied
-by the doc comment example), non-primary volume (SD card) label passthrough,
-malformed percent-encoding fallback, and missing-`/tree/`-marker fallback.
-This is a pure function with zero existing coverage — good, safe, isolated
-next step. If that module turns out already effectively covered indirectly
-elsewhere, fall back to the next inventory row (e.g. `quizSession.ts`
-zero-eligible-questions case, or `puzzleGrid.ts` insets-exceed-window case).
+Iteration 3 priority: pick the next-highest-value inventory gap since no
+module now has zero coverage — recommend `src/quiz/quizSession.ts`'s
+"fewer than 20 eligible questions" and "0 eligible questions" cases (session
+shorter than `SESSION_LENGTH`; empty array should mark `isFinished: true`
+immediately). Read `__tests__/quiz/quizSession.test.ts` first to confirm
+these aren't already covered before writing new tests — if they are, fall
+back to `src/puzzle/puzzleGrid.ts`'s "insets exceed window entirely" case or
+`src/storage/folderMigration.ts`'s "volume-root URI ending exactly in
+`primary:`" boundary case (both listed in the inventory table above).
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -108,6 +141,14 @@ None found that affect correctness. Notes:
   (no risk of behavior change since it's test-only), (c) small enough to
   fully verify in one iteration, and (d) relevant to real child-usability
   (repeated taps on an already-colored region should be fast/no-op).
+- Iteration 2: chose `folderPathDisplay.ts` per iteration 1's own
+  recommendation. Confirmed no bug exists (all 7 tests passed unmodified on
+  first run, independently re-verified by a code-review subagent) — this was
+  pure coverage addition, not a bugfix. This module matters for offline UX:
+  it's the only thing standing between a raw, scary-looking SAF content URI
+  and a readable path shown to parents in Settings/Onboarding, so its
+  fallback-on-any-parsing-surprise design (never throw, never show nothing)
+  is worth having pinned down by tests.
 
 ## BLOCKED
 None. No pre-existing uncommitted changes were found (`git status` was clean
@@ -126,14 +167,16 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
-- What changed: one test-only commit adding 2 new edge-case tests to
-  `floodFill.test.ts`. No production/runtime code changed. No UI changed.
-- What's valuable: PROGRESS.md now has a concrete pure-logic inventory table
-  future iterations can work through one row at a time instead of
-  re-discovering the module map from scratch.
-- What needs visual testing: nothing from this iteration.
-- Risks: none identified — this iteration was intentionally conservative
-  (baseline + inventory + one safe test addition).
+- What changed (iteration 2): one test-only commit adding a new 7-test file
+  `__tests__/storage/folderPathDisplay.test.ts` for `toReadableFolderPath`.
+  No production/runtime code changed. No UI changed.
+- What's valuable: closes the last zero-coverage row in the pure-logic
+  inventory table; confirms (with independent subagent review) that the
+  SAF-URI-to-readable-path logic shown in Settings/Onboarding has no hidden
+  bugs across its fallback paths (malformed encoding, missing marker,
+  non-primary volumes, empty segments).
+- What needs visual testing: nothing from this iteration (test-only).
+- Risks: none identified — intentionally conservative, test-only iteration.
 - Open questions for the developer: none blocking. Java version note: your
   default global `java -version` reports JDK 25; the project needs JDK 17 for
   Android/Gradle builds specifically, and `.sdkmanrc` + `sdk env` handles that
