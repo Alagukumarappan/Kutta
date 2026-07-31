@@ -12,3 +12,4 @@ export * from './RaisedCard';
 export * from './Buttons';
 export * from './CelebrationOverlay';
 export * from './EmptyStatePanel';
+export * from './LoadingPanel';

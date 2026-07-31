@@ -12,7 +12,16 @@ import {
   savePuzzleDifficulty,
   type PuzzleDifficulty,
 } from '../storage/puzzleDifficultyStore';
-import { colors, spacing, radii, elevation, getActivityPalette, RaisedCard, EmptyStatePanel } from '../design-system';
+import {
+  colors,
+  spacing,
+  radii,
+  elevation,
+  getActivityPalette,
+  RaisedCard,
+  EmptyStatePanel,
+  LoadingPanel,
+} from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
@@ -210,7 +219,13 @@ export function PuzzleGallery({
     );
   }
 
-  if (images === null) return <View testID="puzzle-gallery-loading" style={[styles.screen, insetStyle]} />;
+  if (images === null) {
+    return (
+      <View style={[styles.screen, insetStyle]}>
+        <LoadingPanel testID="puzzle-gallery-loading" color={PUZZLE_PALETTE.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.screen, insetStyle]}>

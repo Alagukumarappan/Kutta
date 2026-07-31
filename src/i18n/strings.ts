@@ -171,6 +171,7 @@ export const UI_STRINGS = {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
   },
+  galleryLoading: { en: 'Getting things ready...', de: 'Wird vorbereitet...' },
   // Generic Cancel label, deliberately separate from
   // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped
   // to their own specific confirmation flows) — this one backs the new

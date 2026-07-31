@@ -7,7 +7,16 @@ import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
 import { removeGalleryItems } from '../storage/galleryRemoval';
-import { colors, spacing, radii, elevation, getActivityPalette, EmptyStatePanel, RaisedCard } from '../design-system';
+import {
+  colors,
+  spacing,
+  radii,
+  elevation,
+  getActivityPalette,
+  EmptyStatePanel,
+  LoadingPanel,
+  RaisedCard,
+} from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const GALLERY_COLUMNS = 3;
@@ -174,7 +183,13 @@ export function ColoringGallery({
     );
   }
 
-  if (images === null) return <View testID="coloring-gallery-loading" style={[{ flex: 1 }, insetStyle]} />;
+  if (images === null) {
+    return (
+      <View style={[{ flex: 1 }, insetStyle]}>
+        <LoadingPanel testID="coloring-gallery-loading" color={accent.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.screen, insetStyle]}>

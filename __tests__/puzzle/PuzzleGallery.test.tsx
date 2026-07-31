@@ -36,6 +36,29 @@ describe('PuzzleGallery', () => {
     (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
+  // Regression test for the premium-polish pass: this gallery used to render
+  // a totally blank `<View />` (no spinner, no text) while its folder
+  // listing loaded. It must now show a real spinner instead.
+  it('shows a spinner (not a blank screen) while the folder is still loading', async () => {
+    let resolveListing!: (value: string[]) => void;
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => { resolveListing = resolve; })
+    );
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('puzzle-gallery-loading');
+    expect(await findByText('Getting things ready...')).toBeTruthy();
+
+    await act(async () => {
+      resolveListing([]);
+    });
+  });
+
   it('lists images from the pictures folder and calls onSelect when tapped', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/pictures/beach.jpg',

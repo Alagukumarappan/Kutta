@@ -17,6 +17,7 @@ import {
   RaisedCard,
   RaisedPrimaryButton,
   EmptyStatePanel,
+  LoadingPanel,
 } from '../design-system';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
@@ -186,7 +187,13 @@ export function VideoGallery({
     );
   }
 
-  if (videos === null) return <View testID="video-gallery-loading" style={insetStyle} />;
+  if (videos === null) {
+    return (
+      <View style={[styles.container, insetStyle]}>
+        <LoadingPanel testID="video-gallery-loading" color={palette.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, insetStyle]}>
