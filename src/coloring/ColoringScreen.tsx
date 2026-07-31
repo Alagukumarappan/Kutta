@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert } from 'react-native';
+import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -335,6 +335,105 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     })
   ).current;
 
+  // --- Palette swatch selection pop (this iteration) ---------------------
+  // The selected swatch's `scale: 1.12` used to be a plain, instantly-applied
+  // style value; this animates the transition instead, using the same
+  // lazily-created-and-cached-by-index Animated.Value Map the quiz's
+  // progress dots use (QuestionRenderer.tsx's dotScalesRef) rather than one
+  // fixed-size array, since this palette has grown over past iterations (now
+  // 17 colors) and a Map avoids over-allocating for a count that could grow
+  // again. Only the already-selected swatch's Animated.Value starts life at
+  // 1.12 (matching its already-selected resting state); every other swatch
+  // starts at the plain resting 1 — so mounting never animates anything, it
+  // only settles once a NEW selection actually happens below.
+  const swatchScalesRef = useRef<Map<number, Animated.Value>>(new Map());
+  function getSwatchScale(index: number, initiallySelected: boolean): Animated.Value {
+    let value = swatchScalesRef.current.get(index);
+    if (!value) {
+      value = new Animated.Value(initiallySelected ? 1.12 : 1);
+      swatchScalesRef.current.set(index, value);
+    }
+    return value;
+  }
+
+  // Tracks the previously-selected display color purely to detect a real
+  // selection CHANGE (not the initial mount) so the pop below can't fire on
+  // first render — mirrors QuestionRenderer's prevCurrentIndexRef for the
+  // progress dots.
+  const prevSelectedDisplayColorRef = useRef(selectedDisplayColor);
+  const activeSwatchAnimationsRef = useRef<Map<number, Animated.CompositeAnimation>>(new Map());
+
+  useEffect(() => {
+    const prevColor = prevSelectedDisplayColorRef.current;
+    prevSelectedDisplayColorRef.current = selectedDisplayColor;
+    if (prevColor === selectedDisplayColor) return;
+
+    function pop(index: number, toValue: number) {
+      const scale = getSwatchScale(index, false);
+      activeSwatchAnimationsRef.current.get(index)?.stop();
+      // Quick, light spring — same speed/bounciness as the quiz progress
+      // dots' pop — gentle enough for a 2-8 year old audience and brief
+      // enough not to delay picking the next color.
+      const animation = Animated.spring(scale, {
+        toValue,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 6,
+      });
+      activeSwatchAnimationsRef.current.set(index, animation);
+      animation.start();
+    }
+
+    const newIndex = PALETTE.findIndex((p) => p.display === selectedDisplayColor);
+    const prevIndex = PALETTE.findIndex((p) => p.display === prevColor);
+    if (newIndex >= 0) pop(newIndex, 1.12);
+    if (prevIndex >= 0) pop(prevIndex, 1);
+  }, [selectedDisplayColor]);
+
+  useEffect(() => {
+    return () => {
+      activeSwatchAnimationsRef.current.forEach((animation) => animation.stop());
+    };
+  }, []);
+
+  // --- Toolbar button press feedback (this iteration) ---------------------
+  // Same lightweight "press-in scale-down, spring back on release" language
+  // as Home's cards / the quiz's answer options (see HomeScreen.tsx's
+  // cardScales/animateCard), adapted to these smaller toolbar buttons. Kept
+  // as one fixed Animated.Value per button key (created once via useRef,
+  // like HomeScreen's cardScales keyed by testID) rather than a Map, since
+  // the toolbar only ever has these 4 known buttons — Undo/Clear drawing
+  // simply keep an idle, unused Animated.Value while not rendered, which
+  // costs nothing.
+  const toolbarScales = useRef({
+    'tool-fill': new Animated.Value(1),
+    'tool-pen': new Animated.Value(1),
+    'undo-fill': new Animated.Value(1),
+    'clear-drawing': new Animated.Value(1),
+  }).current;
+  type ToolbarButtonKey = keyof typeof toolbarScales;
+  const activeToolbarAnimationsRef = useRef<Partial<Record<ToolbarButtonKey, Animated.CompositeAnimation>>>({});
+
+  function animateToolbarButton(key: ToolbarButtonKey, toValue: number) {
+    // Native-driven, no-overshoot spring — only ever touches `transform`,
+    // so it can't affect this footer's layout/screen-fit (see the
+    // "toolbar row screen-fit" note above).
+    const animation = Animated.spring(toolbarScales[key], {
+      toValue,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 0,
+    });
+    activeToolbarAnimationsRef.current[key] = animation;
+    animation.start();
+  }
+
+  useEffect(() => {
+    return () => {
+      Object.values(activeToolbarAnimationsRef.current).forEach((animation) => animation?.stop());
+    };
+  }, []);
+
   const displayImage = filledImage ?? image;
 
   return (
@@ -448,51 +547,76 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           <Pressable
             testID="tool-fill"
             onPress={() => setToolMode('fill')}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingVertical: spacing.xs,
-              paddingHorizontal: spacing.md,
-              borderRadius: radii.md,
-              backgroundColor: toolMode === 'fill' ? colors.sky : colors.white,
-              borderWidth: 2,
-              borderColor: toolMode === 'fill' ? colors.skyDark : colors.disabledBorder,
-            }}
+            onPressIn={() => animateToolbarButton('tool-fill', 0.94)}
+            onPressOut={() => animateToolbarButton('tool-fill', 1)}
           >
-            <Text style={{ color: colors.ink, fontWeight: '600' }}>{'\u{1FAA3} '}{t('toolFill')}</Text>
+            {/* This inner Animated.View ("button face") is what presses down —
+                the outer Pressable's own layout box/hit area never changes,
+                the same separation HomeScreen's cardFace/Pressable split
+                uses. */}
+            <Animated.View
+              testID="tool-fill-face"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: spacing.xs,
+                paddingHorizontal: spacing.md,
+                borderRadius: radii.md,
+                backgroundColor: toolMode === 'fill' ? colors.sky : colors.white,
+                borderWidth: 2,
+                borderColor: toolMode === 'fill' ? colors.skyDark : colors.disabledBorder,
+                transform: [{ scale: toolbarScales['tool-fill'] }],
+              }}
+            >
+              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'\u{1FAA3} '}{t('toolFill')}</Text>
+            </Animated.View>
           </Pressable>
           <Pressable
             testID="tool-pen"
             onPress={() => setToolMode('pen')}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingVertical: spacing.xs,
-              paddingHorizontal: spacing.md,
-              borderRadius: radii.md,
-              backgroundColor: toolMode === 'pen' ? colors.sky : colors.white,
-              borderWidth: 2,
-              borderColor: toolMode === 'pen' ? colors.skyDark : colors.disabledBorder,
-            }}
+            onPressIn={() => animateToolbarButton('tool-pen', 0.94)}
+            onPressOut={() => animateToolbarButton('tool-pen', 1)}
           >
-            <Text style={{ color: colors.ink, fontWeight: '600' }}>{'✏️ '}{t('toolPen')}</Text>
+            <Animated.View
+              testID="tool-pen-face"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: spacing.xs,
+                paddingHorizontal: spacing.md,
+                borderRadius: radii.md,
+                backgroundColor: toolMode === 'pen' ? colors.sky : colors.white,
+                borderWidth: 2,
+                borderColor: toolMode === 'pen' ? colors.skyDark : colors.disabledBorder,
+                transform: [{ scale: toolbarScales['tool-pen'] }],
+              }}
+            >
+              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'✏️ '}{t('toolPen')}</Text>
+            </Animated.View>
           </Pressable>
           {canUndoFill && (
             <Pressable
               testID="undo-fill"
               onPress={handleUndoFill}
+              onPressIn={() => animateToolbarButton('undo-fill', 0.94)}
+              onPressOut={() => animateToolbarButton('undo-fill', 1)}
               accessibilityRole="button"
               accessibilityLabel={t('undoFill')}
-              style={{
-                paddingVertical: spacing.xs,
-                paddingHorizontal: spacing.md,
-                borderRadius: radii.md,
-                backgroundColor: colors.white,
-                borderWidth: 2,
-                borderColor: colors.disabledBorder,
-              }}
             >
-              <Text style={{ color: colors.ink, fontWeight: '600' }}>{'↩️ '}{t('undoFill')}</Text>
+              <Animated.View
+                testID="undo-fill-face"
+                style={{
+                  paddingVertical: spacing.xs,
+                  paddingHorizontal: spacing.md,
+                  borderRadius: radii.md,
+                  backgroundColor: colors.white,
+                  borderWidth: 2,
+                  borderColor: colors.disabledBorder,
+                  transform: [{ scale: toolbarScales['undo-fill'] }],
+                }}
+              >
+                <Text style={{ color: colors.ink, fontWeight: '600' }}>{'↩️ '}{t('undoFill')}</Text>
+              </Animated.View>
             </Pressable>
           )}
           {strokes.length > 0 && (
@@ -521,16 +645,23 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                   { cancelable: true }
                 )
               }
-              style={{
-                paddingVertical: spacing.xs,
-                paddingHorizontal: spacing.md,
-                borderRadius: radii.md,
-                backgroundColor: colors.white,
-                borderWidth: 2,
-                borderColor: colors.disabledBorder,
-              }}
+              onPressIn={() => animateToolbarButton('clear-drawing', 0.94)}
+              onPressOut={() => animateToolbarButton('clear-drawing', 1)}
             >
-              <Text style={{ color: colors.ink, fontWeight: '600' }}>{t('clearDrawing')}</Text>
+              <Animated.View
+                testID="clear-drawing-face"
+                style={{
+                  paddingVertical: spacing.xs,
+                  paddingHorizontal: spacing.md,
+                  borderRadius: radii.md,
+                  backgroundColor: colors.white,
+                  borderWidth: 2,
+                  borderColor: colors.disabledBorder,
+                  transform: [{ scale: toolbarScales['clear-drawing'] }],
+                }}
+              >
+                <Text style={{ color: colors.ink, fontWeight: '600' }}>{t('clearDrawing')}</Text>
+              </Animated.View>
             </Pressable>
           )}
         </View>
@@ -589,24 +720,38 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                 // hit zones — no overlap.
                 hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
                 style={{
-                  backgroundColor: paletteColor.display,
                   width: 44,
                   height: 44,
-                  // Fully circular (radius = half the side) rather than a
-                  // rounded square, matching the large circular swatches
-                  // used across children's coloring apps.
-                  borderRadius: 22,
                   marginRight: spacing.sm,
                   marginTop: spacing.xs,
                   marginBottom: spacing.xs,
-                  borderWidth: isSelected ? 3 : 1,
-                  borderColor: isSelected ? colors.ink : colors.disabledBorder,
-                  // Slight scale-up on the selected swatch, on top of the
-                  // existing border-ring change, so the "currently loaded"
-                  // color is unmistakable at a glance.
-                  transform: [{ scale: isSelected ? 1.12 : 1 }],
                 }}
-              />
+              >
+                {/* Inner Animated.View ("swatch face") carries the actual
+                    color/border and the animated selected-state scale — the
+                    outer Pressable above stays a fixed-size hit target so
+                    the scale pop never disturbs this row's layout, the same
+                    Pressable/inner-face split HomeScreen's cards use. */}
+                <Animated.View
+                  testID={`palette-color-${i}-swatch`}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    backgroundColor: paletteColor.display,
+                    // Fully circular (radius = half the side) rather than a
+                    // rounded square, matching the large circular swatches
+                    // used across children's coloring apps.
+                    borderRadius: 22,
+                    borderWidth: isSelected ? 3 : 1,
+                    borderColor: isSelected ? colors.ink : colors.disabledBorder,
+                    // Slight scale-up on the selected swatch, on top of the
+                    // existing border-ring change, so the "currently loaded"
+                    // color is unmistakable at a glance — now animated into
+                    // a light spring "pop" rather than snapping instantly.
+                    transform: [{ scale: getSwatchScale(i, isSelected) }],
+                  }}
+                />
+              </Pressable>
             );
           })}
         </ScrollView>
