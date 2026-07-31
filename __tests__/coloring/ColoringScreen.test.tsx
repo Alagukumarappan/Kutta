@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, AccessibilityInfo } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ColoringScreen } from '../../src/coloring/ColoringScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -719,6 +719,38 @@ describe('ColoringScreen', () => {
       expect(toValues).toContain(1); // previously-selected Red settles back
 
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this pop
+    // always sprang the newly-picked swatch up (and the previously-picked
+    // one back down), ignoring the OS reduce-motion setting — the same
+    // bouncy-pop category already fixed for the quiz's progress dots. With
+    // the setting on, both swatches should land directly on their resting
+    // scale with no spring in between.
+    it('skips the swatch-pop spring when the OS reduce-motion setting is on, landing both swatches directly on their resting scale', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const blueSwatch = await findByLabelText('Blue'); // PALETTE[4]
+      await fireEvent.press(blueSwatch);
+
+      const blueFlattened = StyleSheet.flatten((await findByTestId('palette-color-4-swatch')).props.style);
+      const blueScale = blueFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      const redFlattened = StyleSheet.flatten((await findByTestId('palette-color-0-swatch')).props.style);
+      const redScale = redFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+
+      expect(blueScale).toBeCloseTo(1.12);
+      expect(redScale).toBeCloseTo(1);
+
+      jest.restoreAllMocks();
     });
   });
 

@@ -24,6 +24,7 @@ import {
   touchTarget,
   getActivityPalette,
   RaisedPrimaryButton,
+  useReducedMotion,
 } from '../design-system';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -394,6 +395,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // progress dots.
   const prevSelectedDisplayColorRef = useRef(selectedDisplayColor);
   const activeSwatchAnimationsRef = useRef<Map<number, Animated.CompositeAnimation>>(new Map());
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const prevColor = prevSelectedDisplayColorRef.current;
@@ -403,6 +405,16 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     function pop(index: number, toValue: number) {
       const scale = getSwatchScale(index, false);
       activeSwatchAnimationsRef.current.get(index)?.stop();
+      // Same reduce-motion treatment as the quiz progress-dots' identical
+      // pop pattern (iteration 25): land directly on the resting scale
+      // instead of springing, since this is the exact bouncy/overshooting
+      // motion category the OS setting exists to suppress. The isSelected
+      // border/shadow swap below still conveys the selection change on its
+      // own.
+      if (reducedMotion) {
+        scale.setValue(toValue);
+        return;
+      }
       // Quick, light spring — same speed/bounciness as the quiz progress
       // dots' pop — gentle enough for a 2-8 year old audience and brief
       // enough not to delay picking the next color.
@@ -420,7 +432,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     const prevIndex = PALETTE.findIndex((p) => p.display === prevColor);
     if (newIndex >= 0) pop(newIndex, 1.12);
     if (prevIndex >= 0) pop(prevIndex, 1);
-  }, [selectedDisplayColor]);
+  }, [selectedDisplayColor, reducedMotion]);
 
   useEffect(() => {
     return () => {
