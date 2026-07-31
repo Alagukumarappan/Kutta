@@ -188,6 +188,23 @@ describe('groupPiecesIntoRows', () => {
     ]);
   });
 
+  it('puts the remainder into a shorter final row when the item count is not an exact multiple of `cols`', () => {
+    // Not a real user-reachable puzzle shape today (GRID_DIMENSIONS_LANDSCAPE's
+    // pieceCount/cols pairs are always exact multiples), but groupPiecesIntoRows
+    // is a general-purpose helper and every existing test above happens to use
+    // an exact multiple - this pins down the ragged-remainder branch of
+    // `items.slice(i, i + cols)` for any future non-exact caller.
+    expect(groupPiecesIntoRows([0, 1, 2, 3, 4, 5, 6], 3)).toEqual([
+      [0, 1, 2],
+      [3, 4, 5],
+      [6],
+    ]);
+  });
+
+  it('returns a single short row (not an empty extra row) when item count is less than `cols`', () => {
+    expect(groupPiecesIntoRows([0, 1], 3)).toEqual([[0, 1]]);
+  });
+
   it('never produces a row with more or fewer than `cols` items across all groups but the last', () => {
     for (const [length, cols] of [
       [4, 2],

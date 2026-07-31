@@ -1,21 +1,20 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 5
-- Latest completed improvement: added 1 test to
-  `__tests__/puzzle/puzzleGrid.test.ts` covering `shufflePieceOrder(2, rng)` —
-  confirms the output is ALWAYS `[1, 0]` for exactly 2 pieces regardless of
-  which of Fisher-Yates's two branches fires (rng >= 0.5 producing identity
-  that the guaranteed-non-identity fallback then swaps, vs. rng < 0.5
-  producing the swap directly). No production code changed — the new test
-  passed against the existing implementation unmodified on first run, and was
-  manually verified to fail for the right reason (temporarily removed the
-  `isIdentity` fallback-swap block in `shufflePieceOrder`, confirmed the
-  rng>=0.5 assertions failed as expected with `[0,1]` instead of `[1,0]`,
-  then restored the original file exactly — `git diff --stat` on the
-  production file showed no change afterward).
-- Test status: 22/22 suites passing, 150/150 tests passing (was 22/22 suites,
-  149/149 tests before this iteration's added test).
+- Phase: 1 (baseline verification + inventory), Iteration: 6
+- Latest completed improvement: added 2 tests to
+  `__tests__/puzzle/puzzleGrid.test.ts` covering `groupPiecesIntoRows` when
+  `items.length` is NOT an exact multiple of `cols` — a ragged final row
+  (7 items / cols=3 → `[[0,1,2],[3,4,5],[6]]`) and an input entirely shorter
+  than `cols` (2 items / cols=3 → `[[0,1]]`, not an empty extra row). Every
+  prior test in that describe block used an exact multiple. No production
+  code changed — verified via a temporary TDD revert (swapped the loop for a
+  `Math.floor(items.length / cols)`-bounded version that drops the
+  remainder, confirmed both new tests failed for the intended reason, then
+  restored the original file exactly; `git diff --stat` on the production
+  file showed no change afterward).
+- Test status: 22/22 suites passing, 152/152 tests passing (was 22/22 suites,
+  150/150 tests before this iteration's 2 added tests).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -185,6 +184,49 @@
    - Commit: see `git log` on `overnight-improvements` branch, message
      `loop: add shufflePieceOrder pieceCount=2 boundary coverage`.
 
+8. **loop: add groupPiecesIntoRows ragged-row boundary coverage** (iteration 6)
+   - Files: `__tests__/puzzle/puzzleGrid.test.ts` (test-only change; no
+     production code modified)
+   - Checked first: confirmed iteration 5's `Next` top recommendation
+     (`groupPiecesIntoRows` with `items.length` not evenly divisible by
+     `cols`) was genuinely uncovered — every existing test in the
+     `groupPiecesIntoRows` describe block (including the "never produces a
+     row with more or fewer than `cols` items" loop test) only exercises
+     exact multiples: `[4,2],[6,3],[6,2],[9,3],[12,4],[12,3]`.
+   - Tests added (2):
+     - "puts the remainder into a shorter final row when the item count is
+       not an exact multiple of `cols`" — 7 items, cols=3, expects
+       `[[0,1,2],[3,4,5],[6]]`, pinning down the ragged-remainder branch of
+       `items.slice(i, i + cols)`.
+     - "returns a single short row (not an empty extra row) when item count
+       is less than `cols`" — 2 items, cols=3, expects `[[0,1]]` (a single
+       short row, not an extra empty array or a dropped remainder).
+   - TDD-verified: temporarily replaced the loop in `groupPiecesIntoRows`
+     (`src/puzzle/puzzleGrid.ts`) with a `Math.floor(items.length /
+     cols)`-bounded version that drops any remainder — both new tests failed
+     for the intended reason (missing final row / empty result instead of a
+     short row). Restored the original production file exactly afterward;
+     `git diff --stat` confirmed zero production-code change remained. The
+     tests pass against the real, unmodified implementation — no bug found,
+     pure coverage addition.
+   - Note (documented, same pattern as iteration 5's `pieceCount === 2`
+     case): `groupPiecesIntoRows` is only ever called today with
+     `pieceCount`/`cols` pairs from `GRID_DIMENSIONS_LANDSCAPE`, which are
+     always exact multiples (4/2, 6/2or3, 9/3, 12/3or4) — so a ragged row is
+     not currently user-reachable in the live app. Still worth testing as
+     the general contract of a reusable, exported pure function, and cheap
+     regression insurance if a future non-square piece count is ever added.
+   - A code-review subagent independently re-verified both hand-computed
+     expected outputs against the loop's actual slice bounds, confirmed the
+     tests exercise genuinely new branches not covered by the existing
+     exact-multiple loop test, confirmed they'd catch a real regression
+     (e.g. an off-by-one or a remainder-dropping rewrite), and confirmed the
+     "not currently user-reachable" comment is accurate against
+     `GRID_DIMENSIONS_LANDSCAPE`. Approved with no required or optional
+     changes.
+   - Commit: see `git log` on `overnight-improvements` branch, message
+     `loop: add groupPiecesIntoRows ragged-row boundary coverage`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -193,7 +235,7 @@ Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 | `src/coloring/floodFill.ts` | Flood-fill fill algorithm on RGBA buffer | `__tests__/coloring/floodFill.test.ts` (6 tests after this iteration) | out-of-range `startX`/`startY` (negative or >= width/height) passed as the initial seed before the loop begins — currently only guarded inside the stack loop, not at entry; tolerance boundary (`tolerance` exactly matching a diff); 1x1 image; fully-filled image (no border) |
 | `src/coloring/base64.ts` | Dependency-free base64 decoder | `__tests__/coloring/base64.test.ts` | invalid/malformed base64 input (non-multiple-of-4 length without padding), empty string, whitespace-only input |
 | `src/coloring/palette.ts` | Static color palette data | none (pure data, no logic) | n/a — could add a smoke test asserting no duplicate `fill` values and valid RGBA ranges |
-| `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (32 tests as of iteration 5) — now covers `shufflePieceOrder(2, rng)` always returning `[1,0]` across both Fisher-Yates branches | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. Remaining real gap: `groupPiecesIntoRows` with `items.length` not evenly divisible by `cols` (every existing test uses an exact multiple of `cols`) |
+| `src/puzzle/puzzleGrid.ts` | Board sizing, grid dimensions, piece rects, row grouping, shuffle-with-guaranteed-non-identity | `__tests__/puzzle/puzzleGrid.test.ts` (34 tests as of iteration 6) — now also covers `groupPiecesIntoRows`'s ragged-final-row and shorter-than-`cols` cases | `computePuzzleBoardSize`'s "insets exceed window entirely" case assessed in iteration 4: judged equivalent in code-path terms to the existing "floors to the minimum size when the window is very small" test; not treated as a real gap. No further known gaps in this module as of iteration 6. |
 | `src/quiz/filterQuestions.ts` | Age-range filter | `__tests__/quiz/filterQuestions.test.ts` | already well covered (in-range, boundary-inclusive, empty-result) |
 | `src/quiz/loadQuestions.ts` | JSON parsing/validation of `questions.json`, image URI resolution | `__tests__/quiz/loadQuestions.test.ts` | duplicate option IDs (partially covered per `isValidQuestion`'s Set-size check — verify test exists); `minAge > maxAge` rejection; question with neither `text` nor `image`; option `text` present but missing one language key |
 | `src/quiz/quizSession.ts` | Session building (shuffle + slice to 20), score/finish state machine | `__tests__/quiz/quizSession.test.ts` (10 tests as of iteration 3) — now covers fewer-than-20-eligible, 0-eligible, already-finished no-op, and normal score/advance paths | well covered now; no further gaps identified in this module |
@@ -215,19 +257,18 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 6 priority: `src/puzzle/puzzleGrid.ts`'s `groupPiecesIntoRows` with
-`items.length` NOT evenly divisible by `cols` — every existing test in
-`__tests__/puzzle/puzzleGrid.test.ts` uses an exact multiple of `cols`
-(4/2, 6/3, 6/2, 9/3, 12/4, 12/3), so the final-shorter-row behavior of
-`items.slice(i, i + cols)` on a ragged remainder is currently unexercised.
-First read the existing `groupPiecesIntoRows` describe block to confirm this
-exact case isn't already covered (it doesn't appear to be, but re-verify
-before writing anything, per protocol). If it turns out to already be
-covered, fall back to (in priority order): `src/coloring/floodFill.ts`'s
-out-of-range seed / tolerance-boundary / 1x1-image cases,
-`src/coloring/base64.ts`'s malformed-input cases (non-multiple-of-4 length,
-empty string, whitespace-only), or `src/quiz/loadQuestions.ts`'s
-`minAge > maxAge` rejection and missing-both-text-and-image rejection.
+Iteration 7 priority: `src/coloring/floodFill.ts`'s out-of-range seed
+(negative or >= width/height `startX`/`startY` passed as the initial seed
+before the loop begins — currently only guarded inside the stack loop, not
+at entry), tolerance-boundary (`tolerance` exactly matching a diff), or
+1x1-image cases — first read `__tests__/coloring/floodFill.test.ts` in full
+to confirm none of these three are already covered (iteration 1 added
+early-return no-op/border-start coverage but did not appear to touch these
+three), then pick the first genuinely uncovered one. If all three turn out
+covered, fall back to (in priority order): `src/coloring/base64.ts`'s
+malformed-input cases (non-multiple-of-4 length, empty string,
+whitespace-only), or `src/quiz/loadQuestions.ts`'s `minAge > maxAge`
+rejection and missing-both-text-and-image rejection.
 
 ## Visual Review Required
 None this iteration — no UI or behavior changes were made, only test-file
@@ -315,17 +356,18 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
-- What changed (iteration 5): one test-only commit adding 1 test to
-  `__tests__/puzzle/puzzleGrid.test.ts` covering `shufflePieceOrder(2, rng)`
-  always returning `[1, 0]` regardless of which Fisher-Yates branch fires.
-  No production/runtime code changed. No UI changed.
-- What's valuable: pins down the guaranteed-non-identity fallback logic at
-  its tightest boundary condition (N=2, only 2 possible permutations); also
-  documents (Technical Decisions) that `pieceCount === 2` isn't currently a
-  real user-reachable puzzle difficulty (UI only offers 4/6/9/12) — flagged
-  as cheap future-proofing rather than covering live behavior.
+- What changed (iteration 6): one test-only commit adding 2 tests to
+  `__tests__/puzzle/puzzleGrid.test.ts` covering `groupPiecesIntoRows`'s
+  ragged-final-row behavior (item count not an exact multiple of `cols`) and
+  its shorter-than-`cols` single-row case. No production/runtime code
+  changed. No UI changed.
+- What's valuable: pins down the row-grouping helper's general slicing
+  contract beyond the exact-multiple shapes the live puzzle UI currently
+  uses; documents (Completed #8) that this exact ragged shape isn't
+  currently reachable via the real 4/6/9/12-piece UI, same caveat pattern as
+  iteration 5's `pieceCount === 2` shuffle test — cheap future-proofing.
 - What needs visual testing: nothing from this iteration (test-only, pure
-  shuffle-array logic, no rendered UI touched).
+  array-grouping logic, no rendered UI touched).
 - Risks: none identified — intentionally conservative, test-only iteration.
 - Open questions for the developer: none blocking. Java version note (still
   applies from earlier iterations): your default global `java -version`
