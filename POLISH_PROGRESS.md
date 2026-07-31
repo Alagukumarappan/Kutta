@@ -362,6 +362,31 @@ increased) around the completion transition, rather than a naive "spring
 never called" check that unrelated tilt-press animations would contaminate
 (527 total tests passing, up from 526).
 
+### Iteration 17 — Accessibility parity: LanguageSelector matches AgePicker
+**Screens:** Onboarding, Settings.
+**Problem:** Fresh-eyes audit of areas no prior iteration had touched.
+`LanguageSelector` mirrors `AgePicker`'s exact shared-modal shape (same
+directory, same doc-comment explicitly claiming to follow that pattern,
+same Onboarding/Settings usage) but never received AgePicker's own
+iteration-12 accessibility fix. The trigger field already had
+`accessibilityRole`/`accessibilityLabel`, but the modal-dismiss backdrop
+and both language options (English/Deutsch) had none at all — the same
+screen-reader dead end iteration 12 fixed elsewhere, left unfixed here by
+oversight.
+**Fix:** Added `accessibilityRole="button"` + a real label (new
+`languageModalCloseLabel` i18n key) + a `testID` to the previously
+untagged backdrop; `accessibilityRole="button"`, `accessibilityLabel`, and
+`accessibilityState={{selected}}` to each option. Deliberately did NOT
+route the option labels ("English"/"Deutsch") through `t()` — those are
+each language's own name for itself (an autonym), not translatable UI
+copy, and must stay invariant regardless of the app's current display
+language (unlike the AgePicker/puzzle-difficulty fixes, where the label
+content itself needed translating).
+**Tests:** Three new regression tests covering both options'
+role/label/selected-state, the backdrop's label, and confirming the
+backdrop label translates to German while the option labels correctly do
+not (530 total tests passing, up from 527).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -416,6 +441,7 @@ never called" check that unrelated tilt-press animations would contaminate
   moments (reduce-motion support added)
 - Video player (Retry double-tap guard added, for consistency)
 - Quiz (score-card pop-in now also respects reduce-motion)
+- LanguageSelector / Onboarding + Settings (accessibility semantics added)
 
 ## Remaining polish opportunities (not yet done)
 - `src/components/PieceCountPicker.tsx` is confirmed dead code — never
@@ -429,8 +455,21 @@ never called" check that unrelated tilt-press animations would contaminate
   line). Not touched this iteration since it does pass, but worth a look
   if the bubblegum hue itself ever shifts even slightly darker/lighter.
 - Coloring and Video galleries still lack `getItemLayout` (see iteration
-  9's Performance note) — feasible for both, just messier math than
-  Puzzle's clean fixed-px/fixed-column case.
+  9's Performance note). Investigated in iteration 17's planning and
+  deliberately NOT done: unlike Puzzle's true fixed-128px tiles, Video's row
+  height is only a `minHeight` around single-line text, and Coloring's tiles
+  are flex/aspectRatio-sized — under a large system font-scale accessibility
+  setting, real rendered height could exceed a hardcoded `getItemLayout`
+  value, causing scroll-position glitches. Forcing this "optimization"
+  would risk fighting this project's own accessibility goals for an
+  unmeasured performance gain on typically much smaller lists (few hundred
+  videos/colorings at most, vs. the "1000 images" puzzle scenario). Only
+  worth doing if actually measured to matter, and only with a genuinely
+  fixed row height.
+- `ColoringScreen.tsx`'s Fill/Pen tool-mode buttons have `accessibilityRole`
+  + label but no `accessibilityState={{selected: toolMode === 'fill'}}` —
+  same "which one is currently active" gap LanguageSelector/AgePicker had,
+  in a screen no iteration has touched yet. Small, safe next candidate.
 - Coloring has no completion celebration at all, unlike the other four
   activities — but genuinely has no natural "finished" signal to detect
   (fills/strokes are open-ended and re-doable indefinitely), so this needs
@@ -444,10 +483,14 @@ never called" check that unrelated tilt-press animations would contaminate
   confirm button inside `Alert.alert` for both Settings' "Reset everything"
   and every gallery's "Remove selected" isn't guarded against a double-tap
   on the Alert itself (RN never disables Alert buttons) — low priority.
-- OnboardingScreen's "saving" overlay is a full-screen dark scrim + spinner
-  + text — visually distinct from the new lighter gallery `LoadingPanel`;
-  worth a future pass to decide if that's intentional (blocking modal
-  overlay vs. in-place content loading) or should be unified.
+- Resolved (audit, no code change): OnboardingScreen's full-screen dark
+  "saving" overlay was flagged as possibly inconsistent with the lighter
+  gallery `LoadingPanel`. Investigated in iteration 17's planning —
+  intentional, not a bug: it blocks the ENTIRE screen during a critical
+  one-time async operation (creating folder structure + copying sample
+  content, which can take real seconds), preventing double-submission or
+  navigating away mid-write. Galleries load in-place because navigating
+  away mid-load there is harmless. Unifying the two would be a regression.
 - Home carousel: no "peek further" affordance beyond partial card
   visibility at the edge — could add a subtle fade/gradient hint.
 - Empty states already have a nice bounce (`EmptyStatePanel`) — check

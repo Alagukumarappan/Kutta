@@ -14,6 +14,7 @@ export const UI_STRINGS = {
   // quizAnswerOptionLabel/puzzlePieceSlotLabel above.
   ageOptionLabel: { en: '{age} years old', de: '{age} Jahre alt' },
   ageModalCloseLabel: { en: 'Close age picker', de: 'Altersauswahl schließen' },
+  languageModalCloseLabel: { en: 'Close language picker', de: 'Sprachauswahl schließen' },
   onboardingNameMissing: { en: 'Please enter a name', de: 'Bitte gib einen Namen ein' },
   onboardingAgeMissing: { en: 'Please select an age', de: 'Bitte wähle ein Alter aus' },
   onboardingFolderMissing: { en: 'Please choose a content folder', de: 'Bitte wähle einen Inhaltsordner' },
