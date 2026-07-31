@@ -233,6 +233,30 @@ choices) for every activity and asserts >=3:1 — this stays meaningful if
 individual accent hues change later, and would have caught the original
 bug directly (514 total tests passing, up from 513).
 
+### Iteration 11 — Fix a real double-tap bug that silently skips a quiz question
+**Screen:** Quiz.
+**Problem:** Bug-hunt pass across every screen's completion/advance actions.
+`handleNext` had NO re-entrancy guard, unlike every other completion action
+in the same file (`playAgainFiredRef`, `hasNavigatedHomeRef`) and unlike
+Settings' Save (iteration 6). Two rapid taps on "Next" — trivial for a
+child — fired `handleNext` twice with the same stale `selectedOptionId`
+closure before the first `setState` ever re-rendered. React applied both
+`answerCurrentQuestion()` updates back-to-back: the second one scored the
+*next* question (never shown to the child) using the *previous* question's
+answer, silently skipping a question and corrupting the score for the rest
+of the session.
+**Fix:** Added a `nextFiredRef` guard (same idiom as the file's existing
+refs), set at the top of `handleNext` and reset via a `useEffect` keyed on
+`state?.currentIndex` so a genuinely new question re-arms it. `handleRetry`
+is unaffected since it never touches this ref.
+**Verified as a real bug, not a hypothetical:** confirmed the new
+regression test genuinely fails (jumps straight to the finished screen,
+skipping question 2) without the fix before committing.
+**Tests:** New regression test double-tapping "Next" before the first
+answer's state update commits, asserting the second question still shows
+and the session isn't prematurely finished (515 total tests passing, up
+from 514).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -253,6 +277,9 @@ bug directly (514 total tests passing, up from 513).
 - White text on 3 of 5 Home activity cards (jade/marigold/sky) failed
   WCAG AA contrast badly (as low as 1.8:1 against a 3:1 minimum) — fixed
   in iteration 10.
+- Quiz's "Next" button had no rapid-double-tap protection, letting a
+  double-tap silently skip a question and mis-score it — fixed in
+  iteration 11.
 
 ## Performance improvements
 - Puzzle gallery's FlatList now has a correct `getItemLayout` for its
@@ -273,6 +300,7 @@ bug directly (514 total tests passing, up from 513).
 - Settings (Save button double-tap protection)
 - Video player (completion celebration added)
 - Home screen (card text contrast fixed for 3 of 5 activities)
+- Quiz (Next button double-tap/skip bug fixed)
 
 ## Remaining polish opportunities (not yet done)
 - White-on-bubblegum (Coloring card) is 3.04:1 — technically passes the
@@ -315,6 +343,17 @@ bug directly (514 total tests passing, up from 513).
 - Accessibility: check color-contrast and font-scaling behavior on the new
   design-system components under Android's large-font accessibility
   setting.
+- `AgePicker` (used in both Onboarding and Settings) has zero accessibility
+  semantics anywhere — the trigger, the modal-dismiss overlay, and all 7
+  age options have no `accessibilityRole`/`accessibilityLabel`/
+  `accessibilityState`, the same class of gap iterations 3-5 already fixed
+  elsewhere. Good candidate for a near-future iteration.
+- No screen calls `AccessibilityInfo.isReduceMotionEnabled` — every
+  spring/timing animation (celebration bubbles, score-card pop-in, progress
+  dots, tilt-press) ignores the OS reduced-motion setting entirely. Real
+  vestibular-safety gap, but touching it properly means auditing every
+  `Animated` call site across ~8 files — too broad for a single iteration;
+  flagged here rather than done partially.
 
 ## Visual review notes
 - The candy/aurora activity-accent system already gives every screen a

@@ -72,10 +72,23 @@ export function QuizScreen({
   // permanently leaves this screen instance.
   const playAgainFiredRef = useRef(false);
   const hasNavigatedHomeRef = useRef(false);
+  // Same guard idiom, but for the in-quiz "Next" button: without it, two
+  // taps landing before the first setState's re-render commits both fire
+  // handleNext with the SAME (stale) selectedOptionId closure, so React
+  // applies two answerCurrentQuestion() updates back-to-back — the second
+  // one scores the *next* question (which the child was never shown) using
+  // the *previous* question's answer, silently skipping a question and
+  // corrupting the score. Re-armed whenever the current question changes
+  // (a fresh question means a fresh Next press is legitimate).
+  const nextFiredRef = useRef(false);
 
   useEffect(() => {
     if (state?.isFinished) playAgainFiredRef.current = false;
   }, [state?.isFinished]);
+
+  useEffect(() => {
+    nextFiredRef.current = false;
+  }, [state?.currentIndex]);
 
   // Brief pop-in entrance for the completion screen's score card, mirroring
   // QuestionRenderer's own feedbackCard/cardScaleAnim+cardOpacityAnim recipe
@@ -264,7 +277,8 @@ export function QuizScreen({
   }
 
   function handleNext() {
-    if (selectedOptionId === null) return;
+    if (selectedOptionId === null || nextFiredRef.current) return;
+    nextFiredRef.current = true;
     setState((prev) => (prev ? answerCurrentQuestion(prev, selectedOptionId) : prev));
     setSelectedOptionId(null);
   }

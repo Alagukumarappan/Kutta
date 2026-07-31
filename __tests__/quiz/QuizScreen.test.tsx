@@ -1,6 +1,6 @@
 import React from 'react';
 import { Animated } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { QuizScreen } from '../../src/quiz/QuizScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as loadQuestionsModule from '../../src/quiz/loadQuestions';
@@ -71,6 +71,40 @@ describe('QuizScreen', () => {
     await fireEvent.press(getByTestId('quiz-next'));
 
     await waitFor(() => expect(getByText('Quiz done! Your score: 2 / 2')).toBeTruthy());
+  });
+
+  // Regression test for the premium-polish bug hunt: handleNext had no
+  // re-entrancy guard (every other completion action in this screen already
+  // has one). Two taps landing before the first setState's re-render commits
+  // both fired with the same stale selectedOptionId closure, so React
+  // applied two answerCurrentQuestion() updates from one tap — silently
+  // skipping q2 entirely and scoring it with q1's answer. Confirmed this
+  // fails (jumps straight to the finished screen) without the nextFiredRef
+  // guard in QuizScreen.tsx's handleNext.
+  it('guards Next against a rapid double-tap, advancing exactly one question per tap', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+    jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    const { findByText, getByText, getByTestId, queryByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText('2 + 2?');
+    await fireEvent.press(getByText('4'));
+    await findByText('Correct!');
+
+    const nextButton = getByTestId('quiz-next');
+    // Two rapid presses before the first setState's re-render ever commits —
+    // same "stale double-tap" shape as this codebase's other guard tests.
+    await act(async () => {
+      fireEvent.press(nextButton);
+      fireEvent.press(nextButton);
+    });
+
+    await findByText('1 + 1?');
+    expect(queryByText('Quiz done! Your score: 2 / 2')).toBeNull();
   });
 
   it('shows age-appropriate encouragement for a wrong answer but still advances and does not award a point', async () => {
