@@ -1,8 +1,119 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 1 (baseline verification + inventory), Iteration: 11
-- Latest completed improvement (iteration 11, one commit):
+- Phase: 1 (baseline verification + inventory), Iteration: 12
+- Latest completed improvements (iteration 12, two commits):
+  1. `VideoPlayerScreen`'s error-state audit (this iteration's primary task,
+     `Next` item 1 from iteration 11). Read `src/video/VideoPlayerScreen.tsx`
+     in full against the same 5-point checklist iteration 11 used: no stuck
+     spinner (no spinner state exists at all — it renders `VideoView`
+     immediately and lets the native player show its own loading UI), no
+     unhandled promise rejection (no promises in this file at all — the
+     player reports failure via a synchronous `statusChange` event listener,
+     not a rejected promise), no setState-after-unmount bug (the listener's
+     `subscription.remove()` cleanup already ran correctly on unmount), and
+     the error message was already friendly and localized
+     (`t('videoLoadError')`, never a raw `PlayerError`). But — exactly the
+     same pattern as iteration 11's `ColoringScreen` finding — `VideoGallery`
+     (the screen one level up, listing videos) already has a
+     `retryToken`-driven Retry button for the identical SAF-failure category
+     (SAF grant revoked / file deleted externally / SD card unmounted), while
+     `VideoPlayerScreen`'s error state was a dead end: no retry button, no
+     way to recover except navigating back out via the header. This is a
+     genuine, real gap, not manufactured — confirmed by re-reading
+     `VideoGallery.tsx`'s retry pattern and `RootNavigator.tsx`'s route wiring
+     (video-detail is shown with `headerShown: true`, same as every other
+     detail screen).
+     - Fix (TDD): wrote `__tests__/video/VideoPlayerScreen.test.tsx` (new
+       file, 4 tests — the screen's first-ever test coverage) first —
+       happy-path render, friendly-error-on-status-error (asserts the
+       localized message renders and no raw/technical text like "Exception"
+       leaks through), a retry-recovers test, and a setState-after-unmount
+       regression test. Confirmed the retry test failed for the right reason
+       first (`video-player-retry` testID didn't exist) before implementing.
+       `expo-video` "isn't mockable/transformable under this project's
+       (untouched) jest config" per `RootNavigator.test.tsx`'s own comment
+       (it touches real native prototypes at import time, so
+       `RootNavigator.test.tsx` stubs the whole screen out) — since this new
+       test file exists specifically to exercise `VideoPlayerScreen`'s own
+       load/error/retry logic, the mock boundary was placed one level lower
+       instead: a `jest.mock('expo-video', ...)` fakes only `useVideoPlayer`
+       and `VideoView` with a controllable in-memory player object that can
+       `emit('statusChange', ...)` for real, exercising the screen's actual
+       effect/listener/retry code rather than faking the behavior under test
+       (same principle iteration 11 used for its Skia mock). Status-changing
+       `emit()` calls are wrapped in `await act(async () => {...})` to avoid
+       introducing new act()-warning noise (a plain synchronous `act()`
+       didn't flush the update under this React/RN version — needed the
+       async form).
+     - Then implemented the fix in `src/video/VideoPlayerScreen.tsx`: added a
+       `handleRetry` callback and a `<Pressable testID="video-player-retry">`
+       button in the error branch, styled identically to
+       `ColoringScreen`'s/`QuizScreen`'s retry button
+       (`colors.coral`/`coralDark`, `radii.xl`, `...shadow`, `elevation: 4`,
+       from `../theme/tokens` — note the correct import path is
+       `theme/tokens`, not `theme`). Unlike the `retryToken`-bump pattern used
+       by every other screen (which re-runs a fetch/read *effect*),
+       `VideoPlayerScreen` has no effect to re-run — it holds one long-lived
+       `player` object for the screen's whole life. The equivalent recovery
+       action documented in a code comment: call `player.replace(videoUri)`
+       (the `expo-video` API's documented way to make a player re-attempt the
+       same source) followed by `player.play()`, and reset `error` to
+       `false` so a subsequent `statusChange` (success or failure) can drive
+       the UI again. No new dependency, no new i18n strings
+       (`videoLoadError` and `retry` both already existed in
+       `src/i18n/strings.ts` with en/de).
+     - Verified `npx tsc --noEmit` clean, full suite 24/24 suites and
+       165/165 tests passing (161 baseline + 4 new `VideoPlayerScreen`
+       tests). No existing test touched, skipped, or renamed.
+     - A code-review subagent independently reviewed the diff: confirmed
+       `player.replace`/`player.play` are synchronous, void-returning methods
+       per `node_modules/expo-video/build/VideoPlayer.types.d.ts` (no async
+       closure risk, no throw hazard), confirmed the listener
+       cleanup/dependency array are unchanged and still correct (no new
+       setState-after-unmount risk), confirmed the `expo-video` mock
+       genuinely exercises the real effect/listener/retry code rather than
+       faking it, confirmed no risky `any`/unsafe casts, confirmed the button
+       styling matches the established pattern exactly, and confirmed no
+       accessibility/child-safety/scope-creep issues. One optional
+       improvement suggested (assert `player.play` was actually called on
+       retry, not just implied indirectly) — applied before committing.
+       Approved.
+     - Commit: `a67d544` — `loop: add a retry action to VideoPlayerScreen's
+       playback-error state`.
+  2. Accessibility follow-up (this iteration's secondary task, `Next` item 3
+     from iteration 11): none of the app's retry buttons had an
+     `accessibilityLabel`, a pre-existing gap iteration 11's code-review
+     subagent flagged as optional. Added `accessibilityRole="button"` and
+     `accessibilityLabel={t('retry')}` to the three retry buttons iteration
+     11's note specifically named — `QuizScreen.tsx` (`quiz-retry`),
+     `ColoringGallery.tsx` (`coloring-gallery-retry`), and
+     `ColoringScreen.tsx` (`coloring-retry`). No new i18n strings needed —
+     reused the existing `retry` key (`en`: "Retry", `de`: "Erneut
+     versuchen"), which already had both languages and is exactly the right
+     accessible name for the action. Extended each screen's existing
+     retry-error test (not a new test file) with one `await
+     findByLabelText('Retry')` assertion each, confirming the label actually
+     renders and is queryable the way a screen reader would find it — this
+     is a real assertion, not a no-op, since `findByLabelText` fails if the
+     prop isn't wired up (hand-verified by checking it against the
+     unmodified files first mentally: the query targets
+     `accessibilityLabel`, a prop that did not exist before this change).
+     Deliberately did NOT touch `PuzzleGallery.tsx`, `VideoGallery.tsx`,
+     `RootNavigator.tsx`'s `FolderErrorScreen`, or the just-added
+     `VideoPlayerScreen` retry button in this pass — iteration 11's note
+     named exactly three screens, and expanding to all seven retry buttons
+     found in the codebase (see Technical Decisions) is left as a documented,
+     easy follow-up rather than silently bundled in. `tsc` clean, 24/24
+     suites, 165/165 tests unchanged (assertions were added to existing
+     tests, not new `it` blocks, so the count didn't change from item 1's
+     165). This was reviewed via self-review only (mechanical,
+     low-risk, single-prop-per-file change) rather than a fresh code-review
+     subagent pass, per the protocol's "equivalently rigorous self-review"
+     fallback for very small diffs.
+     - Commit: `78ea4c9` — `loop: add accessibilityLabel to the app's retry
+       buttons`.
+- Previous iteration's completed improvement (iteration 11, one commit):
   Phase 1 item 8 (error-state audit). Audited all three candidate screens'
   async content-loading paths (`QuizScreen`, `ColoringScreen`, `PuzzleScreen`)
   against the 5-point checklist (stuck spinner, unhandled rejection,
@@ -126,10 +237,12 @@
      the `loadQuestions.ts` ones (see Completed #12 below); investigated and
      deliberately deferred the `RootNavigator.tsx` ones (see Technical
      Decisions).
-- Test status: 23/23 suites passing, 161/161 tests passing (up from
-  22/22 suites, 156/156 tests — iteration 11 added a new
-  `__tests__/coloring/ColoringScreen.test.tsx` suite with 5 tests, the
-  screen's first-ever test coverage).
+- Test status: 24/24 suites passing, 165/165 tests passing (up from
+  23/23 suites, 161/161 tests — iteration 12 added a new
+  `__tests__/video/VideoPlayerScreen.test.tsx` suite with 4 tests, that
+  screen's first-ever test coverage; the accessibility follow-up added
+  assertions to 3 existing tests rather than new `it` blocks, so it didn't
+  change the count further).
 - tsc status: `npx tsc --noEmit` — clean, no errors.
 - Java: default `java -version` on this machine is JDK 25 (Temurin). Repo pins
   Java 17 via `.sdkmanrc` (`java=17.0.15-amzn`) for the Android/Gradle build.
@@ -597,6 +710,23 @@
     - Commit: see `git log` on `overnight-improvements` branch, message
       `loop: add a retry action to ColoringScreen's photo-load error state`.
 
+15. **loop: add a retry action to VideoPlayerScreen's playback-error state**
+    (iteration 12, `Next` item 1 from iteration 11)
+    - Files: `src/video/VideoPlayerScreen.tsx` (production code) and
+      `__tests__/video/VideoPlayerScreen.test.tsx` (new file, 4 tests)
+    - See the full write-up under Current Status above for the finding, TDD
+      trace, and code-review outcome — not duplicated here to avoid drift.
+    - Commit: `a67d544`.
+
+16. **loop: add accessibilityLabel to the app's retry buttons** (iteration 12,
+    `Next` item 3 from iteration 11)
+    - Files: `src/quiz/QuizScreen.tsx`, `src/coloring/ColoringGallery.tsx`,
+      `src/coloring/ColoringScreen.tsx` (production code, one prop pair each)
+      and their 3 existing test files (one new assertion each, no new `it`
+      blocks)
+    - See the full write-up under Current Status above.
+    - Commit: `78ea4c9`.
+
 ## Pure-Logic Module Inventory (for future iterations)
 Modules with pure/mostly-pure logic, current test coverage, and possible gaps:
 
@@ -627,49 +757,67 @@ gap is closed; the `primary:` boundary gap was already covered before this
 iteration).
 
 ## Next
-Iteration 12 priority: Phase 1 item 8 (error-state audit) is now done for all
-three candidate screens — `QuizScreen`/`PuzzleScreen` were confirmed clean,
-and `ColoringScreen`'s missing-retry gap was fixed with tests this iteration
-(see Completed #14). `RootNavigator.tsx` was already audited (iterations 9
-and 10). Remaining options, in priority order:
-1. **`VideoPlayerScreen`'s error-state audit** (not yet covered by the Phase 1
-   item 8 sweep — this iteration's audit only covered
-   Quiz/Coloring/Puzzle/RootNavigator per the task's named candidate list).
-   Check `src/video/VideoPlayerScreen.tsx` for the same 5-point
-   checklist: stuck spinner, unhandled rejection, setState-after-unmount,
-   raw technical error surfaced to the child, and racy/double-firing retry.
-   The i18n dictionary already has a `videoLoadError` string, suggesting an
-   error-state exists there too and is worth the same scrutiny/test-coverage
-   check the other screens just got.
+Iteration 13 priority: Phase 1 item 8 (error-state audit) is now done for
+every screen with an async content-loading path that was named across
+iterations 11-12 (`QuizScreen`, `PuzzleScreen`, `ColoringScreen`,
+`VideoPlayerScreen`, `RootNavigator`). Remaining options, in priority order:
+1. **Finish the accessibility-label pass on the remaining retry buttons.**
+   Iteration 12 added `accessibilityLabel`/`accessibilityRole="button"` to
+   only the 3 retry buttons iteration 11's note named
+   (`QuizScreen`/`ColoringGallery`/`ColoringScreen`). A full grep for
+   `testID="[a-z-]*retry"` under `src/` during iteration 12 turned up 4 more
+   that were deliberately left untouched to keep that pass minimal and
+   focused: `src/puzzle/PuzzleGallery.tsx` (`puzzle-gallery-retry`),
+   `src/video/VideoGallery.tsx` (`video-gallery-retry`),
+   `src/navigation/RootNavigator.tsx`'s `FolderErrorScreen`
+   (`folder-resolve-retry`), and this iteration's own new
+   `src/video/VideoPlayerScreen.tsx` (`video-player-retry`). Same one-line
+   fix each (`accessibilityRole="button"` + `accessibilityLabel={t('retry')}`,
+   reusing the existing `retry` i18n key — no new strings needed), same
+   `findByLabelText('Retry')` test-assertion pattern to extend each of their
+   existing retry tests with. Small, well-scoped, real screen-reader value.
 2. **Optional smaller follow-up (unchanged from iteration 10)**: the
    `navigation.navigate(...)` call sites in `RootNavigator.tsx` and
    `HomeScreen.tsx` remain untyped against `RootStackParamList` because
    React Navigation's `RouteConfigComponent` type declares that render-prop's
-   `navigation` argument as plain `any` — see Completed #13 and Technical
-   Decisions for the full trace. Closing this would need a custom-typed
-   wrapper around each render prop's `navigation` argument (e.g. casting
+   `navigation` argument as plain `any` regardless of the navigator's
+   generic — see Completed #13 and Technical Decisions for the full trace.
+   Closing this would need a custom-typed wrapper around each render prop's
+   `navigation` argument (e.g. casting
    `navigation as NativeStackNavigationProp<RootStackParamList, RouteName>`
    once per screen, or a small typed-navigate helper) — judged a separate,
    smaller-value piece of work, not bundled into any iteration so far to
    keep each diff minimal and focused.
-3. **Optional accessibility follow-up noticed this iteration**: none of the
-   three retry buttons in the app (`QuizScreen`, `ColoringGallery`, and now
-   `ColoringScreen`) have an `accessibilityLabel`/`accessibilityRole` —
-   flagged by this iteration's code-review subagent as a pre-existing,
-   consistent (not newly introduced) gap. A future iteration could add
-   `accessibilityRole="button"` and a localized `accessibilityLabel` to all
-   three at once for screen-reader support.
-4. If the above turn out unfruitful or too large to safely scope in one
-   iteration, move toward Phase 2 (accessibility/child-safety): the Phase 1
-   baseline, pure-logic inventory, TODO/lint-smell audit, and now the
-   error-state audit are all substantially covered.
+3. If the above turn out unfruitful or too large to safely scope in one
+   iteration, move toward Phase 2 (accessibility/child-safety) more broadly:
+   the Phase 1 baseline, pure-logic inventory, TODO/lint-smell audit, and now
+   the error-state audit (all 5 async-loading screens) are all substantially
+   covered.
 (The pre-existing, already-documented `PuzzleScreen.test.tsx` act() warning
 under BLOCKED below is a related but separate test-hygiene item, not itself
 part of the error-state audit.)
 
 ## Visual Review Required
-None this iteration — no UI or behavior changes were made, only test-file
-additions covering existing (unchanged) logic.
+- **`VideoPlayerScreen`'s new Retry button** (iteration 12): appears only
+  when `expo-video` reports a `statusChange` event with `status: 'error'`
+  (e.g. a corrupted/unsupported video file, or the SAF grant to the videos
+  folder being revoked mid-playback). Styled identically to the existing
+  `ColoringScreen`/`QuizScreen` retry buttons (coral background, dark-coral
+  border, rounded, drop shadow) but never rendered on a real device by this
+  iteration — no emulator/device available in this environment. Please check
+  on the Galaxy S22, in both English ("Retry" / "This video could not be
+  played.") and German ("Erneut versuchen" / "Dieses Video konnte nicht
+  abgespielt werden."), that: (a) the button is easy for a small child to tap
+  in landscape orientation, (b) tapping it actually resumes playback of a
+  real video file after a real transient failure (this iteration only
+  verified the retry *calls* `player.replace`/`player.play` correctly via a
+  mocked player — it could not verify real `expo-video` playback recovery
+  end-to-end, since `expo-video` itself isn't testable under this project's
+  Jest setup), and (c) the layout still respects the screen's safe-area
+  insets on a real notch/gesture-nav device.
+- No other UI changes this iteration (the accessibility-label addition is
+  invisible on-screen — `accessibilityLabel` only affects screen readers/
+  TalkBack, not visual layout).
 
 ## Documentation or Implementation Mismatches
 None found that affect correctness. Notes:
@@ -685,6 +833,28 @@ None found that affect correctness. Notes:
   with no device/emulator available in this environment.
 
 ## Technical Decisions
+- Iteration 12: chose `player.replace(videoUri)` + `player.play()` as
+  `VideoPlayerScreen`'s retry action instead of trying to force-mimic the
+  `retryToken`-bump pattern every other screen uses. That pattern works
+  because those screens' error state comes from a `useEffect` that runs a
+  fresh fetch/read on every dependency-array change; `VideoPlayerScreen`
+  doesn't have such an effect — `useVideoPlayer(videoUri, setup)` creates one
+  long-lived player object for the component's whole life, and bumping some
+  unrelated state wouldn't make it re-attempt loading. `replace()` is
+  `expo-video`'s own documented API for telling an existing player to
+  re-attempt a (possibly the same) source, so it's the direct semantic
+  equivalent of "try loading this again" for this specific API shape, not a
+  workaround.
+- Iteration 12: scoped the accessibility-label follow-up to exactly the 3
+  retry buttons iteration 11's note named, even though a repo-wide grep
+  during this iteration found 4 more retry buttons with the same gap
+  (`PuzzleGallery`, `VideoGallery`, `RootNavigator`'s `FolderErrorScreen`,
+  and this iteration's own new `VideoPlayerScreen` button). Judged that
+  silently expanding scope mid-iteration (even to fix "more of the same
+  thing") risks a larger, less-reviewable diff than intended, and iteration
+  11's note was specific about which three it meant. Documented the other 4
+  explicitly in `Next` above as a fast, well-scoped follow-up rather than
+  either quietly doing them all or quietly leaving them undocumented.
 - Did not fix the pre-existing React `act(...)` console warning in
   `__tests__/puzzle/PuzzleScreen.test.tsx` (triggered by an async image-size
   callback calling `setImageSize` outside of `act`). It's a test-hygiene
@@ -800,6 +970,51 @@ Pre-existing non-blocking item for a future iteration to address on its own:
   mistaken for a new regression by a future iteration.
 
 ## Morning Review Notes
+- What changed (iteration 12, two commits): (1) added a Retry button and
+  handler to `src/video/VideoPlayerScreen.tsx`'s playback-error state (the
+  screen's first-ever test coverage, 4 new tests in
+  `__tests__/video/VideoPlayerScreen.test.tsx`) — same category of fix as
+  iteration 11's `ColoringScreen` gap, this time for video playback errors;
+  (2) added `accessibilityLabel`/`accessibilityRole="button"` to the 3 retry
+  buttons iteration 11's code review flagged (`QuizScreen`,
+  `ColoringGallery`, `ColoringScreen`), with a test assertion each confirming
+  the label renders.
+- What's valuable: before commit 1, if a video failed to play (corrupted
+  file, unsupported codec, SAF grant revoked, SD card unmounted — all
+  plausible real events), the only recovery was navigating away and back via
+  the header — the exact same dead-end pattern iteration 11 fixed in
+  `ColoringScreen`, and inconsistent with `VideoGallery` (one screen up) 
+  already having a working Retry button for the identical failure category.
+  Before commit 2, none of the app's retry buttons were exposed to
+  screen readers with a proper accessible name (TalkBack would likely read
+  nothing useful, or fall back to reading raw internal text) — a real
+  accessibility gap for any child or parent using an assistive device.
+- What needs visual testing: see "Visual Review Required" above —
+  specifically the new `VideoPlayerScreen` Retry button's real-device
+  behavior (tap target size in landscape, actual playback recovery on a real
+  `expo-video` player, safe-area layout), since `expo-video` itself can't be
+  exercised in this Jest environment (confirmed via
+  `RootNavigator.test.tsx`'s own pre-existing comment about it not being
+  mockable/transformable, and independently by writing this iteration's own
+  lower-boundary mock). The accessibility-label change has no visual effect
+  (screen-reader-only), so nothing to check visually there.
+- Risks: none identified. `tsc` clean, 24/24 suites and 165/165 tests
+  passing (161 baseline + 4 new), no existing test touched/skipped/renamed.
+  A code-review subagent independently verified `player.replace`/`play` are
+  synchronous void-returning `expo-video` APIs (no async/throw hazard),
+  confirmed the existing unmount-cleanup logic still works correctly, and
+  confirmed the new mock genuinely exercises the screen's real logic rather
+  than faking it; one optional review suggestion (assert `player.play` was
+  called on retry) was applied before committing. The accessibility commit
+  was self-reviewed only, being a mechanical, low-risk, single-prop-per-file
+  change with an already-existing localized string reused (no new i18n
+  strings, no behavior change).
+- Open questions for the developer: none blocking. Four more retry buttons
+  in the app (`PuzzleGallery`, `VideoGallery`, `RootNavigator`'s
+  `FolderErrorScreen`, and this iteration's new `VideoPlayerScreen` button)
+  still lack an `accessibilityLabel` — deliberately left out of this
+  iteration's accessibility pass to keep it minimal and matching exactly
+  what iteration 11 named; see `Next` above for the fast follow-up.
 - What changed (iteration 11, one commit): a small production-code fix in
   `src/coloring/ColoringScreen.tsx` (added a `retryToken` state and a Retry
   button to the photo-load error state) plus a new test file,
