@@ -1,8 +1,117 @@
 # Overnight Improvement Progress
 
 ## Current Status
-- Phase: 3 (delight/polish), Iteration: 21
-- Latest completed improvement (iteration 21, one commit): gave the quiz
+- Phase: 3 (delight/polish), Iteration: 22
+- Latest completed improvement (iteration 22, four commits): a
+  touch-target-sizing sweep across the screens iteration 21's `Next` note
+  flagged as unswept (coloring/puzzle/video/settings galleries) plus the
+  still-open, deferred `AgePicker.tsx` check from iteration 16.
+  1. **`AgePicker.tsx`** (`4e13e3a`) — the closed field and each of the 7
+     modal age-option rows (ages 2-8) render ~42px tall, under the ~48px
+     guideline this codebase already established for `ColoringScreen`'s
+     palette swatches (iteration 16). Read `AgePicker.tsx` and both call
+     sites (`OnboardingScreen.tsx`, `SettingsScreen.tsx`) before touching
+     anything: the closed field is a single, isolated `Pressable` (only a
+     non-interactive `Text` label 8px above it, and — in Onboarding only —
+     a non-interactive error `Text` 4px below it), so `hitSlop={{top:4,
+     bottom:4,left:4,right:4}}` closes the gap with zero visual change and
+     no overlap risk. The 7 modal option rows, by contrast, are stacked
+     directly on top of one another inside `modalCard` with NO `gap` style
+     — adding vertical hitSlop there would make neighboring ages' hit zones
+     overlap, a genuine mis-tap risk for a young child picking the wrong
+     age. Used `minHeight: 48` + `justifyContent: 'center'` instead (real
+     layout growth, not an invisible zone) — this is the one deliberate,
+     visible layout change in this iteration (modal grows by ~6px x 7 rows
+     = ~42px taller; still comfortably fits a landscape screen at the
+     modal's current ~310px content height). New test file
+     `__tests__/components/AgePicker.test.tsx` (AgePicker had zero dedicated
+     test coverage of its own before this — only indirect coverage via
+     `OnboardingScreen.test.tsx`/`SettingsScreen.test.tsx`, which never
+     touched touch-target sizing at all).
+  2. **Bundled hitSlop-only fixes** (`3b6155b`) — a fast Explore-agent sweep
+     of `ColoringGallery.tsx`, `PuzzleGallery.tsx`, `VideoGallery.tsx`,
+     `VideoPlayerScreen.tsx`, and `SettingsScreen.tsx` found several more
+     genuine, mechanically-identical gaps, bundled into one commit per this
+     iteration's brief ("multiple small touch-target gaps... trivial
+     one-line hitSlop additions... fine to fix all in one commit since
+     they're the same category of change"):
+     - The three gallery retry buttons (`coloring-gallery-retry`,
+       `puzzle-gallery-retry`, `video-gallery-retry`) had literally no style
+       at all — a plain `Pressable` wrapping unstyled `Text`, rendering
+       ~39x17px. Each is the sole interactive element in its error-state
+       screen (no adjacent interactive sibling) — `hitSlop={{top:14,
+       bottom:14,left:14,right:14}}` added to all three.
+     - `SettingsScreen.tsx`'s two language pills (`settings-lang-en`/`-de`)
+       sit side-by-side with only an 8px horizontal gap — added
+       vertical-only `hitSlop={{top:6,bottom:6}}`, deliberately omitting
+       horizontal hitSlop to avoid the two pills' hit zones colliding across
+       that 8px gap.
+     - `SettingsScreen.tsx`'s folder-change button had no `testID` at all
+       (added `settings-folder-picker`, additive only — existing tests query
+       it by visible text, unaffected) and got the same vertical-only
+       `hitSlop={{top:6,bottom:6}}` (no interactive sibling above/below it).
+     - `VideoPlayerScreen.tsx`'s retry button was checked and found already
+       borderline-adequate (~44px tall) with no clear gap — left unchanged
+       (see Technical Decisions).
+  3. **`VideoGallery.tsx`'s list-row `minHeight`** (`5669899`, separate
+     commit) — each video row (`FlatList` `renderItem`) had no style at all,
+     rendering at one line of unstyled text (~17px tall). Unlike the retry
+     button in the same file, these rows are stacked back-to-back in the
+     `FlatList` with no separator/gap between them — a `hitSlop` fix here
+     would make adjacent rows' hit zones overlap, risking a mis-tap on the
+     wrong video (exactly the overlap risk this iteration's brief warned
+     against). Used `minHeight: 48` + `justifyContent: 'center'` +
+     `paddingVertical: spacing.sm` instead — a real, visible layout change
+     (each row is now taller), which is why it's kept in its own commit
+     rather than bundled with the invisible-only hitSlop fixes above. The
+     gallery is a scrollable `FlatList` by design (browsing many videos), so
+     taller rows don't conflict with the "child-facing screens must never
+     require scrolling" hard limit, which concerns forced/hidden scrolling
+     to complete a primary task, not an intentionally browsable list.
+  4. **`OnboardingScreen.tsx`'s matching gap** (`030ec1d`, fourth commit,
+     found via a deliberate double-check while writing this very Next-section
+     note below) — `OnboardingScreen.tsx` defines its own `langPill`/
+     `folderButton` styles separately from `SettingsScreen.tsx` (not a
+     shared style object), so item 2's fix above did NOT carry over to this
+     visually-identical screen. Same ~39px pills, same 8px gap between them
+     (vertical-only hitSlop, same reasoning), same ~38px folder button
+     (previously had no `testID` — added `onboarding-folder-picker`,
+     additive only). Closes the inconsistency between the app's two
+     near-identical folder/language forms.
+  - Baseline before this iteration: tsc clean, 25/25 suites, 210/210 tests.
+  - After this iteration: tsc clean, **26/26 suites** (new
+    `__tests__/components/AgePicker.test.tsx`), **218/218 tests** (+8 new:
+    2 in the new AgePicker suite, 4 for the bundled hitSlop fixes — one
+    each in `ColoringGallery.test.tsx`/`PuzzleGallery.test.tsx`/
+    `VideoGallery.test.tsx` plus one in `SettingsScreen.test.tsx` covering
+    both pills and the folder button — 1 for VideoGallery's row
+    `minHeight`, and 1 for `OnboardingScreen.test.tsx`'s matching pills/
+    folder-button fix). No existing test modified, skipped, or renamed (one
+    dead `waitFor` import removed from `VideoGallery.test.tsx` as an
+    incidental cleanup, not a test change).
+  - A code-review subagent independently reviewed the diff (items 1-3
+    above, reviewed together before splitting/committing into three
+    commits; item 4's `OnboardingScreen` fix was found and applied
+    afterward, mechanically identical to item 2's already-reviewed
+    `SettingsScreen` fix, so it was self-reviewed rather than sent through
+    a second subagent pass — same rationale as iteration 12's "very small,
+    mechanical diff" self-review fallback):
+    re-verified every "no adjacent interactive sibling" claim above by
+    reading the live JSX/layout of each file (including both `AgePicker`
+    call sites), confirmed all hitSlop/minHeight values are plausible
+    against `theme/tokens.ts`'s actual `spacing` values, confirmed the new
+    tests are non-tautological (numeric thresholds tied to the actual
+    guideline, would fail if a fix were reverted or reduced), confirmed no
+    hard-limit violations (no new deps, no `any`/`ts-ignore`/unsafe casts,
+    no weakened/skipped/renamed test, no new user-facing strings needed,
+    no native config touched), and confirmed nothing else in the diff was
+    out of scope. Raised one process note (at review time, the VideoGallery
+    `minHeight` change had been deliberately, temporarily reverted from the
+    working tree to allow a clean 3-way commit split by category — reviewed
+    logic against the stated intent, not a real bug) — resolved by
+    re-applying that change immediately after as its own commit, exactly as
+    planned. No other required or optional changes.
+- Previous iteration's completed improvement (iteration 21, one commit): gave the quiz
   completion screen (`QuizScreen.tsx`'s `isFinished` branch) real actions —
   a "Play Again" button that starts a genuinely fresh session (a brand-new
   `buildSession()` call against the already-loaded question pool, reshuffled
@@ -1408,23 +1517,37 @@ Iteration 21 closed out the quiz completion screen's missing-actions gap
 (Phase 3/4's "positive completion screen" item) — see Current Status for
 full detail. It should not be re-treaded without new evidence.
 
-Iteration 22 priority: **no single obvious unclaimed Phase 3 gap remains
-queued** — the code-review subagent's one nit from this iteration (real
-height check on the quiz completion screen's new button row, see Visual
-Review Required below) is the most concrete lead, but it's a verification
-task, not a code-change task, and this loop cannot drive a real device.
-Suggested approach for iteration 22:
-- Re-run the touch-target/motion-safety/screen-fit sweep pattern used in
-  iterations 15-16 against any screens not yet covered by that sweep, OR
-- Pick up the still-open, small `AgePicker.tsx` touch-target check noted
-  since iteration 16 ("likely fine but unmeasured"), OR
+Iteration 22 closed out the touch-target sweep across
+coloring/puzzle/video/settings/onboarding galleries AND the long-deferred
+`AgePicker.tsx` check — see Current Status for full detail (4 commits:
+`4e13e3a`, `3b6155b`, `5669899`, `030ec1d`). It should not be re-treaded
+without new evidence. `VideoPlayerScreen.tsx`'s retry button was checked
+and found already borderline-adequate (~44px) with no clear gap.
+`OnboardingScreen.tsx` was specifically double-checked (it defines its own
+language-pill/folder-button styles separately from `SettingsScreen.tsx`,
+NOT a shared style object — worth remembering for any future screen-parity
+assumption) and fixed to match.
+
+Iteration 23 priority: **no single obvious unclaimed Phase 2/3 touch-target
+gap remains queued** after iteration 22's sweep. Suggested approach:
+- The code-review subagent's still-outstanding real-device verification
+  items (the quiz completion screen's button-row height on a Galaxy S22,
+  see Visual Review Required) remain the most concrete lead, but are
+  verification tasks this loop cannot perform (no real device access) —
+  do not attempt to "fix" them speculatively without new evidence of an
+  actual problem.
 - Continue the Pure-Logic Module Inventory's remaining edge-case gaps (see
-  that table above) if no UI-polish gap is found on inspection.
+  that table above) if no further UI-polish gap turns up on inspection —
+  this is likely the best-value next area now that the touch-target sweep
+  is complete.
+- If a fresh UI-polish sweep is still wanted, `HomeScreen.tsx`'s four
+  feature cards were not explicitly checked this iteration — worth a quick
+  size check (though they already render `t(card.labelKey)` as visible
+  text, so they're less likely to be as undersized as the icon/text-only
+  controls found this iteration).
 - Before starting, grep `QuizScreen.tsx`/`QuestionRenderer.tsx` and this
   file's Technical Decisions once more to confirm no Phase 3/4 item was
-  missed, since the last several iterations have been quiz-focused and it's
-  worth deliberately checking other screens (coloring/puzzle/video/settings)
-  haven't accumulated their own equivalent gaps.
+  missed.
 
 Still-open, deliberately deferred real-device check (unchanged from
 iteration 19, still cannot be verified by this loop — see Visual Review
@@ -1550,6 +1673,39 @@ part of the error-state audit.)
 </details>
 
 ## Visual Review Required
+- **Iteration 22's touch-target sizing changes** (mostly invisible
+  `hitSlop`-only changes, but two spots grow real, visible layout — worth a
+  quick look, lower priority than the iteration 21 item below since the
+  size increases here are small and the invisible-hitSlop parts by
+  definition have zero visual delta):
+  - **`AgePicker`'s modal age-option rows** (Onboarding and Settings, tap
+    the age field to open): each of the 7 rows grows from ~42px to a firm
+    48px tall (`minHeight` + centered text) — the modal as a whole grows by
+    ~42px total. Expected: still comfortably fits centered on a landscape
+    screen with room to spare, no scrolling, no clipping against the
+    screen edges; rows should look slightly more spacious/easier to tap,
+    not cramped or oddly spaced.
+  - **`VideoGallery`'s video list rows**: each row grows from one tight
+    line of text (~17px) to a firm 48px with the filename vertically
+    centered. Expected: the list (a `FlatList`, intentionally scrollable —
+    this is not a "child-facing screen requires scrolling" violation, it's
+    a browsable list by design) should look like a normal, comfortably
+    spaced list of tappable rows, not oversized or with odd empty space
+    around short filenames.
+  - **hitSlop-only changes** (zero visual delta expected, included here
+    only for completeness): `AgePicker`'s closed field; the three gallery
+    retry buttons; `SettingsScreen`'s/`OnboardingScreen`'s language pills
+    and folder-change buttons. Nothing should look different at all for
+    any of these — only the tappable area (which isn't visually rendered)
+    changes. A quick check that no adjacent control now feels "too easy to
+    mis-tap" would still be worthwhile, corroborating this iteration's
+    source-level overlap analysis with a real thumb/finger.
+  - **Ages affected**: all ages 2-8; touch-target sizing matters most for
+    the youngest end of the range with less precise motor control.
+  - **Needs real-device confirmation**: yes, but low urgency — the source-
+    level math and sibling-overlap analysis were independently re-verified
+    by a code-review subagent, so this is a corroboration check, not a
+    known-risky change.
 - **Iteration 21's quiz completion screen "Play Again" / "Home" buttons**
   (new visible UI, real layout risk — needs a genuine device/simulator
   check, not just source inspection):
