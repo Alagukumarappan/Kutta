@@ -102,6 +102,32 @@ announced as disabled can never drift from what's actually un-tappable.
 filled cell's updated label + disabled state, and every cell becoming
 disabled once the game ends (508 total tests passing, up from 505).
 
+### Iteration 6 — Fix a real double-navigation bug on Settings' Save button
+**Screen:** Settings.
+**Problem:** Bug-hunt pass (rapid-tap audit across every action button in
+the app). `handleSave`'s only re-entrancy guard was `if (!profile ||
+migrating) return;` — but `migrating` only ever becomes `true` during a
+folder-migration sub-path. The common case (a parent editing name/age/
+language with no folder change) had ZERO protection: a rapid double-tap on
+Save — trivial for a child, or just an impatient parent — re-entered
+`handleSave` a second time while the first call was still awaiting
+`saveProfile()`. Each call independently scheduled its own `goHomeTimeoutRef`
+timer (the first one silently orphaned rather than cancelled), and both
+eventually fired `onGoHome?.()` — navigating to Home twice in quick
+succession.
+**Fix:** Added a `saveInFlightRef` boolean guard (same idiom as
+PuzzleScreen's `retryFiredRef`), set synchronously before the function's
+first `await` (so a double-tap during the migration-confirmation Alert is
+also blocked, not just during the final save), reset in a `finally` on
+every exit path. Also defensively clears any pre-existing
+`goHomeTimeoutRef.current` before scheduling a new one.
+**Verified as a real bug, not a hypothetical:** confirmed the new
+regression test genuinely fails without the fix (2 `saveProfile` calls
+instead of 1) before committing.
+**Tests:** New regression test double-tapping Save before its mocked
+`saveProfile` promise resolves, asserting exactly one save and one
+navigate-home (509 total tests passing, up from 508).
+
 ## Bugs fixed
 - `VideoGallery.tsx`'s loading state was missing `flex: 1`, so the (now
   visible) loading indicator wouldn't have centered correctly — fixed as
@@ -114,6 +140,9 @@ disabled once the game ends (508 total tests passing, up from 505).
   in iteration 4.
 - Tic-Tac-Toe board cells had no accessibility role/label/state at all —
   fixed in iteration 5.
+- Settings' Save button had no rapid-double-tap protection in the common
+  (no-folder-change) case, causing a double navigation to Home — fixed in
+  iteration 6.
 
 ## Performance improvements
 _(none yet)_
@@ -126,8 +155,19 @@ _(none yet)_
   now accessible)
 - Quiz (accessibility label for image-only options)
 - Tic-Tac-Toe board screen (cells now accessible)
+- Settings (Save button double-tap protection)
 
 ## Remaining polish opportunities (not yet done)
+- Rapid-tap audit (iteration 6) also found two harmless-but-inconsistent
+  spots, not real bugs (every underlying operation is idempotent, so a
+  double-fire causes no corruption or visible glitch) — low priority, but
+  noted for a future consistency pass: `VideoPlayerScreen.tsx`'s Retry
+  button has no guard ref (unlike every other Retry-style action in the
+  app), and the destructive confirm button inside `Alert.alert` for both
+  Settings' "Reset everything" and every gallery's "Remove selected" isn't
+  guarded against a double-tap on the Alert itself (RN never disables
+  Alert buttons) — currently safe only because the underlying delete calls
+  are all idempotent.
 - OnboardingScreen's "saving" overlay is a full-screen dark scrim + spinner
   + text — visually distinct from the new lighter gallery `LoadingPanel`;
   worth a future pass to decide if that's intentional (blocking modal

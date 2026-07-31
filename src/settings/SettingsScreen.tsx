@@ -103,6 +103,16 @@ export function SettingsScreen({
   const [savedToastVisible, setSavedToastVisible] = useState(false);
   const [resetting, setResetting] = useState(false);
   const goHomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards handleSave against a rapid double-tap on Save — same idiom as
+  // PuzzleScreen's retryFiredRef/nextFiredRef. Without this, tapping Save
+  // twice quickly (trivial for a child) re-enters handleSave a second time
+  // while the first call is still awaiting saveProfile(); the previous
+  // `disabled={migrating}` guard only actually engaged during a folder
+  // migration, so the common "just edited name/age" case had no protection
+  // at all — each call scheduled its own goHomeTimeoutRef, silently
+  // orphaning the first timer, and both eventually fired onGoHome?.(),
+  // navigating Home twice.
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -203,45 +213,54 @@ export function SettingsScreen({
   }
 
   async function handleSave() {
-    if (!profile || migrating) return;
-    setMigrationError(null);
+    if (!profile || migrating || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    try {
+      setMigrationError(null);
 
-    let nextProfile: Profile = {
-      ...profile,
-      age: age !== null ? age : profile.age,
-    };
+      let nextProfile: Profile = {
+        ...profile,
+        age: age !== null ? age : profile.age,
+      };
 
-    if (pendingFolderUri && pendingFolderUri !== profile.rootFolderUri) {
-      const oldUri = profile.rootFolderUri;
+      if (pendingFolderUri && pendingFolderUri !== profile.rootFolderUri) {
+        const oldUri = profile.rootFolderUri;
 
-      if (oldUri) {
-        const confirmed = await confirmMigration();
-        if (!confirmed) return;
+        if (oldUri) {
+          const confirmed = await confirmMigration();
+          if (!confirmed) return;
+        }
+
+        setMigrating(true);
+        const result = oldUri
+          ? await migrateContent(oldUri, pendingFolderUri)
+          : ({ success: true } as const);
+        setMigrating(false);
+
+        if (!result.success) {
+          setMigrationError(t('migrationFailed'));
+          return;
+        }
+        nextProfile = { ...nextProfile, rootFolderUri: pendingFolderUri };
       }
 
-      setMigrating(true);
-      const result = oldUri
-        ? await migrateContent(oldUri, pendingFolderUri)
-        : ({ success: true } as const);
-      setMigrating(false);
+      await saveProfile(nextProfile);
+      setProfile(nextProfile);
+      setLanguage(nextProfile.language);
+      onProfileChanged?.();
 
-      if (!result.success) {
-        setMigrationError(t('migrationFailed'));
-        return;
-      }
-      nextProfile = { ...nextProfile, rootFolderUri: pendingFolderUri };
+      setSavedToastVisible(true);
+      // Defensive: clear any still-pending timer from an earlier save
+      // before scheduling a new one, so at most one onGoHome?.() can ever
+      // be pending at a time even if this guard were somehow bypassed.
+      if (goHomeTimeoutRef.current) clearTimeout(goHomeTimeoutRef.current);
+      goHomeTimeoutRef.current = setTimeout(() => {
+        setSavedToastVisible(false);
+        onGoHome?.();
+      }, SAVED_TOAST_DURATION_MS);
+    } finally {
+      saveInFlightRef.current = false;
     }
-
-    await saveProfile(nextProfile);
-    setProfile(nextProfile);
-    setLanguage(nextProfile.language);
-    onProfileChanged?.();
-
-    setSavedToastVisible(true);
-    goHomeTimeoutRef.current = setTimeout(() => {
-      setSavedToastVisible(false);
-      onGoHome?.();
-    }, SAVED_TOAST_DURATION_MS);
   }
 
   const insetStyle = {
