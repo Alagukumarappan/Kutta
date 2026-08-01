@@ -136,13 +136,11 @@ export function PuzzleScreen({
   const { t, language } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  // This screen is shown with headerShown:true (see RootNavigator), so the
-  // native header already consumes the top safe-area inset before this
-  // component's flex:1 container gets its share of the window — unlike
-  // HomeScreen (headerShown:false), which is the one screen that has to
-  // account for insets.top itself. Zero out top here so it isn't double-
-  // counted on top of what the header already reserved; bottom/left/right
-  // still need to be handled since the header doesn't cover those.
+  // This screen is shown with headerShown:false (see RootNavigator — every
+  // activity screen dropped the native header/back-button in favor of the
+  // device's own hardware/gesture back), so insets.top now has to be
+  // reserved here too, the same way it already is in this screen's own
+  // ScrollView contentContainerStyle below — nothing else consumes it.
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   // The board's shape and crop rects depend on the ACTUAL picked photo's real
@@ -258,7 +256,7 @@ export function PuzzleScreen({
   const imageWidth = imageSize?.width ?? 1;
   const imageHeight = imageSize?.height ?? 1;
   const isPortrait = imageWidth < imageHeight;
-  const board = computePuzzleBoardSize(width, height, imageWidth, imageHeight, { ...insets, top: 0 });
+  const board = computePuzzleBoardSize(width, height, imageWidth, imageHeight, insets);
   const isImageSizeReady = imageSize !== null || imageSizeFailed;
 
   function startPuzzle(count: PuzzleDifficulty) {
