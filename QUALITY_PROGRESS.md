@@ -311,6 +311,51 @@ can never get stuck permanently `true`, confirmed no other unguarded async
 handler remains in this file, confirmed the new test's cleanup doesn't
 leak a pending promise into a later test).
 
+### Iteration 9 — Visual Consistency: ColoringScreen's error state now matches every other error state
+**Area:** Visual Consistency.
+
+**Problem:** `ColoringScreen.tsx`'s `imageLoadFailed` error state rendered
+a bare `View`+`Text` with inline styles — the one visibly inconsistent
+error screen left in the app, now that `FolderErrorScreen`, `QuizScreen`,
+the 3 galleries, and `VideoPlayerScreen` had all converged on a
+`RaisedCard`+`RaisedPrimaryButton` pattern in earlier polish/quality
+passes.
+
+**Fix:** Wrapped the same existing text/retry-button in a `RaisedCard`,
+using `VideoPlayerScreen.tsx`'s equivalent as the direct reference (same
+`elevationLevel="level3"`, same `errorCardOuter`/`errorCardInner`/
+`errorTitle` style shapes, moved from inline styles into the file's
+existing `StyleSheet.create` block). No testID, i18n key, retry wiring, or
+button props changed — purely a visual wrapper around identical content
+and behavior.
+
+**Caught and fixed during review:** the first version placed the
+`errorCardOuter` style on the plain outer `View` instead of on the
+`RaisedCard` itself, unlike every reference screen (which apply that style
+directly to the card). Visually equivalent by coincidence (the outer
+View's `alignItems:'center'` plus RaisedCard's default `alignItems:'stretch'`
+happened to produce the same layout), but structurally inconsistent with
+the established pattern, and it meant the accompanying regression test
+was verifying "a style constant survived" rather than "RaisedCard is
+actually used" — it would have still passed with RaisedCard removed and
+the style left on a bare View. Fixed by moving the style onto the
+`RaisedCard` (now the pattern matches exactly) and giving the `RaisedCard`
+its own testID so the test queries it directly, which cannot pass unless
+the card is genuinely rendered.
+
+**Tests:** 1 new test in `__tests__/coloring/ColoringScreen.test.tsx`
+("wraps the error message in a real styled card, not a bare unstyled
+layout"), re-verified via `git stash` to genuinely fail without the fix —
+first with a style-based assertion (passed coincidentally due to the
+placement bug above, caught by review), then re-verified after the fix
+with the corrected testID-based assertion (fails with "Unable to find
+element," not just a missing style, once the fix is reverted). Full
+suite: 624/624 passing. `npx tsc --noEmit` clean. Reviewed by an
+independent agent — found the real style-placement issue described above
+(alongside iteration 5's double-tap race, one of the two genuine
+review-caught issues this loop has fixed so far, versus most reviews
+finding the change already sound as submitted).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -328,7 +373,7 @@ leak a pending promise into a later test).
 - Iteration 8: OnboardingScreen's "Choose content folder" had no double-tap guard, unlike its neighboring Save button. See above.
 
 ## Consistency improvements
-(none yet this pass)
+- Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
 
 ## Remaining opportunities
 (from the initial research pass; two candidates below were investigated in
@@ -357,12 +402,6 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `sun`) and verifying the result on a real device/screenshot — genuine
   visual redesign work, not a mechanical import swap, and out of scope for
   an autonomous "no redesign" iteration.
-- **Visual Consistency (S, from iteration 7's research pass, not yet
-  done):** `ColoringScreen.tsx`'s `imageLoadFailed` error state renders a
-  bare `View`+`Text` (no `RaisedCard` wrapper) — the one visibly
-  inconsistent error screen left, now that `FolderErrorScreen`, `QuizScreen`,
-  the 3 galleries, and `VideoPlayerScreen` have all converged on the
-  RaisedCard+RaisedPrimaryButton pattern.
 - **Architecture (S, from iteration 7's research pass, lower priority —
   only 2 copies exist):** `HomeScreen.tsx` and `TicTacToeSetupScreen.tsx`
   each hand-roll a near-identical "debounce rapid navigation taps"

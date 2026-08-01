@@ -213,6 +213,32 @@ describe('ColoringScreen', () => {
     await findByTestId('coloring-canvas-touch-area');
   });
 
+  // Regression test for the quality-evolution visual-consistency pass:
+  // ColoringScreen's error state was the one screen left rendering a bare
+  // View+Text instead of the RaisedCard+RaisedPrimaryButton pattern every
+  // other error state (FolderErrorScreen, QuizScreen, the 3 galleries,
+  // VideoPlayerScreen) had already converged on.
+  it('wraps the error message in a real styled card, not a bare unstyled layout', async () => {
+    const { StyleSheet } = require('react-native');
+    (FileSystem.readAsStringAsync as jest.Mock).mockRejectedValue(new Error('SAF grant revoked'));
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    // Query the RaisedCard's own testID directly (not just the surrounding
+    // plain View) — this is the actual proof RaisedCard is rendered at all,
+    // not just that some style constant survived; RaisedCard forwards its
+    // `testID` prop onto its own outer node (see RaisedCard.tsx's no-onPress
+    // path), so finding this testID with the expected `style` prop couldn't
+    // pass if the card were removed and a bare View put back in its place.
+    const raisedCard = await findByTestId('coloring-image-load-error-card');
+    const flattened = StyleSheet.flatten(raisedCard.props.style);
+    expect(flattened.maxWidth).toBeDefined();
+  });
+
   it('labels each palette swatch with its localized color name and marks the selected one for screen readers', async () => {
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
 
