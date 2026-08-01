@@ -6,6 +6,14 @@ export default {
     mockStorage[key] = value;
     return Promise.resolve();
   }),
+  // Added for activityLog.ts's clearActivityLog (and matches profileStore's
+  // own real clearProfile, which called this from day one but had never
+  // actually been exercised against this shared mock — every existing test
+  // that touches clearProfile mocks the whole profileStore module instead).
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+    return Promise.resolve();
+  }),
   clear: jest.fn(async () => {
     Object.keys(mockStorage).forEach(key => {
       delete mockStorage[key];

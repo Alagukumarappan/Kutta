@@ -4,7 +4,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 import { getProfile, saveProfile, clearProfile } from '../storage/profileStore';
+import { getActivityLog, clearActivityLog, type ActivityLog } from '../storage/activityLog';
 import { requestFolderAccess, findChildUri, KUTTA_GAMES_FOLDER_NAME } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
@@ -79,7 +81,7 @@ export function SettingsScreen({
   onReset?: () => void;
   picturesFolderUri?: string;
 } = {}) {
-  const { t, setLanguage } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   // Shown with headerShown:true (see RootNavigator), so the native header
   // already covers the top inset — only left/right/bottom are ours to
   // handle (a notch or gesture-nav bar sits at one of the sides in this
@@ -102,6 +104,7 @@ export function SettingsScreen({
   const [previewFailed, setPreviewFailed] = useState(false);
   const [savedToastVisible, setSavedToastVisible] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [activityLog, setActivityLog] = useState<ActivityLog | null>(null);
   const goHomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards handleSave against a rapid double-tap on Save — same idiom as
   // PuzzleScreen's retryFiredRef/nextFiredRef. Without this, tapping Save
@@ -125,6 +128,7 @@ export function SettingsScreen({
       setProfile(p);
       if (p) setAge(p.age);
     });
+    getActivityLog().then(setActivityLog);
   }, []);
 
   // Reset the stale-preview flag whenever the picture itself changes (a new
@@ -206,6 +210,7 @@ export function SettingsScreen({
         }
       }
       await clearProfile();
+      await clearActivityLog();
       onReset?.();
     } finally {
       setResetting(false);
@@ -287,6 +292,17 @@ export function SettingsScreen({
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.title}>{t('settingsTitle')}</Text>
+
+          {activityLog && (activityLog.quizzesCompleted > 0 || activityLog.puzzlesCompleted > 0) && (
+            <View testID="settings-accomplishments" style={styles.card}>
+              <Text style={styles.label}>{t('settingsAccomplishmentsTitle')}</Text>
+              <Text style={styles.accomplishmentsText}>
+                {tFormat('settingsQuizzesCompleted', language, { count: activityLog.quizzesCompleted })}
+                {'  •  '}
+                {tFormat('settingsPuzzlesCompleted', language, { count: activityLog.puzzlesCompleted })}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.row}>
             <View style={[styles.card, styles.halfCard]}>
@@ -489,6 +505,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.parent.inkMuted,
     marginBottom: spacing.xxs,
+  },
+  accomplishmentsText: {
+    fontSize: typography.body.fontSize,
+    fontWeight: '600',
+    color: colors.parent.ink,
   },
   textInput: {
     borderWidth: 1,

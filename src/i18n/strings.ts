@@ -216,6 +216,15 @@ export const UI_STRINGS = {
     en: "This quiz file couldn't be read. Check questions.json in the quiz folder.",
     de: 'Diese Quizdatei konnte nicht gelesen werden. Bitte questions.json im Quiz-Ordner prüfen.',
   },
+  // Settings' small "accomplishments" summary — a purely local, offline
+  // count of finished quizzes/puzzles (see src/storage/activityLog.ts). No
+  // singular/plural grammar variants: a plain count reads fine for both "0
+  // quizzes completed" and "1 quiz completed" in both languages here, and
+  // adding pluralization branches for a decorative counter would be more
+  // complexity than the feature warrants.
+  settingsAccomplishmentsTitle: { en: 'Accomplishments', de: 'Erfolge' },
+  settingsQuizzesCompleted: { en: '{count} quizzes completed', de: '{count} Quiz abgeschlossen' },
+  settingsPuzzlesCompleted: { en: '{count} puzzles completed', de: '{count} Puzzle gelöst' },
   galleryLoading: { en: 'Getting things ready...', de: 'Wird vorbereitet...' },
   // Generic Cancel label, deliberately separate from
   // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped

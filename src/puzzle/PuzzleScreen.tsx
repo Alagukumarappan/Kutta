@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
+import { recordPuzzleCompleted } from '../storage/activityLog';
 import {
   colors,
   radii,
@@ -194,6 +195,24 @@ export function PuzzleScreen({
       retryFiredRef.current = false;
       nextFiredRef.current = false;
     }
+  }, [isSolved]);
+
+  // Records one completed puzzle per genuine solve (initial solve, and every
+  // Retry's later re-solve) — a rising-edge guard, reset whenever isSolved
+  // goes false again (a fresh shuffle via Retry/Next), so a re-render while
+  // still solved doesn't record twice.
+  const hasRecordedThisSolveRef = useRef(false);
+  useEffect(() => {
+    if (!isSolved) {
+      hasRecordedThisSolveRef.current = false;
+      return;
+    }
+    if (hasRecordedThisSolveRef.current) return;
+    hasRecordedThisSolveRef.current = true;
+    recordPuzzleCompleted().catch(() => {
+      // Best-effort: a purely decorative counter must never block or crash
+      // the completion overlay over an AsyncStorage write failure.
+    });
   }, [isSolved]);
 
   const reducedMotion = useReducedMotion();

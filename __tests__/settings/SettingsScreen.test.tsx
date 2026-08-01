@@ -6,12 +6,14 @@ import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as folderMigration from '../../src/storage/folderMigration';
+import * as activityLogModule from '../../src/storage/activityLog';
 import * as FileSystem from 'expo-file-system/legacy';
 import { colors as dsColors } from '../../src/design-system';
 
 jest.mock('../../src/storage/profileStore');
 jest.mock('../../src/storage/folderAccess');
 jest.mock('../../src/storage/folderMigration');
+jest.mock('../../src/storage/activityLog');
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
 }));
@@ -37,6 +39,12 @@ describe('SettingsScreen', () => {
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     (profileStore.getProfile as jest.Mock).mockResolvedValue(initialProfile);
+    // Default: no accomplishments yet, matching a brand-new profile — tests
+    // specifically about the accomplishments display override this.
+    (activityLogModule.getActivityLog as jest.Mock).mockResolvedValue({
+      quizzesCompleted: 0,
+      puzzlesCompleted: 0,
+    });
   });
 
   it('migrates content when the folder is changed and the user confirms, then saves the new profile', async () => {
@@ -486,6 +494,27 @@ describe('SettingsScreen', () => {
       expect(getByText('Reset everything')).toBeTruthy();
     });
 
+    // Regression test for the quality-evolution gamification addition: a
+    // reset should feel like a genuine fresh start, not leave an orphaned
+    // accomplishment count behind for whichever child profile comes next.
+    it('also clears the local activity log alongside the profile', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue(null);
+      (profileStore.clearProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(getByTestId('settings-reset'));
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+      await confirmAlertWith('Reset everything');
+
+      await waitFor(() => expect(activityLogModule.clearActivityLog).toHaveBeenCalledTimes(1));
+    });
+
     it('does NOT reset anything if the parent cancels the confirmation', async () => {
       (folderAccess.findChildUri as jest.Mock).mockResolvedValue('content://tree/old/Kutta-games');
       const onReset = jest.fn();
@@ -605,6 +634,41 @@ describe('SettingsScreen', () => {
 
       const removeButton = StyleSheet.flatten((await findByTestId('settings-picture-remove')).props.style);
       expect(removeButton.borderColor).toBe(dsColors.berry);
+    });
+  });
+
+  describe('accomplishments summary', () => {
+    it('is hidden entirely for a brand-new profile with nothing completed yet', async () => {
+      (activityLogModule.getActivityLog as jest.Mock).mockResolvedValue({
+        quizzesCompleted: 0,
+        puzzlesCompleted: 0,
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      expect(queryByTestId('settings-accomplishments')).toBeNull();
+    });
+
+    it('shows completed quiz and puzzle counts once at least one activity has been completed', async () => {
+      (activityLogModule.getActivityLog as jest.Mock).mockResolvedValue({
+        quizzesCompleted: 3,
+        puzzlesCompleted: 5,
+      });
+
+      const { findByTestId, getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-accomplishments');
+      expect(getByText(/3 quizzes completed/)).toBeTruthy();
+      expect(getByText(/5 puzzles completed/)).toBeTruthy();
     });
   });
 });

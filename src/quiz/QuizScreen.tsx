@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { loadQuestions, QuestionsFileCorruptError } from './loadQuestions';
+import { recordQuizCompleted } from '../storage/activityLog';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
 import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
@@ -150,6 +151,26 @@ export function QuizScreen({
       animation.stop();
     };
   }, [state?.isFinished, reducedMotion, scoreCardScaleAnim, scoreCardOpacityAnim]);
+
+  // Records one completed quiz per genuine finish (initial mount+finish, and
+  // every "Play Again" finish) — a rising-edge guard mirroring the reset
+  // above, so re-renders while already finished don't record again. A
+  // session with zero eligible questions is also technically "isFinished"
+  // (see quizSession.ts's initialSessionState) but must NOT count as a
+  // completed quiz — that's the empty-state screen, not an actual play.
+  const hasRecordedThisFinishRef = useRef(false);
+  useEffect(() => {
+    if (!state?.isFinished || state.session.length === 0) {
+      hasRecordedThisFinishRef.current = false;
+      return;
+    }
+    if (hasRecordedThisFinishRef.current) return;
+    hasRecordedThisFinishRef.current = true;
+    recordQuizCompleted().catch(() => {
+      // Best-effort: a purely decorative counter must never block or crash
+      // the completion screen over an AsyncStorage write failure.
+    });
+  }, [state?.isFinished, state?.session.length]);
 
   useEffect(() => {
     let cancelled = false;

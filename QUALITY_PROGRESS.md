@@ -54,11 +54,71 @@ noted, accepted tradeoff (the corruption check duplicates two of
 with it, to avoid changing that function's contract; flagged for future
 maintainers to keep both in sync if the schema ever changes).
 
+### Iteration 3 — Gamification: first local, offline "accomplishments" counter
+**Area:** Gamification.
+
+**Problem:** No achievement/reward/progress-persistence mechanism existed
+anywhere in the app — confirmed by grepping for achievement/badge/streak/
+reward/milestone across `src/`. The only related thing was QuizScreen's
+own per-session, non-persisted star emoji, which resets every time the
+screen is left. Nothing recognized a child's accumulated effort across
+sessions.
+
+**What was added:** `src/storage/activityLog.ts` — a small AsyncStorage-backed
+counter (`quizzesCompleted`, `puzzlesCompleted`), mirroring the existing
+tiny `profileStore.ts` in shape and error-handling style (corrupt/missing
+storage recovers to zero rather than crashing, since this is a purely
+decorative feature that must never block core functionality). Wired in
+with the smallest possible footprint:
+- `QuizScreen.tsx` calls `recordQuizCompleted()` once per genuine quiz
+  finish (a rising-edge guard on `state.isFinished`, explicitly excluding
+  the "0 eligible questions" empty-state case, which is also technically
+  `isFinished` but isn't a real play).
+- `PuzzleScreen.tsx` calls `recordPuzzleCompleted()` once per genuine solve
+  (same rising-edge guard pattern on `isSolved`).
+- `SettingsScreen.tsx` shows a small "Accomplishments" summary line (e.g.
+  "3 quizzes completed • 5 puzzles completed") — hidden entirely at zero,
+  so a brand-new profile isn't shown a discouraging "0 of everything"
+  message. "Reset everything" now also calls `clearActivityLog()`
+  alongside the existing `clearProfile()`, so a reset is a genuine fresh
+  start for the next profile.
+
+**Explicitly NOT done (deliberately, to keep scope minimal):** Coloring and
+Video have no natural "finished" signal to hook (open-ended fills,
+re-watchable playback) — consistent with the existing
+`POLISH_PROGRESS.md` note on why Coloring has no completion celebration —
+so they are not counted here. No streaks, timers, leaderboards, or
+push-style nudges — per this loop's own "no manipulative engagement"
+mandate, this is a quiet, always-optional summary a parent can glance at,
+not a mechanic the child is steered toward.
+
+**Tests:** 6 new tests in `__tests__/storage/activityLog.test.ts`
+(increment/read/clear/corrupt-recovery), 3 new tests in
+`__tests__/quiz/QuizScreen.test.tsx` (records once on finish, does NOT
+record for the empty-state screen, records again after Play Again), 2 new
+tests in `__tests__/puzzle/PuzzleScreen.test.tsx` (records once on solve,
+records again after Retry+re-solve), 3 new tests in
+`__tests__/settings/SettingsScreen.test.tsx` (reset clears the log, summary
+hidden at zero, summary shown with correct counts). Also added `removeItem`
+to the shared `__mocks__/@react-native-async-storage/async-storage.ts` mock
+— a pre-existing gap (`clearProfile` had called the real `removeItem` since
+day one but no test had ever exercised it against this shared mock; every
+test touching `clearProfile` mocked the whole `profileStore` module
+instead). Verified the whole feature is genuinely new (not dead code) via
+`git stash`: all 4 new/changed test suites fail to even resolve the
+`activityLog` module without these changes. Full suite: 609/609 passing.
+`npx tsc --noEmit` clean. Reviewed by an independent agent — no issues
+found (checked for double-counting races in both screens' rising-edge
+guards, the `increment()` read-then-write pattern's theoretical-but-
+unreachable lost-update risk, and gamification tone/no-shaming
+compliance).
+
 ## Architecture improvements
 (none yet this pass)
 
 ## Gamification improvements
-(none yet this pass)
+- Iteration 3: local, offline "activities completed" counter (quizzes +
+  puzzles) with a small, hideable-at-zero summary in Settings. See above.
 
 ## Bugs fixed
 - Iteration 1: corrupted `questions.json` silently indistinguishable from an empty quiz folder (see above).
@@ -78,21 +138,17 @@ iteration 2's planning and found NOT to be real issues — see "Review notes")
   ~150-200 duplicated lines and centralize future selection-bug fixes.
   Large — worth splitting into its own iteration(s), extracted only if it
   genuinely simplifies all three call sites without behavior change.
-- **Gamification (M):** No achievement/reward/progress-persistence
-  mechanism exists anywhere in the app (grepped — nothing beyond
-  QuizScreen's own non-persisted per-session star emoji). A small, local
-  `src/storage/activityLog.ts` (mirroring the existing tiny `profileStore.ts`)
-  tracking a simple completed-activities counter could be a clean, low-risk
-  first hook point for a badge/celebration variant — without touching
-  existing screens' core logic beyond one increment call per completion
-  callback.
-- **Visual Consistency (S per file, M in aggregate):** a handful of
-  hardcoded spacing/radius literals exist alongside the design-system
-  tokens instead of using them — e.g. `OnboardingScreen.tsx`'s
-  `borderRadius: 22` doesn't match any documented radius step in
-  `src/design-system/tokens.ts`; similar scattered literals were spotted in
-  `EmptyState.tsx`, `PieceCountPicker.tsx`, and the three gallery
-  components. Worth a full audit-and-standardize sweep.
+- **Gamification (S, follow-up to iteration 3 — DONE, see above):** the
+  activity-log counter now exists (quiz+puzzle only). A natural next step,
+  once there's a sense the current summary is useful, would be a manual
+  "I'm done!" button for Coloring, giving it a genuine completion signal
+  without guessing at one — needs real design thought (see
+  `POLISH_PROGRESS.md`'s existing note on the same topic), not a quick
+  reuse of the puzzle/quiz pattern.
+- ~~**Visual Consistency**: hardcoded radius literals~~ — investigated in
+  iteration 2 planning and ruled out (every literal checked was a genuine
+  circle radius = exactly half its element's diameter, not token drift).
+  See "Review notes" below.
 
 ## Technical debt removed
 (none yet this pass)
