@@ -19,3 +19,11 @@ export async function getPuzzleDifficulty(): Promise<PuzzleDifficulty> {
 export async function savePuzzleDifficulty(difficulty: PuzzleDifficulty): Promise<void> {
   await AsyncStorage.setItem(DIFFICULTY_KEY, String(difficulty));
 }
+
+// Used by Settings' "Reset everything" flow — without this, a fresh profile
+// created after a reset would silently inherit the PREVIOUS child's
+// difficulty preference instead of the intended default (this key isn't
+// scoped per-profile, since the app only ever has one profile at a time).
+export async function clearPuzzleDifficulty(): Promise<void> {
+  await AsyncStorage.removeItem(DIFFICULTY_KEY);
+}

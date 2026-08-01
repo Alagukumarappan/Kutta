@@ -7,6 +7,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { getProfile, saveProfile, clearProfile } from '../storage/profileStore';
 import { getActivityLog, clearActivityLog, type ActivityLog } from '../storage/activityLog';
+import { clearAllFileReferences } from '../storage/fileReferenceStore';
+import { clearPuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { requestFolderAccess, findChildUri, KUTTA_GAMES_FOLDER_NAME } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
@@ -211,6 +213,13 @@ export function SettingsScreen({
       }
       await clearProfile();
       await clearActivityLog();
+      // Individually-"+"-added file references and the remembered puzzle
+      // difficulty are both keyed globally (not per-profile), so without
+      // these a fresh profile after this reset would silently inherit the
+      // PREVIOUS child's picked files and difficulty setting instead of a
+      // genuine fresh start.
+      await clearAllFileReferences();
+      await clearPuzzleDifficulty();
       onReset?.();
     } finally {
       setResetting(false);

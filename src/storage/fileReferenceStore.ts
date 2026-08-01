@@ -8,6 +8,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 // "folder content + individually-added files" together.
 export type FileReferenceContentType = 'coloring' | 'puzzle' | 'video';
 
+// Every content type a reference can exist for — used by clearAllFileReferences
+// below so a caller doesn't have to remember to list all three itself (and
+// risk missing one if a new content type is ever added here).
+const ALL_CONTENT_TYPES: readonly FileReferenceContentType[] = ['coloring', 'puzzle', 'video'];
+
 export interface FileReference {
   uri: string;
   addedAt: number;
@@ -102,4 +107,14 @@ export async function pruneMissingFileReferences(type: FileReferenceContentType)
     await saveFileReferences(type, valid);
   }
   return valid.map((ref) => ref.uri);
+}
+
+// Used by Settings' "Reset everything" flow, alongside clearProfile and
+// clearActivityLog — without this, a fresh profile created after a reset
+// would silently inherit every individually-"+"-added file reference the
+// PREVIOUS child's parent picked (these are keyed globally, not per-profile,
+// since the app only ever has one profile at a time), making "reset
+// everything" not actually reset everything.
+export async function clearAllFileReferences(): Promise<void> {
+  await Promise.all(ALL_CONTENT_TYPES.map((type) => AsyncStorage.removeItem(keyFor(type))));
 }

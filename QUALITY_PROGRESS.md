@@ -246,6 +246,41 @@ Reviewed by an independent agent, which re-confirmed the dead-code claim
 via its own grep, confirmed no documentation contradicts the deletion, and
 caught the orphaned `puzzlePickPieces` string that my own pass missed.
 
+### Iteration 7 — Bug fix: "Reset everything" left cross-profile data behind
+**Area:** Bug Hunting.
+
+**Problem:** `src/storage/fileReferenceStore.ts` (individually-"+"-added
+file references per gallery — coloring/puzzle/video) and
+`src/storage/puzzleDifficultyStore.ts` (remembered puzzle difficulty) are
+both keyed globally in AsyncStorage, not scoped to any one child profile
+(the app only ever has one profile at a time). Settings' "Reset
+everything" flow already cleared `profileStore` and `activityLog`, but
+never these two — so a fresh profile created right after a reset would
+silently inherit the PREVIOUS child's individually-added files and puzzle
+difficulty setting instead of a genuine fresh start. Confirmed via a grep
+across every `src/storage/*.ts` file that these were the only two
+AsyncStorage-backed stores `performReset()` had missed.
+
+**Fix:** Added `clearAllFileReferences()` (clears all 3 content types in
+one call, so a caller can't accidentally clear only one) and
+`clearPuzzleDifficulty()`, both called from `performReset()` alongside the
+existing `clearProfile()`/`clearActivityLog()` calls.
+
+**Tests:** 2 new tests in `__tests__/storage/fileReferenceStore.test.ts`
+(clears every content type, doesn't throw when already empty), 1 new test
+in `__tests__/storage/puzzleDifficultyStore.test.ts` (resets to default),
+1 new test in `__tests__/settings/SettingsScreen.test.tsx` (both new
+functions are actually invoked from the reset flow). All 4 verified to
+genuinely fail without the fix via `git stash` ("is not a function" —
+confirms these are brand-new exports, not a tautological test). Full
+suite: 622/622 passing. `npx tsc --noEmit` clean. Reviewed by an
+independent agent — no issues found (checked the unguarded `Promise.all`
+in `clearAllFileReferences` against this codebase's existing pattern of
+only wrapping genuinely-fallible SAF/filesystem calls in `.catch()`, not
+AsyncStorage writes; re-confirmed no other globally-keyed store was
+missed; confirmed the sequential `await`s in `performReset` can't race
+with `onReset?.()`).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -259,6 +294,7 @@ caught the orphaned `puzzlePickPieces` string that my own pass missed.
 ## Bugs fixed
 - Iteration 1: corrupted `questions.json` silently indistinguishable from an empty quiz folder. See above.
 - Iteration 5: `FolderErrorScreen`'s Retry was a dead end for a permanently-revoked SAF grant — no way back to Settings' folder picker. See above.
+- Iteration 7: "Reset everything" left individually-added file references and puzzle difficulty behind for the next profile. See above.
 
 ## Consistency improvements
 (none yet this pass)

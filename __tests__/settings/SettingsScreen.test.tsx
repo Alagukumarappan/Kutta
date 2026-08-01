@@ -7,6 +7,8 @@ import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as folderMigration from '../../src/storage/folderMigration';
 import * as activityLogModule from '../../src/storage/activityLog';
+import * as fileReferenceStore from '../../src/storage/fileReferenceStore';
+import * as puzzleDifficultyStore from '../../src/storage/puzzleDifficultyStore';
 import * as FileSystem from 'expo-file-system/legacy';
 import { colors as dsColors } from '../../src/design-system';
 
@@ -14,6 +16,8 @@ jest.mock('../../src/storage/profileStore');
 jest.mock('../../src/storage/folderAccess');
 jest.mock('../../src/storage/folderMigration');
 jest.mock('../../src/storage/activityLog');
+jest.mock('../../src/storage/fileReferenceStore');
+jest.mock('../../src/storage/puzzleDifficultyStore');
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
 }));
@@ -513,6 +517,31 @@ describe('SettingsScreen', () => {
       await confirmAlertWith('Reset everything');
 
       await waitFor(() => expect(activityLogModule.clearActivityLog).toHaveBeenCalledTimes(1));
+    });
+
+    // Regression test for a real cross-profile data-leak bug fix: these two
+    // stores are keyed globally, not scoped to any one profile — without
+    // clearing them here, a fresh profile created after this reset would
+    // silently inherit the PREVIOUS child's individually-added file
+    // references and puzzle difficulty preference instead of a genuine
+    // fresh start.
+    it('also clears individually-added file references and the remembered puzzle difficulty', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue(null);
+      (profileStore.clearProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(getByTestId('settings-reset'));
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+      await confirmAlertWith('Reset everything');
+
+      await waitFor(() => expect(fileReferenceStore.clearAllFileReferences).toHaveBeenCalledTimes(1));
+      expect(puzzleDifficultyStore.clearPuzzleDifficulty).toHaveBeenCalledTimes(1);
     });
 
     it('does NOT reset anything if the parent cancels the confirmation', async () => {
