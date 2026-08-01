@@ -168,6 +168,11 @@ export const UI_STRINGS = {
     en: 'Could not access your content folders. Please check folder access and try again.',
     de: 'Zugriff auf deine Inhaltsordner nicht möglich. Bitte überprüfe den Ordnerzugriff und versuche es erneut.',
   },
+  // Second action on FolderErrorScreen, alongside Retry — for when the SAF
+  // grant is permanently gone (not a transient failure Retry can self-heal),
+  // Retry alone was a dead end with no way back to Settings' own folder
+  // picker (Settings never mounts while this error screen is showing).
+  folderResolveChooseNew: { en: 'Choose a different folder', de: 'Anderen Ordner wählen' },
   retry: { en: 'Retry', de: 'Erneut versuchen' },
   paletteColorRed: { en: 'Red', de: 'Rot' },
   paletteColorOrange: { en: 'Orange', de: 'Orange' },

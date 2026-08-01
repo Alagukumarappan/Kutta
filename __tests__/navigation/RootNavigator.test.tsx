@@ -128,6 +128,97 @@ describe('RootNavigator header titles', () => {
     // of rendering completely bare.
     expect(flattened.backgroundColor).toBeDefined();
   });
+
+  // Regression test for a real bug fix: previously FolderErrorScreen only
+  // offered Retry, which re-resolves against the exact same rootFolderUri —
+  // a dead end if the SAF grant is PERMANENTLY gone (not a transient
+  // failure), since there was no way to reach Settings' own folder picker
+  // (Settings is nested inside AppStack, which never mounts while this
+  // error screen is showing). "Choose a different folder" must let a parent
+  // pick a new root, save it onto the existing profile, and successfully
+  // recover all the way to Home.
+  it('lets a parent recover from a permanently-revoked SAF grant by choosing a different folder', async () => {
+    let currentProfile = { ...profile };
+    (profileStore.getProfile as jest.Mock).mockImplementation(async () => currentProfile);
+    (profileStore.saveProfile as jest.Mock).mockImplementation(async (p: typeof profile) => {
+      currentProfile = p;
+    });
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new-root');
+    // First resolution attempt (against the original, now-inaccessible
+    // root) fails; a later attempt (against the newly-picked root, after
+    // the parent recovers) succeeds — same "revoked, then fixed" shape as
+    // Retry's own existing test above, just reached via the new button.
+    (folderAccess.ensureContentStructure as jest.Mock)
+      .mockRejectedValueOnce(new Error('SAF grant revoked'))
+      .mockResolvedValue(undefined);
+
+    const { findByTestId, findByLabelText } = await render(<RootNavigator />);
+
+    await findByTestId('folder-resolve-error');
+    await fireEvent.press(await findByLabelText('Choose a different folder'));
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ rootFolderUri: 'content://tree/new-root' })
+      )
+    );
+    // The parent's other profile fields must survive the folder change
+    // untouched — this is a folder swap, not a fresh onboarding.
+    expect(profileStore.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ name: 'Sam', age: 4 }));
+
+    await findByTestId('home-child-name');
+  });
+
+  it('does nothing (stays on the error screen) if the parent cancels the folder picker', async () => {
+    (folderAccess.ensureContentStructure as jest.Mock).mockRejectedValue(new Error('SAF grant revoked'));
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue(null);
+
+    const { findByTestId, findByLabelText } = await render(<RootNavigator />);
+
+    await findByTestId('folder-resolve-error');
+    const chooseNewButton = await findByLabelText('Choose a different folder');
+    // fireEvent.press only flushes the SYNCHRONOUS portion of the handler —
+    // handleChooseNewFolder's first (and here, only) await is
+    // requestFolderAccess() itself, so asserting immediately after would
+    // race ahead of its resolution and could pass even if a future
+    // regression called saveProfile unconditionally. Extra ticks flush that
+    // pending microtask first, same technique as this suite's own
+    // confirmAlertWith-style Alert-button helpers elsewhere in this repo.
+    await act(async () => {
+      fireEvent.press(chooseNewButton);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(profileStore.saveProfile).not.toHaveBeenCalled();
+    await findByTestId('folder-resolve-error');
+  });
+
+  // Regression test for a rapid double-tap: without a synchronous
+  // check-and-set guard, two taps landing before the first `setPicking(true)`
+  // re-render commits could both pass the `disabled` check and invoke
+  // requestFolderAccess()/saveProfile() twice.
+  it('guards "Choose a different folder" against a rapid double-tap, only picking once', async () => {
+    (folderAccess.ensureContentStructure as jest.Mock).mockRejectedValue(new Error('SAF grant revoked'));
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new-root');
+
+    const { findByTestId, findByLabelText } = await render(<RootNavigator />);
+
+    await findByTestId('folder-resolve-error');
+    const chooseNewButton = await findByLabelText('Choose a different folder');
+    // Two presses on the SAME captured element without re-querying — the
+    // "stale double-tap" shape this codebase's other double-fire guards
+    // (e.g. QuizScreen's Play Again, PuzzleScreen's Retry) are tested with.
+    await act(async () => {
+      fireEvent.press(chooseNewButton);
+      fireEvent.press(chooseNewButton);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(folderAccess.requestFolderAccess).toHaveBeenCalledTimes(1);
+  });
 });
 
 // The app opens portrait-only (splash, onboarding) and only switches to

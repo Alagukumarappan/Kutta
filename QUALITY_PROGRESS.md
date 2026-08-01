@@ -155,6 +155,45 @@ NOT extracted, no leftover `setRetryToken`/dead imports, and that the
 1000ms timeout during development until every state-changing call was
 wrapped in `await act(async () => ...)` instead of a plain sync `act()`).
 
+### Iteration 5 — Bug fix: FolderErrorScreen's Retry was a dead end for a permanently-revoked SAF grant
+**Area:** Bug Hunting.
+
+**Problem:** `RootNavigator.tsx`'s `FolderErrorScreen` (the app's one truly
+global error screen — reached whenever the SAF content folders can't be
+resolved) only offered a "Retry" button, which re-resolves against the
+EXACT SAME `profile.rootFolderUri`. If the SAF grant is permanently gone
+(the parent revoked storage permission in Android settings, uninstalled a
+file manager that held it, the SD card was replaced, etc. — not a transient
+failure Retry can self-heal), every retry fails identically forever. There
+was no way to reach Settings' own folder-repicker either, since `AppStack`
+(which hosts Settings) never mounts while this error screen is showing —
+a genuine dead end requiring the parent to fully uninstall/reinstall the
+app to recover, silently losing the child's profile in the process.
+
+**Fix:** Added a second action, "Choose a different folder", which calls
+`requestFolderAccess()` (the same primitive Settings/Onboarding already
+use), then `saveProfile({ ...profile, rootFolderUri: newUri })` — updating
+just the folder while preserving every other profile field (name, age,
+language, picture) — then triggers a refresh that re-resolves against the
+new folder. Cancelling the picker (`requestFolderAccess()` resolves `null`)
+is correctly a silent no-op, matching `SettingsScreen`'s own equivalent
+handling. Guarded against a rapid double-tap with a synchronous
+check-and-set ref (same idiom as `SettingsScreen`'s `saveInFlightRef` /
+`PuzzleScreen`'s `retryFiredRef`) — an independent review caught that the
+initial version relied only on `disabled={picking}` state, which doesn't
+take effect until the next render and so wouldn't have actually blocked a
+fast second tap.
+
+**Tests:** 3 new tests in `__tests__/navigation/RootNavigator.test.tsx`:
+full recovery to Home with the profile's other fields preserved, cancel
+is a no-op (fixed after review to correctly await the async handler's
+pending microtask before asserting, rather than checking immediately after
+`fireEvent.press` — the earlier version could have passed even if a future
+regression called `saveProfile` unconditionally), and the double-tap guard
+(confirmed to genuinely fail without the ref fix — temporarily reverted
+just the guard, reran, restored). Full suite: 621/621 passing. `npx tsc
+--noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -164,7 +203,8 @@ wrapped in `await act(async () => ...)` instead of a plain sync `act()`).
   puzzles) with a small, hideable-at-zero summary in Settings. See above.
 
 ## Bugs fixed
-- Iteration 1: corrupted `questions.json` silently indistinguishable from an empty quiz folder (see above).
+- Iteration 1: corrupted `questions.json` silently indistinguishable from an empty quiz folder. See above.
+- Iteration 5: `FolderErrorScreen`'s Retry was a dead end for a permanently-revoked SAF grant — no way back to Settings' folder picker. See above.
 
 ## Consistency improvements
 (none yet this pass)
