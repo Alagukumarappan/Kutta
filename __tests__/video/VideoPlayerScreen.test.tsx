@@ -20,6 +20,12 @@ interface MockVideoPlayer {
   play: jest.Mock;
   replace: jest.Mock;
   addListener: jest.Mock;
+  // Real expo-video players expose this as a synchronous, readable getter —
+  // the screen now reads it once up front (see VideoPlayerScreen.tsx's own
+  // comment on why) to avoid missing a status that already settled before
+  // its effect subscribes. Defaults to 'idle', matching a freshly-created
+  // real player that hasn't started loading its source data yet.
+  status: 'idle' | 'loading' | 'readyToPlay' | 'error';
   emit(event: 'statusChange', payload: StatusChangePayload): void;
   emit(event: 'playToEnd'): void;
 }
@@ -32,12 +38,18 @@ jest.mock('expo-video', () => {
   const mockPlayer: MockVideoPlayer = {
     play: jest.fn(),
     replace: jest.fn(),
+    status: 'idle',
     addListener: jest.fn((event: string, cb: Listener) => {
       if (!listenersByEvent.has(event)) listenersByEvent.set(event, new Set());
       listenersByEvent.get(event)!.add(cb);
       return { remove: jest.fn(() => listenersByEvent.get(event)?.delete(cb)) };
     }),
     emit: ((event: string, payload?: StatusChangePayload) => {
+      // A real player's own `status` getter reflects its most recent
+      // statusChange too — kept in sync here so a later test reading
+      // `player.status` again (or a second mount reusing this same mock
+      // instance) sees the up-to-date value, not a stale 'idle'.
+      if (event === 'statusChange' && payload) mockPlayer.status = payload.status;
       listenersByEvent.get(event)?.forEach((cb) => cb(payload));
     }) as MockVideoPlayer['emit'],
   };
@@ -57,9 +69,21 @@ const { __mockPlayer } = require('expo-video') as { __mockPlayer: MockVideoPlaye
 
 const VIDEO_URI = 'content://tree/videos/party.mp4';
 
+// The screen now shows a loading spinner until the player reports
+// 'readyToPlay' (see the quality-evolution loading-state fix) — every test
+// below that expects to see the real video view/celebration has to first
+// drive the mock player past that loading gate, the same way a real
+// expo-video player would eventually emit this itself.
+async function emitReady() {
+  await act(async () => {
+    __mockPlayer.emit('statusChange', { status: 'readyToPlay' });
+  });
+}
+
 describe('VideoPlayerScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __mockPlayer.status = 'idle';
   });
 
   it('renders the video view when playback is healthy', async () => {
@@ -69,8 +93,109 @@ describe('VideoPlayerScreen', () => {
       </LanguageProvider>
     );
 
+    await emitReady();
+
     await findByTestId('video-view');
     expect(queryByTestId('video-player-error')).toBeNull();
+  });
+
+  // Regression test for a real bug seen on-device: nativeControls showed
+  // (native controls are plain Views), but no actual video frames ever
+  // appeared — just the control bar. The player frame around VideoView is a
+  // RaisedCard, which clips with overflow:'hidden' for rounded corners and
+  // carries an Android elevation shadow; the default 'surfaceView' renderer
+  // draws via a separate hardware-compositor layer that doesn't always
+  // composite correctly nested under a clipped/elevated parent on real
+  // devices. 'textureView' renders through the normal view hierarchy
+  // instead, which expo-video's own docs recommend for exactly this
+  // "overlapping/clipped video view" scenario.
+  it('uses textureView rendering, not the default surfaceView, to avoid disappearing under the clipped/elevated player frame', async () => {
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await emitReady();
+
+    const videoView = await findByTestId('video-view');
+    expect(videoView.props.surfaceType).toBe('textureView');
+  });
+
+  // Regression test for a real gap: previously this screen showed NO
+  // feedback at all while the video was still loading (only 'error' was
+  // ever handled) — a child would just see an empty frame with no signal
+  // anything was happening, unlike every other async-load screen in the
+  // app (galleries, QuizScreen, ColoringScreen), which all show an explicit
+  // spinner.
+  it('shows a loading spinner before the player reports it is ready, and hides it once ready', async () => {
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-player-loading');
+    expect(queryByTestId('video-view')).toBeNull();
+
+    await emitReady();
+
+    await findByTestId('video-view');
+    expect(queryByTestId('video-player-loading')).toBeNull();
+  });
+
+  // expo-video's 'idle' status (not just 'loading') must also count as
+  // still-loading — this app never assumes readiness from anything other
+  // than an explicit 'readyToPlay'.
+  it('keeps showing the spinner through an "idle" status update, not just "loading"', async () => {
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await act(async () => {
+      __mockPlayer.emit('statusChange', { status: 'idle' });
+    });
+
+    await findByTestId('video-player-loading');
+    expect(queryByTestId('video-view')).toBeNull();
+  });
+
+  // Regression test for a race caught during review: a real player is
+  // created and told to play synchronously (see useVideoPlayer's setup
+  // callback), before VideoPlayerScreen's own effect ever subscribes to
+  // statusChange — so its status can already have settled (e.g. a small or
+  // cached local file reaching 'readyToPlay' almost immediately) by the
+  // time that subscription happens. A status only transitions once, so
+  // missing that first change would leave the spinner stuck forever with
+  // no later event ever arriving to clear it. Simulated here by setting the
+  // mock player's status BEFORE render, with no statusChange event ever
+  // emitted at all.
+  it('does not get stuck loading forever if the player already settled to readyToPlay before this screen subscribes', async () => {
+    __mockPlayer.status = 'readyToPlay';
+
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-view');
+    expect(queryByTestId('video-player-loading')).toBeNull();
+  });
+
+  it('does not get stuck loading forever if the player already settled to error before this screen subscribes', async () => {
+    __mockPlayer.status = 'error';
+
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-player-error');
+    expect(queryByTestId('video-player-loading')).toBeNull();
   });
 
   it('shows a friendly localized message (never a raw technical error) when the player reports a status error', async () => {
@@ -107,13 +232,13 @@ describe('VideoPlayerScreen', () => {
     // rather than leaving the child on a permanent dead end.
     expect(__mockPlayer.replace).toHaveBeenCalledWith(VIDEO_URI);
     expect(__mockPlayer.play).toHaveBeenCalled();
-    await findByTestId('video-view');
     expect(queryByTestId('video-player-error')).toBeNull();
 
-    // A subsequent successful status should not leave stale error UI behind.
-    await act(async () => {
-      __mockPlayer.emit('statusChange', { status: 'readyToPlay' });
-    });
+    // Retrying re-enters the loading state (a fresh source load) — the
+    // video view only reappears once a subsequent status genuinely reports
+    // success, same as a first-ever mount.
+    await emitReady();
+    await findByTestId('video-view');
     expect(queryByTestId('video-player-error')).toBeNull();
   });
 
@@ -164,6 +289,7 @@ describe('VideoPlayerScreen', () => {
         </LanguageProvider>
       );
 
+      await emitReady();
       await findByTestId('video-view');
       expect(queryByTestId('video-finished')).toBeNull();
 
@@ -183,6 +309,7 @@ describe('VideoPlayerScreen', () => {
         </LanguageProvider>
       );
 
+      await emitReady();
       await act(async () => {
         __mockPlayer.emit('playToEnd');
       });

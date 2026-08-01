@@ -1,15 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { NavigationContainer, type NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { getProfile } from '../storage/profileStore';
-import { findChildUri, ensureContentStructure } from '../storage/folderAccess';
+import { getProfile, saveProfile } from '../storage/profileStore';
+import { findChildUri, ensureContentStructure, requestFolderAccess } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 import type { StringKey } from '../i18n/strings';
-import { colors, spacing, typography, RaisedCard, RaisedPrimaryButton } from '../design-system';
+import { colors, spacing, typography, RaisedCard, RaisedPrimaryButton, RaisedSecondaryButton } from '../design-system';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsScreen } from '../settings/SettingsScreen';
@@ -123,9 +123,45 @@ async function resolveSubfolderUris(rootUri: string): Promise<SubfolderUris> {
 // PuzzleGallery/VideoGallery's own error cards), using the calmer
 // `colors.parent` palette (the same one SettingsScreen uses) since this is a
 // parent-facing recovery moment, not a child-facing activity.
-function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
+//
+// Retry alone is a dead end if the SAF grant is PERMANENTLY gone (not a
+// transient failure): it re-resolves against the exact same rootFolderUri,
+// which fails identically forever, and there was previously no way back to
+// Settings' own folder picker — Settings is nested inside AppStack, which
+// never mounts while this screen is showing. "Choose a different folder"
+// below reuses the same requestFolderAccess() primitive Settings/Onboarding
+// use, then saves the new root onto the existing profile (name/age/language
+// untouched) so the parent recovers without losing their child's profile.
+function FolderErrorScreen({ profile, onRetry, onFolderChanged }: { profile: Profile; onRetry: () => void; onFolderChanged: () => void }) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const [picking, setPicking] = useState(false);
+  // `disabled={picking}` alone doesn't take effect until the NEXT render, so
+  // a rapid double-tap could still invoke requestFolderAccess()/saveProfile()
+  // twice before that first setPicking(true) commits — same idiom as
+  // SettingsScreen's saveInFlightRef/PuzzleScreen's retryFiredRef: a ref is
+  // checked-and-set synchronously, before any `await`, so even a second tap
+  // captured from a stale pre-render closure can't slip past it.
+  const pickingRef = useRef(false);
+
+  async function handleChooseNewFolder() {
+    if (pickingRef.current) return;
+    pickingRef.current = true;
+    setPicking(true);
+    try {
+      const uri = await requestFolderAccess();
+      if (uri) {
+        await saveProfile({ ...profile, rootFolderUri: uri });
+        onFolderChanged();
+      }
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    } finally {
+      pickingRef.current = false;
+      setPicking(false);
+    }
+  }
+
   return (
     <View
       testID="folder-resolve-error"
@@ -144,6 +180,15 @@ function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
             color={colors.parent.accent}
             textColor={colors.white}
             accessibilityLabel={t('retry')}
+          />
+          <RaisedSecondaryButton
+            testID="folder-resolve-choose-new"
+            label={t('folderResolveChooseNew')}
+            onPress={handleChooseNewFolder}
+            disabled={picking}
+            color={colors.parent.accent}
+            accessibilityLabel={t('folderResolveChooseNew')}
+            style={styles.chooseNewButton}
           />
         </View>
       </RaisedCard>
@@ -166,6 +211,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xl,
+  },
+  chooseNewButton: {
+    marginTop: spacing.sm,
   },
   errorTitle: {
     fontSize: typography.h3.fontSize,
@@ -351,15 +399,16 @@ export function RootNavigator({
     };
   }, []);
 
-  // Everything up through onboarding (splash, name/age/folder setup) stays
-  // portrait — it's a vertical, form-like flow. Only once a profile AND its
-  // folders are both resolved does the app actually reveal Home/AppStack,
-  // which is the landscape-designed part of the app, so the lock flips here
-  // rather than the moment a profile is merely loaded (a returning user with
-  // an already-complete profile still needs `folderUris` resolved first).
-  const readyForAppStack = Boolean(profile?.rootFolderUri) && folderUris !== null && !folderError;
+  // Only the initial splash instant (profile not yet resolved at all) stays
+  // portrait. Onboarding is landscape-designed exactly like every other
+  // screen (same RaisedCard row layout Settings uses) — it just used to be
+  // squeezed into a portrait lock left over from an earlier design, which
+  // this flips to landscape as soon as we know whether to show onboarding
+  // or the app stack (i.e. profile !== undefined), not just once the app
+  // stack itself is ready.
+  const profileResolved = profile !== undefined;
   useEffect(() => {
-    const targetLock = readyForAppStack
+    const targetLock = profileResolved
       ? ScreenOrientation.OrientationLock.LANDSCAPE
       : ScreenOrientation.OrientationLock.PORTRAIT_UP;
     ScreenOrientation.lockAsync(targetLock).catch((err) => {
@@ -368,7 +417,7 @@ export function RootNavigator({
       // about during development.
       console.warn('Failed to lock orientation', err);
     });
-  }, [readyForAppStack]);
+  }, [profileResolved]);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,7 +458,7 @@ export function RootNavigator({
       <NavigationContainer ref={navigationRef}>
         {profile ? (
           folderError ? (
-            <FolderErrorScreen onRetry={retryFolderResolution} />
+            <FolderErrorScreen profile={profile} onRetry={retryFolderResolution} onFolderChanged={refreshProfile} />
           ) : folderUris ? (
             <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} onReset={handleReset} />
           ) : null

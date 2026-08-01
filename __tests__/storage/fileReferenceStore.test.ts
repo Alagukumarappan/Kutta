@@ -5,6 +5,7 @@ import {
   addFileReferences,
   removeFileReference,
   pruneMissingFileReferences,
+  clearAllFileReferences,
 } from '../../src/storage/fileReferenceStore';
 
 jest.mock('@react-native-async-storage/async-storage');
@@ -145,6 +146,29 @@ describe('fileReferenceStore', () => {
       const valid = await pruneMissingFileReferences('coloring');
       expect(valid).toEqual([]);
       expect(setItemSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // Regression tests for a real cross-profile data-leak bug fix: these
+  // references are keyed globally (kutta.fileRefs.<type>.v1), not scoped to
+  // any one profile, so without a way to clear them a fresh profile created
+  // after Settings' "Reset everything" would silently inherit every file the
+  // PREVIOUS child's parent had individually added.
+  describe('clearAllFileReferences', () => {
+    it('clears references across every content type, not just one', async () => {
+      await addFileReferences('coloring', ['content://tree/a.jpg']);
+      await addFileReferences('puzzle', ['content://tree/b.jpg']);
+      await addFileReferences('video', ['content://tree/c.mp4']);
+
+      await clearAllFileReferences();
+
+      expect(await getFileReferences('coloring')).toEqual([]);
+      expect(await getFileReferences('puzzle')).toEqual([]);
+      expect(await getFileReferences('video')).toEqual([]);
+    });
+
+    it('does not throw when there was nothing to clear', async () => {
+      await expect(clearAllFileReferences()).resolves.toBeUndefined();
     });
   });
 });

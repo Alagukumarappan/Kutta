@@ -116,7 +116,6 @@ export const UI_STRINGS = {
   // regardless of score, so neither label references performance at all.
   quizPlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
   quizGoHome: { en: 'Home', de: 'Start' },
-  puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleDifficultyLabel: { en: 'Difficulty: {count}', de: 'Schwierigkeit: {count}' },
   // Accessibility labels for the difficulty-picker modal opened from the
   // pill above — same "positional/value fallback label" idiom as
@@ -168,6 +167,11 @@ export const UI_STRINGS = {
     en: 'Could not access your content folders. Please check folder access and try again.',
     de: 'Zugriff auf deine Inhaltsordner nicht möglich. Bitte überprüfe den Ordnerzugriff und versuche es erneut.',
   },
+  // Second action on FolderErrorScreen, alongside Retry — for when the SAF
+  // grant is permanently gone (not a transient failure Retry can self-heal),
+  // Retry alone was a dead end with no way back to Settings' own folder
+  // picker (Settings never mounts while this error screen is showing).
+  folderResolveChooseNew: { en: 'Choose a different folder', de: 'Anderen Ordner wählen' },
   retry: { en: 'Retry', de: 'Erneut versuchen' },
   paletteColorRed: { en: 'Red', de: 'Rot' },
   paletteColorOrange: { en: 'Orange', de: 'Orange' },
@@ -208,6 +212,23 @@ export const UI_STRINGS = {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
   },
+  // Shown instead of the generic loadError/emptyQuiz text specifically when
+  // questions.json exists but couldn't be read as valid quiz data (bad JSON,
+  // or missing its questions list) — a parent-facing hint that the FILE is
+  // the problem, not "there's simply no quiz content yet".
+  quizFileCorrupt: {
+    en: "This quiz file couldn't be read. Check questions.json in the quiz folder.",
+    de: 'Diese Quizdatei konnte nicht gelesen werden. Bitte questions.json im Quiz-Ordner prüfen.',
+  },
+  // Settings' small "accomplishments" summary — a purely local, offline
+  // count of finished quizzes/puzzles (see src/storage/activityLog.ts). No
+  // singular/plural grammar variants: a plain count reads fine for both "0
+  // quizzes completed" and "1 quiz completed" in both languages here, and
+  // adding pluralization branches for a decorative counter would be more
+  // complexity than the feature warrants.
+  settingsAccomplishmentsTitle: { en: 'Accomplishments', de: 'Erfolge' },
+  settingsQuizzesCompleted: { en: '{count} quizzes completed', de: '{count} Quiz abgeschlossen' },
+  settingsPuzzlesCompleted: { en: '{count} puzzles completed', de: '{count} Puzzle gelöst' },
   galleryLoading: { en: 'Getting things ready...', de: 'Wird vorbereitet...' },
   // Generic Cancel label, deliberately separate from
   // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped

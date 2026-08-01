@@ -59,6 +59,45 @@ describe('AddFilesButton', () => {
     );
   });
 
+  // Regression test for a real bug seen on-device: ColoringScreen reads a
+  // picked image's raw bytes via expo-file-system + Skia to decode it for
+  // flood-fill, and a content:// URI handed back by the system picker for
+  // an arbitrary photo (Google Photos, a cloud-backed gallery app, etc.)
+  // isn't guaranteed to stay reliably byte-readable that way afterwards —
+  // this showed up as "This picture could not be loaded for coloring."
+  // copyToCacheDirectory:true makes the picker copy the bytes into the
+  // app's own cache directory up front, sidestepping the original
+  // provider's read behavior entirely.
+  it('copies picked IMAGES into the cache directory, so they stay reliably readable later', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
+    const { findByTestId } = await renderButton();
+
+    await fireEvent.press(await findByTestId('add-files'));
+
+    expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'image/*', copyToCacheDirectory: true })
+    );
+  });
+
+  // Videos are only ever streamed through expo-video's own player, never
+  // read as raw bytes, so there's no reliability need to copy them — and
+  // copying could mean silently duplicating a large file into the app's
+  // cache for nothing.
+  it('does NOT copy picked VIDEOS into the cache directory', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <AddFilesButton testID="add-files" label="+ Add video" contentType="video" mimeType="video/*" onAdded={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(await findByTestId('add-files'));
+
+    expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'video/*', copyToCacheDirectory: false })
+    );
+  });
+
   it('does nothing and does not call onAdded when the picker is cancelled', async () => {
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
     const onAdded = jest.fn();

@@ -4,9 +4,11 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { QuizScreen } from '../../src/quiz/QuizScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as loadQuestionsModule from '../../src/quiz/loadQuestions';
+import * as activityLogModule from '../../src/storage/activityLog';
 import type { Question } from '../../src/types/quiz';
 
 jest.mock('../../src/quiz/loadQuestions');
+jest.mock('../../src/storage/activityLog');
 
 const twoQuestions: Question[] = [
   {
@@ -42,6 +44,13 @@ const twoQuestions: Question[] = [
 describe('QuizScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default: resolves successfully so every existing test that reaches the
+    // completion screen (most of them) doesn't need its own setup for this —
+    // only the tests specifically ABOUT activity logging below override it.
+    (activityLogModule.recordQuizCompleted as jest.Mock).mockResolvedValue({
+      quizzesCompleted: 1,
+      puzzlesCompleted: 0,
+    });
   });
 
   afterEach(() => {
@@ -216,6 +225,34 @@ describe('QuizScreen', () => {
     await findByText('2 + 2?');
   });
 
+  // Regression test for a quality-evolution bug fix: a corrupted
+  // questions.json (bad JSON, or missing its questions array) previously
+  // resolved to [] just like a genuinely empty/no-quiz-yet folder, showing
+  // the exact same "No quiz questions for this age yet." text either way —
+  // a parent had no way to tell "nothing here yet" apart from "this file is
+  // broken". loadQuestions now throws QuestionsFileCorruptError for that
+  // case specifically, and QuizScreen must show the distinct, more helpful
+  // message instead of silently falling back to the plain empty state.
+  it('shows a distinct "file corrupt" message instead of the generic empty state when questions.json is unreadable', async () => {
+    // Must construct via the same (automocked) module instance QuizScreen
+    // itself imports — jest.requireActual would return a different class
+    // reference, making QuizScreen's `instanceof` check silently fail and
+    // fall through to the generic error message instead of this one.
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockRejectedValueOnce(
+      new loadQuestionsModule.QuestionsFileCorruptError()
+    );
+
+    const { findByText, queryByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText("This quiz file couldn't be read. Check questions.json in the quiz folder.");
+    expect(queryByText('No quiz questions for this age yet.')).toBeNull();
+    expect(queryByText('Something went wrong loading this content.')).toBeNull();
+  });
+
   // Regression test for the premium-polish visual-consistency pass:
   // QuizScreen's error state had been left behind on the old theme/tokens
   // look (a plain Pressable+text button) after every other gallery/player's
@@ -322,6 +359,51 @@ describe('QuizScreen', () => {
       await rendered.findByText('Quiz done! Your score: 0 / 2');
       return rendered;
     }
+
+    // Regression tests for the quality-evolution gamification addition: a
+    // completed quiz should be recorded exactly once per finish, not on
+    // every re-render while the completion screen is showing, and a fresh
+    // "Play Again" finish must record again (it's a genuinely new play).
+    it('records exactly one completed quiz when the completion screen first appears', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      await finishQuizWithZeroScore();
+
+      expect(activityLogModule.recordQuizCompleted).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT record a completed quiz for the empty-state screen (isFinished is trivially true with zero questions)', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue([]);
+
+      const { findByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('No quiz questions for this age yet.');
+      expect(activityLogModule.recordQuizCompleted).not.toHaveBeenCalled();
+    });
+
+    it('records a second completed quiz after "Play Again" finishes a fresh session', async () => {
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+      const { getByText, getByTestId, findByText } = await finishQuizWithZeroScore();
+      expect(activityLogModule.recordQuizCompleted).toHaveBeenCalledTimes(1);
+
+      await fireEvent.press(getByTestId('quiz-play-again'));
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('3'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('3'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz done! Your score: 0 / 2');
+
+      expect(activityLogModule.recordQuizCompleted).toHaveBeenCalledTimes(2);
+    });
 
     it('shows an encouraging message and at least one star even at a 0/2 score, with no shaming wording', async () => {
       (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);

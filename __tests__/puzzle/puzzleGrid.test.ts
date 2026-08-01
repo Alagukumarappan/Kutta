@@ -7,57 +7,60 @@ import {
 } from '../../src/puzzle/puzzleGrid';
 
 // computePuzzleBoardSize reserves the same fixed chrome (mirrored here, not imported, so
-// these tests catch a regression in either file): reservedHeight=160, reservedWidth=220,
-// floor=200 (there is deliberately no ceiling any more - the board should use as much of
-// the available landscape space as the real screen allows, not clamp down to a small
-// fixed square regardless of screen size). It then fits a WIDTH x HEIGHT box that
-// preserves the real photo's aspect ratio into whatever space is left.
+// these tests catch a regression in either file): the preview column takes a 20% share of
+// the window's WIDTH (an explicit fraction, not a fixed pixel guess - see
+// PUZZLE_PREVIEW_WIDTH_FRACTION), then a shared chromeMargin=70 is subtracted from BOTH axes
+// (the screen's own ScrollView padding + the board frame's own border/padding chrome - real
+// space that isn't available for the board's pixels, in either dimension), floor=200 (there
+// is deliberately no ceiling any more - the board should use as much of the available
+// landscape space as the real screen allows, not clamp down to a small fixed square
+// regardless of screen size). It then fits a WIDTH x HEIGHT box that preserves the real
+// photo's aspect ratio into whatever space is left.
 describe('computePuzzleBoardSize', () => {
   it('fills the available width for a landscape photo on a wide landscape screen', () => {
-    // window 800x360, insets zero: availableWidth = 800-220 = 580, availableHeight = 360-160 = 200.
-    // photo is 4:3 landscape (aspectRatio = 4/3). width/ratio = 580/(4/3) = 435 > 200 (availableHeight),
-    // so height is the binding constraint: height = 200, width = 200 * 4/3 = 266.67.
+    // window 800x360, insets zero: availableWidth = 800*0.8-70 = 570, availableHeight = 360-70 = 290.
+    // photo is 4:3 landscape (aspectRatio = 4/3). width/ratio = 570/(4/3) = 427.5 > 290 (availableHeight),
+    // so height is the binding constraint: height = 290, width = 290 * 4/3 = 386.67.
     const board = computePuzzleBoardSize(800, 360, 400, 300);
-    expect(board.height).toBeCloseTo(200);
-    expect(board.width).toBeCloseTo(266.667, 2);
+    expect(board.height).toBeCloseTo(290);
+    expect(board.width).toBeCloseTo(386.667, 2);
   });
 
   it('preserves a portrait photo real aspect ratio instead of forcing a square', () => {
-    // window 800x360, insets zero: availableWidth = 580, availableHeight = 200.
-    // photo is 3:4 portrait (aspectRatio = 3/4 = 0.75). width/ratio = 580/0.75 = 773.3 > 200,
-    // so height is the binding constraint: height = 200, width = 200 * 0.75 = 150.
-    // width (150) is below the 200 floor, but scaling up to the floor (x1.3333) would need
-    // height = 266.67 > availableHeight (200) - i.e. it would overflow and force scrolling -
-    // so the floor is capped by available space instead: maxScale = min(580/150, 200/200) = 1,
-    // so the board stays at width=150, height=200 (fits perfectly, no scrolling needed).
+    // window 800x360, insets zero: availableWidth = 570, availableHeight = 290.
+    // photo is 3:4 portrait (aspectRatio = 3/4 = 0.75). width/ratio = 570/0.75 = 760 > 290,
+    // so height is the binding constraint: height = 290, width = 290 * 0.75 = 217.5.
+    // width (217.5) is already above the 200 floor, so no floor-scaling kicks in.
     const board = computePuzzleBoardSize(800, 360, 300, 400);
-    expect(board.width).toBeCloseTo(150);
-    expect(board.height).toBeCloseTo(200);
+    expect(board.width).toBeCloseTo(217.5);
+    expect(board.height).toBeCloseTo(290);
     // Sanity: the board itself is taller than it is wide, matching the portrait photo.
     expect(board.height).toBeGreaterThan(board.width);
   });
 
   it('is bound by width when width is the tighter constraint', () => {
-    // window 500x1000, square photo: availableWidth = 500-220 = 280, availableHeight = 1000-160 = 840.
-    // width/ratio(1) = 280 <= 840, so width is binding: width = 280, height = 280.
+    // window 500x1000, square photo: availableWidth = 500*0.8-70 = 330, availableHeight = 1000-70 = 930.
+    // width/ratio(1) = 330 <= 930, so width is binding: width = 330, height = 330.
     const board = computePuzzleBoardSize(500, 1000, 100, 100);
-    expect(board.width).toBeCloseTo(280);
-    expect(board.height).toBeCloseTo(280);
+    expect(board.width).toBeCloseTo(330);
+    expect(board.height).toBeCloseTo(330);
   });
 
   it('floors to the minimum size when the window is very small', () => {
-    // availableWidth = max(300-220, 200) = 200 (floored); availableHeight = max(300-160, 200) = 200 (floored).
+    // availableWidth = max(200*0.8-70, 200) = 200 (floored, raw value 90 < floor);
+    // availableHeight = max(200-70, 200) = 200 (floored, raw value 130 < floor).
     // Square photo -> both stay at the 200 floor.
-    const board = computePuzzleBoardSize(300, 300, 100, 100);
+    const board = computePuzzleBoardSize(200, 200, 100, 100);
     expect(board.width).toBeCloseTo(200);
     expect(board.height).toBeCloseTo(200);
   });
 
   it('uses far more of a very large window than the old fixed 420 ceiling allowed', () => {
-    // window 2000x2000, square photo: availableWidth = 1780, availableHeight = 1840 -> width binds at 1780.
+    // window 2000x2000, square photo: availableWidth = 2000*0.8-70 = 1530, availableHeight = 2000-70 = 1930
+    // -> width binds at 1530.
     const board = computePuzzleBoardSize(2000, 2000, 100, 100);
-    expect(board.width).toBeCloseTo(1780);
-    expect(board.height).toBeCloseTo(1780);
+    expect(board.width).toBeCloseTo(1530);
+    expect(board.height).toBeCloseTo(1530);
   });
 
   it('defaults to zero insets when none are passed, matching a device with no notch/nav-bar', () => {
@@ -67,11 +70,11 @@ describe('computePuzzleBoardSize', () => {
   });
 
   it('shrinks the board to make room for real device insets (notch/status bar/gesture-nav bar)', () => {
-    // maxByHeight = 500 - 160 - (20 top + 30 bottom) = 290; maxByWidth = 1000 - 220 - (10 left + 10 right) = 760.
-    // Square photo -> width/ratio(1)=760 > 290, so height binds: height = 290, width = 290.
+    // maxByHeight = 500 - 70 - (20 top + 30 bottom) = 380; maxByWidth = 1000*0.8 - 70 - (10 left + 10 right) = 710.
+    // Square photo -> width/ratio(1)=710 > 380, so height binds: height = 380, width = 380.
     const board = computePuzzleBoardSize(1000, 500, 100, 100, { top: 20, right: 10, bottom: 30, left: 10 });
-    expect(board.width).toBeCloseTo(290);
-    expect(board.height).toBeCloseTo(290);
+    expect(board.width).toBeCloseTo(380);
+    expect(board.height).toBeCloseTo(380);
   });
 
   it('falls back to a square aspect ratio when the image size is not yet known (0x0)', () => {

@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { parseQuestionsFile, loadQuestions } from '../../src/quiz/loadQuestions';
+import { parseQuestionsFile, loadQuestions, QuestionsFileCorruptError } from '../../src/quiz/loadQuestions';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: {
@@ -154,5 +154,50 @@ describe('loadQuestions', () => {
     const result = await loadQuestions('content://tree/quiz');
 
     expect(result[0].options[0].image).toBe('content://tree/quiz/images/opt-a.png');
+  });
+
+  // Regression tests for a real bug: previously, both "the quiz folder has
+  // no questions.json at all" AND "questions.json exists but is corrupt"
+  // resolved to the exact same [] result, so a parent had no way to tell a
+  // genuinely empty folder apart from a broken file. loadQuestions must now
+  // throw a distinguishable error for the second case specifically.
+  describe('corrupt questions.json (distinct from a genuinely empty folder)', () => {
+    beforeEach(() => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/quiz/questions.json',
+      ]);
+    });
+
+    it('throws QuestionsFileCorruptError when the file is not valid JSON', async () => {
+      (FileSystem.StorageAccessFramework.readAsStringAsync as jest.Mock).mockResolvedValue('{not valid json');
+
+      await expect(loadQuestions('content://tree/quiz')).rejects.toBeInstanceOf(QuestionsFileCorruptError);
+    });
+
+    it('throws QuestionsFileCorruptError when valid JSON is missing its questions array', async () => {
+      (FileSystem.StorageAccessFramework.readAsStringAsync as jest.Mock).mockResolvedValue(
+        JSON.stringify({ schemaVersion: 1 })
+      );
+
+      await expect(loadQuestions('content://tree/quiz')).rejects.toBeInstanceOf(QuestionsFileCorruptError);
+    });
+
+    it('does NOT throw when questions.json is valid but every question is filtered out by validation', async () => {
+      // A syntactically valid file with a real (if entirely invalid) question
+      // inside is NOT the "corrupt file" case — it's ordinary content that
+      // happens to yield zero valid questions, same as an age range with no
+      // matches. This must resolve to [] exactly like before, not throw.
+      (FileSystem.StorageAccessFramework.readAsStringAsync as jest.Mock).mockResolvedValue(
+        JSON.stringify({ questions: [{ id: 'bad' }] })
+      );
+
+      await expect(loadQuestions('content://tree/quiz')).resolves.toEqual([]);
+    });
+
+    it('does not throw for a genuinely missing questions.json (no file at all)', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      await expect(loadQuestions('content://tree/quiz')).resolves.toEqual([]);
+    });
   });
 });

@@ -11,6 +11,7 @@ import {
   RaisedCard,
   RaisedPrimaryButton,
   CelebrationOverlay,
+  LoadingPanel,
 } from '../design-system';
 
 // Video's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
@@ -22,6 +23,17 @@ const palette = getActivityPalette('video');
 export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const { t } = useLanguage();
   const [error, setError] = useState(false);
+  // Every other async-load screen (galleries, QuizScreen, ColoringScreen)
+  // shows an explicit spinner while its content is still loading; this
+  // screen previously showed none at all — between mount and the player
+  // actually becoming ready (e.g. a large file on slow SAF-backed storage),
+  // a child just saw an empty frame with no feedback that anything was
+  // happening. Starts `true` since the player begins loading immediately on
+  // mount (see the `useVideoPlayer` call below), and is driven entirely by
+  // `statusChange` events below — expo-video's own 'idle'/'loading' states
+  // both count as still-loading, only 'readyToPlay' (or an error, which
+  // takes over the screen entirely via the `error` branch below) clears it.
+  const [loading, setLoading] = useState(true);
   // Previously this screen gave a child NO feedback at all when a video
   // finished — it just sat on its last frame with native controls, unlike
   // every other activity (Quiz/Puzzle/Tic-Tac-Toe), which all celebrate a
@@ -55,9 +67,24 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   }, [error, finished]);
 
   useEffect(() => {
-    const subscription = player.addListener('statusChange', ({ status }) => {
-      if (status === 'error') setError(true);
-    });
+    // The player is created (and told to play) synchronously above, before
+    // this effect ever runs — its status can already have settled to
+    // 'readyToPlay' or even 'error' by the time this subscribes (e.g. a
+    // small/cached local file), and a status only transitions ONCE, so
+    // missing that first change here would leave `loading` stuck `true`
+    // forever with no later `statusChange` ever arriving to unstick it.
+    // Syncing from the player's own current `status` up front (in addition
+    // to listening for future changes) closes that gap.
+    function applyStatus(status: typeof player.status) {
+      if (status === 'error') {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      setLoading(status !== 'readyToPlay');
+    }
+    applyStatus(player.status);
+    const subscription = player.addListener('statusChange', ({ status }) => applyStatus(status));
     return () => subscription.remove();
   }, [player]);
 
@@ -82,6 +109,11 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     retryFiredRef.current = true;
     setError(false);
     setFinished(false);
+    // Replacing the source re-triggers the same load sequence as a fresh
+    // mount, so the loading spinner should reappear until a new
+    // `statusChange` reports the result — otherwise a stale `loading:false`
+    // from before the retry could briefly show the (now-invalid) old frame.
+    setLoading(true);
     player.replace(videoUri);
     player.play();
   }, [player, videoUri]);
@@ -106,11 +138,34 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     );
   }
 
+  if (loading) {
+    return (
+      <View style={[styles.container, insetStyle(insets)]}>
+        <LoadingPanel testID="video-player-loading" color={palette.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, insetStyle(insets)]}>
       <RaisedCard color={colors.surfaceRaised} borderColor={palette.accentDark} elevationLevel="level3" style={styles.playerFrame}>
         <View style={styles.playerInner}>
-          <VideoView player={player} style={styles.videoView} nativeControls />
+          <VideoView
+            player={player}
+            style={styles.videoView}
+            nativeControls
+            // The player frame above (RaisedCard) clips its content with
+            // overflow:'hidden' for rounded corners and carries an Android
+            // elevation shadow. The default 'surfaceView' renderer draws
+            // via a separate hardware compositor layer that doesn't always
+            // composite correctly nested under a clipped/elevated parent —
+            // on some devices this shows native controls (which ARE normal
+            // Views) but no actual video frames underneath. 'textureView'
+            // renders through the normal view hierarchy instead, at a
+            // small performance cost, and is exactly what expo-video's own
+            // docs recommend for "overlapping/clipped video views".
+            surfaceType="textureView"
+          />
         </View>
       </RaisedCard>
 

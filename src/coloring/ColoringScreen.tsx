@@ -24,7 +24,9 @@ import {
   touchTarget,
   motion,
   getActivityPalette,
+  RaisedCard,
   RaisedPrimaryButton,
+  LoadingPanel,
   useReducedMotion,
 } from '../design-system';
 import { PALETTE, RGBA } from './palette';
@@ -699,26 +701,30 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       }}
     >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        {imageLoadFailed ? (
-          <View testID="coloring-image-load-error" style={{ alignItems: 'center' }}>
-            <Text
-              style={{
-                fontSize: typography.h3.fontSize,
-                fontWeight: typography.h3.fontWeight,
-                color: colors.ink,
-                textAlign: 'center',
-                marginBottom: spacing.md,
-              }}
+        {!imageLoadFailed && image === null ? (
+          <View testID="coloring-image-loading" style={{ width: canvasWidth, height: canvasHeight }}>
+            <LoadingPanel color={coloringAccent.accent} message={t('galleryLoading')} />
+          </View>
+        ) : imageLoadFailed ? (
+          <View testID="coloring-image-load-error">
+            <RaisedCard
+              testID="coloring-image-load-error-card"
+              color={colors.surface}
+              borderColor={coloringAccent.accentDark}
+              elevationLevel="level3"
+              style={styles.errorCardOuter}
             >
-              {t('coloringImageLoadError')}
-            </Text>
-            <RaisedPrimaryButton
-              testID="coloring-retry"
-              label={t('retry')}
-              onPress={() => setRetryToken((n) => n + 1)}
-              color={coloringAccent.accent}
-              size="compact"
-            />
+              <View style={styles.errorCardInner}>
+                <Text style={styles.errorTitle}>{t('coloringImageLoadError')}</Text>
+                <RaisedPrimaryButton
+                  testID="coloring-retry"
+                  label={t('retry')}
+                  onPress={() => setRetryToken((n) => n + 1)}
+                  color={coloringAccent.accent}
+                  size="compact"
+                />
+              </View>
+            </RaisedCard>
           </View>
         ) : (
           <>
@@ -1097,6 +1103,22 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 }
 
 const styles = StyleSheet.create({
+  errorCardOuter: {
+    width: '100%',
+    maxWidth: 420,
+  },
+  errorCardInner: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: colors.ink,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
   touchCursorBase: {
     position: 'absolute',
     borderWidth: 2,

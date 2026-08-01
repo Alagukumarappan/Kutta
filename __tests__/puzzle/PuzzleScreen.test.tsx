@@ -4,6 +4,9 @@ import { render, fireEvent, within, waitFor } from '@testing-library/react-nativ
 import { PuzzleScreen } from '../../src/puzzle/PuzzleScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { computePuzzleBoardSize } from '../../src/puzzle/puzzleGrid';
+import * as activityLogModule from '../../src/storage/activityLog';
+
+jest.mock('../../src/storage/activityLog');
 
 const IMAGE_URI = 'content://tree/pictures/beach.jpg';
 
@@ -69,6 +72,10 @@ describe('PuzzleScreen', () => {
   beforeEach(() => {
     getSizeSpy = jest.spyOn(Image, 'getSize').mockImplementation((_uri: string, success: (w: number, h: number) => void) => {
       success(SQUARE_IMAGE_SIZE.width, SQUARE_IMAGE_SIZE.height);
+    });
+    (activityLogModule.recordPuzzleCompleted as jest.Mock).mockClear().mockResolvedValue({
+      quizzesCompleted: 0,
+      puzzlesCompleted: 1,
     });
   });
 
@@ -138,6 +145,35 @@ describe('PuzzleScreen', () => {
     expect(getByText('Great job!')).toBeTruthy();
     expect(await findByTestId('puzzle-retry')).toBeTruthy();
     expect(await findByTestId('puzzle-next')).toBeTruthy();
+  });
+
+  // Regression tests for the quality-evolution gamification addition: a
+  // solved puzzle should be recorded exactly once per solve, not once per
+  // re-render while the completion overlay is showing, and a genuinely
+  // fresh solve after Retry must record again.
+  it('records exactly one completed puzzle when it is first solved', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+
+    await solveFourPiecePuzzle(utils);
+    expect(utils.getByTestId('puzzle-complete')).toBeTruthy();
+
+    expect(activityLogModule.recordPuzzleCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a second completed puzzle after Retry is solved again', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+    const { getByTestId } = utils;
+
+    await solveFourPiecePuzzle(utils);
+    expect(activityLogModule.recordPuzzleCompleted).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(getByTestId('puzzle-retry'));
+    await solveFourPiecePuzzle(utils);
+    expect(readOrder(getByTestId)).toEqual([0, 1, 2, 3]);
+
+    expect(activityLogModule.recordPuzzleCompleted).toHaveBeenCalledTimes(2);
   });
 
   describe('completion Modal Retry/Next', () => {

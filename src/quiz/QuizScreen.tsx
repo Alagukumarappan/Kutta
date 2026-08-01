@@ -3,7 +3,8 @@ import { Animated, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
-import { loadQuestions } from './loadQuestions';
+import { loadQuestions, QuestionsFileCorruptError } from './loadQuestions';
+import { recordQuizCompleted } from '../storage/activityLog';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
 import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
@@ -54,7 +55,12 @@ export function QuizScreen({
   const insets = useSafeAreaInsets();
   const [state, setState] = useState<QuizSessionState | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [error, setError] = useState(false);
+  // 'generic' covers every prior failure mode (SAF grant revoked, folder
+  // deleted externally, SD card unmounted) and keeps the existing retry
+  // copy/behavior byte-identical. 'corrupt' is the new, narrower case where
+  // questions.json itself exists but isn't valid quiz data — worth telling a
+  // parent apart from "nothing went wrong, there's just no quiz content".
+  const [errorKind, setErrorKind] = useState<'generic' | 'corrupt' | null>(null);
   // Bumped on Retry to force a fresh load attempt even when quizFolderUri and
   // childAge haven't changed (e.g. a transient failure).
   const [retryToken, setRetryToken] = useState(0);
@@ -146,9 +152,29 @@ export function QuizScreen({
     };
   }, [state?.isFinished, reducedMotion, scoreCardScaleAnim, scoreCardOpacityAnim]);
 
+  // Records one completed quiz per genuine finish (initial mount+finish, and
+  // every "Play Again" finish) — a rising-edge guard mirroring the reset
+  // above, so re-renders while already finished don't record again. A
+  // session with zero eligible questions is also technically "isFinished"
+  // (see quizSession.ts's initialSessionState) but must NOT count as a
+  // completed quiz — that's the empty-state screen, not an actual play.
+  const hasRecordedThisFinishRef = useRef(false);
+  useEffect(() => {
+    if (!state?.isFinished || state.session.length === 0) {
+      hasRecordedThisFinishRef.current = false;
+      return;
+    }
+    if (hasRecordedThisFinishRef.current) return;
+    hasRecordedThisFinishRef.current = true;
+    recordQuizCompleted().catch(() => {
+      // Best-effort: a purely decorative counter must never block or crash
+      // the completion screen over an AsyncStorage write failure.
+    });
+  }, [state?.isFinished, state?.session.length]);
+
   useEffect(() => {
     let cancelled = false;
-    setError(false);
+    setErrorKind(null);
     setState(null);
 
     loadQuestions(quizFolderUri)
@@ -158,12 +184,14 @@ export function QuizScreen({
         const session = buildSession(all, childAge);
         setState(initialSessionState(session));
       })
-      .catch(() => {
+      .catch((err) => {
+        if (cancelled) return;
         // The SAF grant may have been revoked, the quiz folder deleted
         // externally, or an SD card unmounted — surface a retry state
         // instead of leaving an unhandled rejection and a permanently blank
-        // loading screen.
-        if (!cancelled) setError(true);
+        // loading screen. A corrupt questions.json gets its own, more
+        // specific message (see QuestionsFileCorruptError's own comment).
+        setErrorKind(err instanceof QuestionsFileCorruptError ? 'corrupt' : 'generic');
       });
 
     return () => {
@@ -184,7 +212,7 @@ export function QuizScreen({
     paddingBottom: spacing.lg + insets.bottom,
   };
 
-  if (error) {
+  if (errorKind) {
     // Restyled onto the shared design-system's error-card shape — the same
     // RaisedCard + RaisedPrimaryButton pattern every other gallery/player's
     // error state already converged on (VideoPlayerScreen, ColoringGallery,
@@ -197,7 +225,7 @@ export function QuizScreen({
       <View testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
         <RaisedCard color={dsColors.surface} borderColor={quizPalette.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
           <View style={styles.errorCardInner}>
-            <Text style={styles.errorTitle}>{t('loadError')}</Text>
+            <Text style={styles.errorTitle}>{t(errorKind === 'corrupt' ? 'quizFileCorrupt' : 'loadError')}</Text>
             <RaisedPrimaryButton
               testID="quiz-retry"
               label={t('retry')}

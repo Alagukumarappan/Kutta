@@ -38,6 +38,36 @@ describe('OnboardingScreen', () => {
     jest.clearAllMocks();
   });
 
+  // Regression test: this name is later rendered centered and unbounded on
+  // TicTacToeScreen's statusText and the shared CelebrationOverlay's
+  // completion title, neither of which truncates or scrolls (same risk
+  // fixed for the friend name in quality-evolution iteration 18).
+  it('caps the child name at a sensible maximum length', async () => {
+    const { getByTestId } = await renderScreen();
+
+    expect(getByTestId('onboarding-name-input').props.maxLength).toBe(20);
+  });
+
+  it('clamps the underlying name state itself, not just the input prop', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+    (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByTestId, getByText } = await renderScreen();
+
+    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'x'.repeat(50));
+    await selectAge(getByTestId, 4);
+    await fireEvent.press(getByText('Choose content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    await fireEvent.press(getByText('Save'));
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'x'.repeat(20) })
+      )
+    );
+  });
+
   it('saves the profile and calls onComplete after a successful folder pick', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
     (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
@@ -127,6 +157,38 @@ describe('OnboardingScreen', () => {
     });
     await waitFor(() => expect(profileStore.saveProfile).toHaveBeenCalledTimes(1));
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression test for a real bug fix: handlePickFolder previously had no
+  // re-entrancy guard at all (unlike handleSave's savingRef right below it),
+  // so a rapid double-tap on "Choose content folder" — trivial for a child,
+  // even on this parent-facing screen — could fire two concurrent
+  // requestFolderAccess() calls, whose two resolved uris could resolve out
+  // of order and leave folderUri set to whichever one happened to finish
+  // first rather than the one the parent actually meant to end up with.
+  it('guards "Choose content folder" against a rapid double-tap, only picking once', async () => {
+    let resolveFolderPick!: (uri: string) => void;
+    (folderAccess.requestFolderAccess as jest.Mock).mockImplementation(
+      () => new Promise<string>((resolve) => { resolveFolderPick = resolve; })
+    );
+
+    const { getByText } = await renderScreen();
+
+    // Two rapid presses on the SAME captured element before the mocked
+    // picker promise ever resolves — same "stale double-tap" shape as this
+    // codebase's other double-fire guard tests.
+    const pickFolderButton = getByText('Choose content folder');
+    await act(async () => {
+      fireEvent.press(pickFolderButton);
+      fireEvent.press(pickFolderButton);
+    });
+
+    expect(folderAccess.requestFolderAccess).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFolderPick('content://tree/root');
+      await Promise.resolve();
+    });
   });
 
   it('does not save when age has not been selected', async () => {

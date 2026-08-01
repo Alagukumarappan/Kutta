@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
@@ -37,8 +38,20 @@ import {
 // and most consequential action, uses the full RaisedPrimaryButton instead —
 // its size='large' preset already clears touchTarget.primaryCTA (64dp) on
 // its own, no hitSlop trick required.
+// Same length-cap idiom as TicTacToeSetupScreen's friend-name field
+// (quality-evolution iteration 18): this name is later rendered centered
+// and unbounded on TicTacToeScreen's statusText and the shared
+// CelebrationOverlay's completion title, neither of which truncates or
+// scrolls — an arbitrarily long name could push those layouts off-screen.
+const CHILD_NAME_MAX_LENGTH = 20;
+
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
+  // Rendered directly (not inside a Stack.Screen), so there's no native
+  // header ever — this screen has to reserve its own safe-area insets, same
+  // as every other landscape screen (Home, Settings), so a side notch or
+  // gesture-nav bar never covers content.
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [age, setAge] = useState<number | null>(null);
   const [ageModalVisible, setAgeModalVisible] = useState(false);
@@ -55,6 +68,10 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [pictureModalVisible, setPictureModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
+  function handleNameChange(text: string) {
+    setName(text.slice(0, CHILD_NAME_MAX_LENGTH));
+  }
+
   const nameValid = name.trim().length > 0;
   const ageValid = age !== null;
   const folderValid = !!folderUri;
@@ -69,13 +86,25 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   // content copies and onComplete() firing twice. A ref closes that gap
   // immediately, synchronously, unlike state.
   const savingRef = useRef(false);
+  // Same re-entrancy guard idiom as savingRef above (and FolderErrorScreen's
+  // pickingRef in RootNavigator.tsx, which reuses this exact
+  // requestFolderAccess() primitive) — without it, a rapid double-tap on
+  // "Choose content folder" could fire two concurrent SAF picker
+  // invocations, whose two resolved uris could resolve out of order and
+  // leave folderUri set to whichever one happened to finish first rather
+  // than the one the parent actually meant to end up with.
+  const pickingFolderRef = useRef(false);
 
   async function handlePickFolder() {
+    if (pickingFolderRef.current) return;
+    pickingFolderRef.current = true;
     try {
       const uri = await requestFolderAccess();
       setFolderUri(uri);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    } finally {
+      pickingFolderRef.current = false;
     }
   }
 
@@ -99,7 +128,15 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
     <View style={styles.outer}>
     <ScrollView
       style={styles.scrollView}
-      contentContainerStyle={styles.screen}
+      contentContainerStyle={[
+        styles.screen,
+        {
+          paddingTop: spacing.sm + insets.top,
+          paddingLeft: spacing.sm + insets.left,
+          paddingRight: spacing.sm + insets.right,
+          paddingBottom: spacing.sm + insets.bottom,
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.brandBadge}>🐾</Text>
@@ -136,7 +173,8 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
                 <TextInput
                   testID="onboarding-name-input"
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={handleNameChange}
+                  maxLength={CHILD_NAME_MAX_LENGTH}
                   style={[styles.textInput, nameValid ? styles.textInputFilled : styles.textInputEmpty]}
                   placeholder="Name"
                   placeholderTextColor={colors.inkMuted}
@@ -293,16 +331,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.sm,
     alignItems: 'stretch',
-    // Centered rather than top-anchored: this form's content was originally
-    // sized for a short, wide landscape viewport, and now renders in a
-    // taller portrait one (onboarding is portrait-only, see
-    // RootNavigator.tsx) — top-anchoring left a large empty gap below the
-    // form on a real phone. Centering keeps the same compact cards but
-    // balances them within the extra vertical space instead of stranding it
-    // at the bottom. Only takes effect once content is shorter than the
-    // viewport (flexGrow:1 already handles the reverse: a smaller screen or
+    // Centered rather than top-anchored, matching this screen's short, wide
+    // landscape viewport (see RootNavigator.tsx's orientation lock) —
+    // flexGrow:1 already handles the reverse case too: a smaller screen or
     // more content still scrolls normally, since a ScrollView never clips
-    // content shorter than justifyContent would otherwise want to show).
+    // content shorter than justifyContent would otherwise want to show.
     justifyContent: 'center',
   },
   brandBadge: {

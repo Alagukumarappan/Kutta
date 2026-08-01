@@ -4,7 +4,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 import { getProfile, saveProfile, clearProfile } from '../storage/profileStore';
+import { getActivityLog, clearActivityLog, type ActivityLog } from '../storage/activityLog';
+import { clearAllFileReferences } from '../storage/fileReferenceStore';
+import { clearPuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { requestFolderAccess, findChildUri, KUTTA_GAMES_FOLDER_NAME } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
@@ -65,6 +69,14 @@ function FadeInBanner({
 // read it, short enough not to feel like the app is stuck after a tap.
 const SAVED_TOAST_DURATION_MS = 1200;
 
+// Same length-cap idiom as TicTacToeSetupScreen's friend-name field and
+// OnboardingScreen's own name field (quality-evolution iterations 18/20):
+// this name is later rendered centered and unbounded on TicTacToeScreen's
+// statusText and the shared CelebrationOverlay's completion title, neither
+// of which truncates or scrolls — an arbitrarily long name could push
+// those layouts off-screen.
+const CHILD_NAME_MAX_LENGTH = 20;
+
 export function SettingsScreen({
   onProfileChanged,
   onGoHome,
@@ -79,7 +91,7 @@ export function SettingsScreen({
   onReset?: () => void;
   picturesFolderUri?: string;
 } = {}) {
-  const { t, setLanguage } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   // Shown with headerShown:true (see RootNavigator), so the native header
   // already covers the top inset — only left/right/bottom are ours to
   // handle (a notch or gesture-nav bar sits at one of the sides in this
@@ -102,6 +114,7 @@ export function SettingsScreen({
   const [previewFailed, setPreviewFailed] = useState(false);
   const [savedToastVisible, setSavedToastVisible] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [activityLog, setActivityLog] = useState<ActivityLog | null>(null);
   const goHomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards handleSave against a rapid double-tap on Save — same idiom as
   // PuzzleScreen's retryFiredRef/nextFiredRef. Without this, tapping Save
@@ -113,6 +126,40 @@ export function SettingsScreen({
   // orphaning the first timer, and both eventually fired onGoHome?.(),
   // navigating Home twice.
   const saveInFlightRef = useRef(false);
+  // Same re-entrancy guard idiom as OnboardingScreen's pickingFolderRef and
+  // FolderErrorScreen's pickingRef (both reuse this exact
+  // requestFolderAccess() primitive) — without it, a rapid double-tap on
+  // "Change content folder" could fire two concurrent SAF picker
+  // invocations, whose two resolved uris could resolve out of order and
+  // leave pendingFolderUri set to whichever one happened to finish first
+  // rather than the one the parent actually meant to end up with.
+  const pickingFolderRef = useRef(false);
+  // handleSave awaits confirmMigration()/migrateContent() before persisting
+  // — both potentially slow (a real confirmation dialog, a real file copy)
+  // — but nothing disables the name/age/language/picture fields while that
+  // await is pending. Without these refs, handleSave would build its
+  // "nextProfile" to save from a SNAPSHOT of `profile`/`age` taken before
+  // those awaits, so any edit the parent makes to those fields WHILE a
+  // migration is in flight would be silently discarded the moment the
+  // in-flight save's own `setProfile(nextProfile)` finally runs, overwriting
+  // the parent's newer edit with the stale one. Kept in sync on every
+  // render below so handleSave can read the FRESHEST values right before
+  // actually persisting, instead of the ones captured when Save was first
+  // pressed. Deliberately NOT applied to the folder-migration decision
+  // itself (`pendingFolderUri`) — which folder migrateContent actually
+  // migrates FROM/TO must stay pinned to the snapshot taken when Save was
+  // pressed, not silently redirected if the parent picks yet another folder
+  // mid-migration.
+  const latestProfileRef = useRef(profile);
+  const latestAgeRef = useRef(age);
+
+  useEffect(() => {
+    latestProfileRef.current = profile;
+  }, [profile]);
+
+  useEffect(() => {
+    latestAgeRef.current = age;
+  }, [age]);
 
   useEffect(() => {
     return () => {
@@ -125,6 +172,7 @@ export function SettingsScreen({
       setProfile(p);
       if (p) setAge(p.age);
     });
+    getActivityLog().then(setActivityLog);
   }, []);
 
   // Reset the stale-preview flag whenever the picture itself changes (a new
@@ -155,11 +203,15 @@ export function SettingsScreen({
   }
 
   async function handlePickFolder() {
+    if (pickingFolderRef.current) return;
+    pickingFolderRef.current = true;
     try {
       const uri = await requestFolderAccess();
       setPendingFolderUri(uri);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    } finally {
+      pickingFolderRef.current = false;
     }
   }
 
@@ -206,6 +258,14 @@ export function SettingsScreen({
         }
       }
       await clearProfile();
+      await clearActivityLog();
+      // Individually-"+"-added file references and the remembered puzzle
+      // difficulty are both keyed globally (not per-profile), so without
+      // these a fresh profile after this reset would silently inherit the
+      // PREVIOUS child's picked files and difficulty setting instead of a
+      // genuine fresh start.
+      await clearAllFileReferences();
+      await clearPuzzleDifficulty();
       onReset?.();
     } finally {
       setResetting(false);
@@ -214,14 +274,29 @@ export function SettingsScreen({
 
   async function handleSave() {
     if (!profile || migrating || saveInFlightRef.current) return;
+    // Unlike OnboardingScreen (which disables Save entirely until the name
+    // is non-blank), this screen has no existing convention for disabling
+    // Save based on field validity — every other failure here (folder pick,
+    // migration) already surfaces via Alert.alert, so a blank/whitespace-only
+    // name is blocked the same way rather than introducing a new inline
+    // field-error style just for this one case. Without this, a parent
+    // clearing the name field and hitting Save would silently persist an
+    // empty name, breaking HomeScreen's "Hi, {name}" greeting and the
+    // profile-picture initial-letter fallback (both assume a non-empty name).
+    if (profile.name.trim().length === 0) {
+      Alert.alert(t('onboardingNameMissing'));
+      return;
+    }
     saveInFlightRef.current = true;
     try {
       setMigrationError(null);
 
-      let nextProfile: Profile = {
-        ...profile,
-        age: age !== null ? age : profile.age,
-      };
+      // Which folder to migrate FROM/TO is decided from the snapshot taken
+      // when Save was pressed, deliberately NOT re-read from the latest
+      // state below — if the parent somehow picked yet another folder while
+      // this migration is already in flight, that later pick must not
+      // retroactively change what's already being migrated.
+      let migratedRootFolderUri: string | undefined;
 
       if (pendingFolderUri && pendingFolderUri !== profile.rootFolderUri) {
         const oldUri = profile.rootFolderUri;
@@ -241,8 +316,36 @@ export function SettingsScreen({
           setMigrationError(t('migrationFailed'));
           return;
         }
-        nextProfile = { ...nextProfile, rootFolderUri: pendingFolderUri };
+        migratedRootFolderUri = pendingFolderUri;
       }
+
+      // Read the FRESHEST name/age/language/picture right before
+      // persisting, not the snapshot from when Save was first pressed —
+      // see latestProfileRef/latestAgeRef's own comment above for why.
+      const latestProfile = latestProfileRef.current;
+      const latestAge = latestAgeRef.current;
+      if (!latestProfile) return;
+
+      // If the name went blank during the migration confirm/copy above,
+      // fall back to the ORIGINAL, already-validated name instead of
+      // blocking persistence entirely. By this point a folder migration may
+      // already have irreversibly happened — migrateContent deletes the old
+      // folder's content once its copy is verified — so aborting the save
+      // here (as an earlier version of this fix did) would leave the
+      // profile pointing at now-deleted content with no way back. The
+      // freshest name is still used whenever it's actually valid; only the
+      // specific "went blank mid-flight" case silently falls back, and only
+      // for the name field — every other fresh edit (age/language/picture)
+      // is still honored below.
+      const freshName = latestProfile.name.trim();
+      const nameToSave = freshName.length > 0 ? freshName : profile.name.trim();
+
+      const nextProfile: Profile = {
+        ...latestProfile,
+        name: nameToSave,
+        age: latestAge !== null ? latestAge : latestProfile.age,
+        rootFolderUri: migratedRootFolderUri ?? latestProfile.rootFolderUri,
+      };
 
       await saveProfile(nextProfile);
       setProfile(nextProfile);
@@ -288,13 +391,25 @@ export function SettingsScreen({
         >
           <Text style={styles.title}>{t('settingsTitle')}</Text>
 
+          {activityLog && (activityLog.quizzesCompleted > 0 || activityLog.puzzlesCompleted > 0) && (
+            <View testID="settings-accomplishments" style={styles.card}>
+              <Text style={styles.label}>{t('settingsAccomplishmentsTitle')}</Text>
+              <Text style={styles.accomplishmentsText}>
+                {tFormat('settingsQuizzesCompleted', language, { count: activityLog.quizzesCompleted })}
+                {'  •  '}
+                {tFormat('settingsPuzzlesCompleted', language, { count: activityLog.puzzlesCompleted })}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.row}>
             <View style={[styles.card, styles.halfCard]}>
               <Text style={styles.label}>{t('onboardingName')}</Text>
               <TextInput
                 testID="settings-name-input"
                 value={profile.name}
-                onChangeText={(name) => setProfile({ ...profile, name })}
+                onChangeText={(name) => setProfile({ ...profile, name: name.slice(0, CHILD_NAME_MAX_LENGTH) })}
+                maxLength={CHILD_NAME_MAX_LENGTH}
                 style={styles.textInput}
               />
             </View>
@@ -340,6 +455,8 @@ export function SettingsScreen({
               <Pressable
                 testID="settings-folder-picker"
                 onPress={handlePickFolder}
+                accessibilityRole="button"
+                accessibilityLabel={t('settingsChangeFolder')}
                 style={({ pressed }) => [styles.folderButton, pressed && styles.pressedSubtle]}
                 hitSlop={{ top: 8, bottom: 8 }}
               >
@@ -368,6 +485,8 @@ export function SettingsScreen({
                   <Pressable
                     testID="settings-picture-choose"
                     onPress={handleChoosePicture}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profilePictureChoose')}
                     style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
                     hitSlop={{ top: 6, bottom: 6 }}
                   >
@@ -378,6 +497,8 @@ export function SettingsScreen({
                   <Pressable
                     testID="settings-picture-remove"
                     onPress={handleRemovePicture}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profilePictureRemove')}
                     style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
                     hitSlop={{ top: 6, bottom: 6 }}
                   >
@@ -408,6 +529,8 @@ export function SettingsScreen({
             testID="settings-save"
             onPress={handleSave}
             disabled={migrating}
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsSave')}
             style={({ pressed }) => [
               styles.saveButton,
               migrating ? styles.saveButtonDisabled : styles.saveButtonEnabled,
@@ -423,6 +546,8 @@ export function SettingsScreen({
             testID="settings-reset"
             onPress={handleReset}
             disabled={resetting}
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsReset')}
             style={({ pressed }) => [
               styles.resetButton,
               resetting && styles.resetButtonDisabled,
@@ -489,6 +614,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.parent.inkMuted,
     marginBottom: spacing.xxs,
+  },
+  accomplishmentsText: {
+    fontSize: typography.body.fontSize,
+    fontWeight: '600',
+    color: colors.parent.ink,
   },
   textInput: {
     borderWidth: 1,

@@ -164,6 +164,26 @@ describe('ColoringScreen', () => {
     expect(queryByTestId('coloring-image-load-error')).toBeNull();
   });
 
+  // Regression test: while the photo is still being read/decoded, `image`
+  // is `null` and `imageLoadFailed` is `false` — the exact same gap already
+  // fixed for VideoPlayerScreen (iteration 12) and ProfilePicturePicker
+  // (iteration 17), both converged on the shared LoadingPanel. Without a
+  // loading branch, a child would see a blank, fully-interactive canvas +
+  // toolbar with zero feedback that anything was happening at all.
+  it('shows a real loading spinner (not a blank interactive canvas) while the photo is still decoding', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-image-loading');
+    expect(queryByTestId('coloring-canvas-touch-area')).toBeNull();
+    expect(queryByTestId('coloring-image-load-error')).toBeNull();
+  });
+
   it('shows a friendly localized message (never the raw technical error) when the photo fails to load', async () => {
     (FileSystem.readAsStringAsync as jest.Mock).mockRejectedValue(
       new Error('ENOENT: no such file or directory, open \'/data/user/0/com.example/cache/x.jpg\'')
@@ -211,6 +231,32 @@ describe('ColoringScreen', () => {
     await fireEvent.press(await findByTestId('coloring-retry'));
 
     await findByTestId('coloring-canvas-touch-area');
+  });
+
+  // Regression test for the quality-evolution visual-consistency pass:
+  // ColoringScreen's error state was the one screen left rendering a bare
+  // View+Text instead of the RaisedCard+RaisedPrimaryButton pattern every
+  // other error state (FolderErrorScreen, QuizScreen, the 3 galleries,
+  // VideoPlayerScreen) had already converged on.
+  it('wraps the error message in a real styled card, not a bare unstyled layout', async () => {
+    const { StyleSheet } = require('react-native');
+    (FileSystem.readAsStringAsync as jest.Mock).mockRejectedValue(new Error('SAF grant revoked'));
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    // Query the RaisedCard's own testID directly (not just the surrounding
+    // plain View) — this is the actual proof RaisedCard is rendered at all,
+    // not just that some style constant survived; RaisedCard forwards its
+    // `testID` prop onto its own outer node (see RaisedCard.tsx's no-onPress
+    // path), so finding this testID with the expected `style` prop couldn't
+    // pass if the card were removed and a bare View put back in its place.
+    const raisedCard = await findByTestId('coloring-image-load-error-card');
+    const flattened = StyleSheet.flatten(raisedCard.props.style);
+    expect(flattened.maxWidth).toBeDefined();
   });
 
   it('labels each palette swatch with its localized color name and marks the selected one for screen readers', async () => {

@@ -5,18 +5,18 @@ import { RaisedPrimaryButton } from './Buttons';
 import { useReducedMotion } from './useReducedMotion';
 
 // The richer "empty-state panel" the brief calls for: icon/emoji + TITLE +
-// message + an optional action button, replacing the current bare-text (or,
-// in `src/components/EmptyState.tsx`'s case, emoji+message-only) empty
-// states with something that can also tell a parent what to do about it
-// (e.g. "Add pictures" straight from an empty gallery) rather than just
-// describing the absence.
+// message + an optional action button, replacing the old bare-text (or,
+// in the now-removed `src/components/EmptyState.tsx`'s case,
+// emoji+message-only) empty states with something that can also tell a
+// parent what to do about it (e.g. "Add pictures" straight from an empty
+// gallery) rather than just describing the absence.
 //
-// Deliberately a NEW, separate component rather than an edit to the
-// existing `src/components/EmptyState.tsx` — that component is still used
-// by today's (not-yet-redesigned) galleries and screens, and this iteration
-// is scoped to the shared foundation only; migrating each gallery over to
-// this richer panel (with its own title copy and action wiring) is
-// screen-level redesign work for a later iteration.
+// Originally created as a new, separate component rather than an edit to
+// `src/components/EmptyState.tsx`, since that component was still used by
+// the not-yet-redesigned galleries at the time and this iteration was
+// scoped to the shared foundation only. All three galleries (Coloring,
+// Puzzle, Video) have since migrated to this component; the old one had
+// no remaining callers and was deleted in a later quality pass.
 export function EmptyStatePanel({
   emoji,
   title,

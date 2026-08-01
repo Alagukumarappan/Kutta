@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
+import { recordPuzzleCompleted } from '../storage/activityLog';
 import {
   colors,
   radii,
@@ -20,7 +21,6 @@ import {
   elevation,
   typography,
   getActivityPalette,
-  RaisedCard,
   CelebrationOverlay,
   LoadingPanel,
   useReducedMotion,
@@ -32,6 +32,7 @@ import {
   shufflePieceOrder,
   groupPiecesIntoRows,
   PieceRect,
+  PUZZLE_PREVIEW_WIDTH_FRACTION,
 } from './puzzleGrid';
 
 // Puzzle's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
@@ -196,6 +197,24 @@ export function PuzzleScreen({
     }
   }, [isSolved]);
 
+  // Records one completed puzzle per genuine solve (initial solve, and every
+  // Retry's later re-solve) — a rising-edge guard, reset whenever isSolved
+  // goes false again (a fresh shuffle via Retry/Next), so a re-render while
+  // still solved doesn't record twice.
+  const hasRecordedThisSolveRef = useRef(false);
+  useEffect(() => {
+    if (!isSolved) {
+      hasRecordedThisSolveRef.current = false;
+      return;
+    }
+    if (hasRecordedThisSolveRef.current) return;
+    hasRecordedThisSolveRef.current = true;
+    recordPuzzleCompleted().catch(() => {
+      // Best-effort: a purely decorative counter must never block or crash
+      // the completion overlay over an AsyncStorage write failure.
+    });
+  }, [isSolved]);
+
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -341,17 +360,24 @@ export function PuzzleScreen({
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.row}>
-        <RaisedCard
-          color={colors.surface}
-          borderColor={PUZZLE_PALETTE.accentDark}
-          elevationLevel="level3"
-          style={styles.previewCardOuter}
-        >
-          <View style={styles.previewCard}>
-            <Image source={{ uri: imageUri }} style={styles.previewImage} testID="puzzle-preview" />
-            <Text style={styles.previewHint}>{t('puzzleMatchHint')}</Text>
-          </View>
-        </RaisedCard>
+        {/* A plain label + the full, uncropped source photo - no card/border
+            chrome around it, matching the reference design. Sized to a fixed
+            fraction of the window width (see PUZZLE_PREVIEW_WIDTH_FRACTION,
+            the exact same fraction computePuzzleBoardSize reserves for it),
+            so the board always gets the other ~80% regardless of screen
+            size. The image itself uses the photo's REAL aspect ratio (not a
+            forced square crop) so it displays in full whether the source
+            photo is portrait or landscape - resizeMode:'contain' is a
+            second, redundant safety net for the same guarantee. */}
+        <View style={[styles.previewColumn, { width: width * PUZZLE_PREVIEW_WIDTH_FRACTION - spacing.md }]}>
+          <Text style={styles.previewHint}>{t('puzzleMatchHint')}</Text>
+          <Image
+            source={{ uri: imageUri }}
+            style={[styles.previewImage, { aspectRatio: imageWidth / imageHeight }]}
+            resizeMode="contain"
+            testID="puzzle-preview"
+          />
+        </View>
 
         {/* The board sits inside a deliberately deep "recessed tray" frame
             (surfaceSunk fill, a strong accent border, and a heavier
@@ -444,25 +470,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  previewCardOuter: {
+  previewColumn: {
     marginRight: spacing.md,
   },
-  previewCard: {
-    padding: spacing.sm,
-    alignItems: 'center',
-  },
   previewImage: {
-    width: 80,
-    height: 80,
+    width: '100%',
     borderRadius: radii.md,
   },
   previewHint: {
-    marginTop: spacing.xs,
-    fontSize: typography.caption.fontSize,
-    fontWeight: typography.caption.fontWeight,
-    color: PUZZLE_PALETTE.accentDark,
+    marginBottom: spacing.xs,
+    fontSize: typography.body.fontSize,
+    fontWeight: '800',
+    color: colors.berryDark,
     textAlign: 'center',
-    maxWidth: 90,
   },
   // The "recessed tray" the board sits in — a sunken fill (darker than the
   // canvas background, lighter than the pieces' own white slots) plus a

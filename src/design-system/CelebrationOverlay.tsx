@@ -1,5 +1,13 @@
 import React from 'react';
-import { Animated, Modal, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import {
+  AccessibilityInfo,
+  Animated,
+  Modal,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 import { colors, elevation, motion, radii, spacing, typography } from './tokens';
 import { SurfaceWash } from './SurfaceWash';
 import { RaisedPrimaryButton, RaisedSecondaryButton } from './Buttons';
@@ -104,6 +112,17 @@ export function CelebrationOverlay({
     };
   }, [visible, tone, emoji, reducedMotion, scaleAnim, opacityAnim, bubbleScaleAnim, bubbleOpacityAnim]);
 
+  // accessibilityRole="alert" + accessibilityLiveRegion="polite" on the
+  // title (below) reliably notifies Android's TalkBack, but iOS VoiceOver
+  // does not auto-announce on mount just because of that role - it needs an
+  // explicit announcement. Fire one whenever the dialog actually becomes
+  // visible, covering both the title and the message so a VoiceOver user
+  // doesn't have to manually navigate to catch the message.
+  React.useEffect(() => {
+    if (!visible) return;
+    AccessibilityInfo.announceForAccessibility(message ? `${title}. ${message}` : title);
+  }, [visible, title, message]);
+
   if (!visible) return null;
 
   const washTint = tone === 'success' ? colors.jade : colors.violet;
@@ -113,6 +132,8 @@ export function CelebrationOverlay({
     <Modal visible transparent animationType="fade" testID={testID}>
       <View style={styles.backdrop}>
         <Animated.View
+          testID="celebration-overlay-card"
+          accessibilityViewIsModal
           style={[styles.card, elevation.level5, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
         >
           <View style={styles.cardClip}>
@@ -130,7 +151,13 @@ export function CelebrationOverlay({
               </Animated.View>
             )}
 
-            <Text style={styles.title}>{title}</Text>
+            <Text
+              style={styles.title}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              {title}
+            </Text>
             {message && <Text style={styles.message}>{message}</Text>}
 
             {actions.length > 0 && (
