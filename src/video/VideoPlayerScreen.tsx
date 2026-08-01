@@ -151,22 +151,46 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     <View style={styles.fullScreen}>
       <VideoView
         player={player}
-        // Genuinely edge-to-edge (no inset padding) — the whole point of
-        // this redesign is filling the actual physical screen the way a
-        // real video app's fullscreen player does, notch/gesture-bar area
-        // included, not shrinking the video away from it.
-        style={[styles.videoView, { width, height }]}
+        // Fills the real screen size (see fullScreen's own black
+        // background for the immersive look), but still reserves the
+        // safe-area insets as padding rather than going fully edge-to-edge
+        // behind a notch/gesture-nav bar: expo-video's nativeControls is
+        // an all-or-nothing boolean (no way to inset just the controls
+        // layer on its own), so going truly edge-to-edge risks the native
+        // scrubber/play/fullscreen buttons landing under a cutout and
+        // becoming unreachable — a real regression risk not worth trading
+        // for a few extra pixels of "immersive" video.
+        style={[
+          styles.videoView,
+          {
+            width,
+            height,
+            paddingTop: insets.top,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+            paddingBottom: insets.bottom,
+          },
+        ]}
         nativeControls
         contentFit="contain"
         // A small RaisedCard frame (this screen's previous look) only ever
         // made sense at a modest fixed size — a genuinely full-screen video
         // is the point here, so there's no card/border chrome left to clip
         // or collapse it (the earlier "thin line" bug was actually that
-        // card's own ambiguous flex sizing, not a surface-rendering issue -
-        // switching surfaceType away from the default 'surfaceView' never
-        // fixed anything and has been reverted, since 'textureView' has
-        // been observed to NOT correctly apply some videos' embedded
-        // rotation metadata, showing them sideways/upside-down instead).
+        // card's own ambiguous flex sizing, not a surface-rendering issue).
+        // Switching surfaceType away from the default 'surfaceView' never
+        // fixed the thin-line bug (the height fix did) — reverted here.
+        // NOTE: whether this also fixes the separate "video shows sideways
+        // and upside-down" bug is NOT yet confirmed on a real device. Two
+        // candidate causes, either or both may be at play: (1) 'textureView'
+        // is known to sometimes not apply a video's own embedded rotation
+        // metadata correctly, unlike the default 'surfaceView'; (2) this
+        // app force-locks landscape orientation app-wide (see
+        // RootNavigator.tsx's ScreenOrientation.lockAsync) independently of
+        // the device's live sensor orientation, which can compound with a
+        // video's own rotation transform on some Android versions. If
+        // reverting surfaceType alone doesn't fix the rotation on-device,
+        // the orientation-lock interaction is the next thing to try.
       />
 
       <CelebrationOverlay
