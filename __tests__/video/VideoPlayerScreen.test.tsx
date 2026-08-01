@@ -103,13 +103,29 @@ describe('VideoPlayerScreen', () => {
   // small fixed-size RaisedCard frame; that frame's own ambiguous flex
   // sizing collapsed the video down to a sliver (a real bug), which a
   // 'textureView' surfaceType change didn't actually fix; then an explicit
-  // height on the frame fixed the collapse, but 'textureView' turned out to
-  // have its OWN separate problem — some videos' embedded rotation metadata
-  // wasn't applied, showing them sideways/upside-down. The redesign here
-  // removes the frame concept entirely: a genuinely full-screen video with
-  // the default 'surfaceView' renderer (which doesn't have that rotation
-  // problem), sized directly from the real device window.
+  // height on the frame fixed the collapse. 'textureView' was still left in
+  // place at that point; a LATER report ("landscape video shows portrait
+  // and upside-down") led to reverting it, on the theory that 'textureView'
+  // doesn't always apply a video's embedded rotation metadata correctly —
+  // NOT yet confirmed on a real device, and a second candidate cause (the
+  // app's own force-landscape orientation lock interacting with the
+  // video's rotation) hasn't been ruled out either. The redesign here
+  // removes the small-card frame concept entirely: a genuinely full-screen
+  // video sized directly from the real device window, on the default
+  // 'surfaceView' renderer.
   it('fills the entire window (no fixed-size frame), matching the developer\'s explicit "fill the whole screen" request', async () => {
+    const { useWindowDimensions } = require('react-native');
+    // A deliberately distinctive fake size (not RN's own default test
+    // window) — proves the video view's size is actually DRIVEN by this
+    // hook's live value, not coincidentally matching some other constant
+    // (e.g. a leftover hardcoded 300, which would fail this exact check).
+    jest.spyOn(require('react-native/Libraries/Utilities/useWindowDimensions'), 'default').mockReturnValue({
+      width: 812,
+      height: 375,
+      scale: 2,
+      fontScale: 1,
+    });
+
     const { findByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <VideoPlayerScreen videoUri={VIDEO_URI} />
@@ -119,21 +135,14 @@ describe('VideoPlayerScreen', () => {
     await emitReady();
 
     const videoView = await findByTestId('video-view');
-    // useWindowDimensions() in this Jest environment resolves to RN's own
-    // default test window size (1080 x 1920 physical px through jest-expo's
-    // preset) — asserting against that exact value would be circular. The
-    // real guarantee this locks in is structural: no surfaceType prop (so
-    // it stays on the default 'surfaceView', avoiding the rotation bug),
-    // and width/height driven by the live hook value rather than any fixed
-    // number.
+    // No surfaceType prop -> stays on the default 'surfaceView'.
     expect(videoView.props.surfaceType).toBeUndefined();
-    expect(typeof videoView.props.style).not.toBe('undefined');
     const { StyleSheet } = require('react-native');
     const flattened = StyleSheet.flatten(videoView.props.style);
-    expect(typeof flattened.width).toBe('number');
-    expect(typeof flattened.height).toBe('number');
-    expect(flattened.width).toBeGreaterThan(0);
-    expect(flattened.height).toBeGreaterThan(0);
+    expect(flattened.width).toBe(812);
+    expect(flattened.height).toBe(375);
+
+    jest.restoreAllMocks();
   });
 
   // Regression test for a real gap: previously this screen showed NO
