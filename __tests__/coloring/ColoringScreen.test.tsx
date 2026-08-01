@@ -1122,6 +1122,80 @@ describe('ColoringScreen', () => {
       expect(queryByTestId('touch-cursor')).toBeNull();
     });
 
+    // Regression test for a real bug seen on-device: a child's finger
+    // touched one point on the canvas but the paint filled (and the cursor
+    // appeared) at a visibly different point. `nativeEvent.locationX/Y` has
+    // been observed to report inconsistently on some real Android devices
+    // for a touch inside this canvas's zoom/pan-transformed view hierarchy.
+    // The fix prefers `nativeEvent.touches[].pageX/pageY` (always
+    // window-absolute, unaffected by any transform) whenever a real
+    // `touches` array is present, exactly like the pinch-zoom code already
+    // did — this fires a grant event with a `touches` array reporting one
+    // point (40, 60) but a deliberately WRONG `locationX/locationY` (999,
+    // 999), and confirms the cursor lands at the `touches`-derived point,
+    // proving `locationX/Y` is ignored whenever `touches` is available.
+    it('positions the cursor from nativeEvent.touches[].pageX/pageY, not locationX/locationY, when a touches array is present', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: {
+          locationX: 999,
+          locationY: 999,
+          touches: [{ pageX: 40, pageY: 60 }],
+        },
+      });
+
+      const cursor = await findByTestId('touch-cursor');
+      const flattened = StyleSheet.flatten(cursor.props.style);
+      // Fill mode (the default): a fixed 36x36 ring centered on the touch
+      // point — (40, 60), the touches-array point, not (999, 999).
+      expect(flattened.left).toBeCloseTo(40 - 18);
+      expect(flattened.top).toBeCloseTo(60 - 18);
+    });
+
+    // Same discrimination, but for the actual PEN STROKE path rather than
+    // just the cursor — proves the fix reaches the real drawing/fill logic,
+    // not just the cosmetic cursor indicator.
+    it('starts a pen stroke at the touches-array point, not locationX/locationY, when a touches array is present', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: {
+          locationX: 999,
+          locationY: 999,
+          touches: [{ pageX: 40, pageY: 60 }],
+        },
+      });
+
+      // The identity (untouched, unzoomed) transform is a no-op mapping, so
+      // the canvas-space point the stroke starts at is exactly (40, 60) —
+      // the touches-array point — if (and only if) locationX/Y is ignored.
+      const pathMock = (Skia.Path.Make as jest.Mock).mock.results[0].value;
+      expect(pathMock.moveTo).toHaveBeenCalledWith(40, 60);
+    });
+
     it('sizes the cursor to the current pen width in Pen mode, tinted with the selected color', async () => {
       (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
       const { StyleSheet } = require('react-native');

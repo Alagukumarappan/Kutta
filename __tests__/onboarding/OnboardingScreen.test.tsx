@@ -404,6 +404,34 @@ describe('OnboardingScreen', () => {
       expect(getByTestId('onboarding-picture-placeholder')).toHaveTextContent('?');
     });
 
+    // Regression test for a real bug seen on-device: a parent reported "the
+    // welcome screen doesn't have a profile picture" — the picker was
+    // always there, but a plain initial-letter circle with no visible
+    // "tap here to add a photo" affordance reads as purely decorative, not
+    // interactive (unlike Settings' own picture picker, a full card with a
+    // visible "Choose a picture" button label this compact layout has no
+    // room for). A small "+" badge is the fix.
+    it('shows a "+" add-photo badge on the avatar when no picture is set yet', async () => {
+      const { getByTestId } = await renderScreen();
+      expect(getByTestId('onboarding-picture-add-badge')).toHaveTextContent('+');
+    });
+
+    it('hides the "+" add-photo badge once a picture has actually been picked', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://picked/photo.jpg', name: 'photo.jpg', lastModified: 0 }],
+      });
+
+      const { getByTestId, findByTestId, queryByTestId } = await renderScreen();
+      expect(getByTestId('onboarding-picture-add-badge')).toBeTruthy();
+
+      await fireEvent.press(getByTestId('onboarding-picture-picker'));
+      await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
+      await findByTestId('onboarding-picture-preview');
+
+      expect(queryByTestId('onboarding-picture-add-badge')).toBeNull();
+    });
+
     it('lets the parent pick a picture via "Browse anywhere" and shows a preview + remove link', async () => {
       (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
         canceled: false,

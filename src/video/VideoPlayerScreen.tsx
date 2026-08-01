@@ -148,7 +148,13 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
 
   return (
     <View style={[styles.container, insetStyle(insets)]}>
-      <RaisedCard color={colors.surfaceRaised} borderColor={palette.accentDark} elevationLevel="level3" style={styles.playerFrame}>
+      <RaisedCard
+        testID="video-player-frame"
+        color={colors.surfaceRaised}
+        borderColor={palette.accentDark}
+        elevationLevel="level3"
+        style={styles.playerFrame}
+      >
         <View style={styles.playerInner}>
           <VideoView
             player={player}
@@ -208,6 +214,29 @@ const styles = StyleSheet.create({
   playerFrame: {
     width: '100%',
     maxWidth: 700,
+    // RaisedCard's internal cardFace/cardClip layers both use flex:1 (so a
+    // RaisedCard normally sizes itself to whatever explicit dimensions its
+    // OWN parent gives it) — but this frame's parent (`container`, below)
+    // is a centered flex column with no explicit height of its own. Asking
+    // a flex:1 chain to size itself inside an unbounded, centered parent
+    // has been observed to resolve to an unpredictable height instead of
+    // the wrapped content's real size (the same root cause behind a
+    // stretched PuzzleScreen preview card fixed elsewhere) — here it
+    // collapsed the whole card toward ~0px tall, and since cardClip clips
+    // with overflow:'hidden', the real 300px-tall VideoView got clipped
+    // down to a sliver: audio kept playing (unaffected by visual clipping)
+    // while only a thin line of video showed. Giving this frame an
+    // EXPLICIT height removes the ambiguity — this is a best-effort
+    // diagnosis reasoned by analogy to a confirmed bug elsewhere in this
+    // same RaisedCard component, not yet verified on a real device.
+    //
+    // RN uses border-box sizing, so this height must cover the full box:
+    // videoView's own height (300) + playerInner's padding on both sides
+    // (spacing.sm x2) + cardFace's own borderWidth on both sides (4 x2) —
+    // omitting the border here would leave cardClip ~8px short of what
+    // playerInner actually needs, clipping the bottom sliver of the video
+    // right back off again.
+    height: 300 + spacing.sm * 2 + 4 * 2,
   },
   playerInner: {
     padding: spacing.sm,

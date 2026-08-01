@@ -122,6 +122,40 @@ describe('VideoPlayerScreen', () => {
     expect(videoView.props.surfaceType).toBe('textureView');
   });
 
+  // Regression test for a real bug seen on-device that the textureView
+  // change above did NOT actually fix: audio played but no video frame ever
+  // showed, just a thin line. Best-effort diagnosis (not yet confirmed on a
+  // real device): the player frame (a RaisedCard) has no explicit height of
+  // its own — RaisedCard's internal cardFace/cardClip layers both use
+  // flex:1, which sizes correctly when RaisedCard's own parent provides a
+  // definite height, but this frame's parent is a centered flex column with
+  // none — the same "flex:1 inside an unbounded parent" root cause already
+  // found and fixed for a stretched PuzzleScreen preview card, except here
+  // it collapsed the frame toward ~0px tall instead of stretching, clipping
+  // the real 300px-tall VideoView down to a sliver via cardClip's
+  // overflow:'hidden' (audio, unaffected by visual clipping, kept playing
+  // normally). Giving the frame an explicit height removes that specific
+  // ambiguity, whether or not it turns out to be the whole story.
+  it('gives the player frame an explicit height, so it can never collapse the video view down to a sliver', async () => {
+    const { StyleSheet } = require('react-native');
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await emitReady();
+
+    const frame = await findByTestId('video-player-frame');
+    const flattened = StyleSheet.flatten(frame.props.style);
+    // Full border-box: videoView's own height (300) + playerInner's padding
+    // on both sides (spacing.sm=12 x2) + cardFace's own borderWidth on both
+    // sides (4 x2) — omitting the border would leave cardClip a few px
+    // short of what playerInner actually needs, clipping the bottom sliver
+    // of the video right back off again.
+    expect(flattened.height).toBe(300 + 12 * 2 + 4 * 2);
+  });
+
   // Regression test for a real gap: previously this screen showed NO
   // feedback at all while the video was still loading (only 'error' was
   // ever handled) — a child would just see an empty frame with no signal

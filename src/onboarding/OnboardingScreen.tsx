@@ -168,6 +168,18 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
                     {(name.trim().charAt(0) || '?').toUpperCase()}
                   </Text>
                 )}
+                {/* A plain initial-letter circle reads as decorative, not
+                    tappable — unlike Settings' own picture picker (a full
+                    card with a visible "Choose a picture" button label),
+                    this one has no room for a text label at this compact
+                    size. A small "+" badge is the same minimal, widely
+                    understood affordance most apps use for "tap to add a
+                    photo", without needing extra layout space. */}
+                {!pictureUri && (
+                  <View testID="onboarding-picture-add-badge" style={styles.avatarAddBadge}>
+                    <Text style={styles.avatarAddBadgeText}>+</Text>
+                  </View>
+                )}
               </AnimatedPressable>
               <View style={styles.nameInputColumn}>
                 <TextInput
@@ -405,6 +417,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: colors.violetDark,
+  },
+  // Sits fully INSIDE the circle's own bounds (not overlapping its edge) —
+  // avatarButton's overflow:'hidden' (needed to clip a chosen picture into
+  // a circle) would otherwise clip off anything positioned past its border.
+  avatarAddBadge: {
+    position: 'absolute',
+    // Flush bottom:0/right:0 would put this badge's own outer corner
+    // ~31px from the 44x44 circle's center — outside its 22px radius, so
+    // avatarButton's circular overflow:'hidden' would clip a real chunk of
+    // it into a lens shape. Insetting by 8 on both edges keeps the badge's
+    // own farthest corner within the circle's radius (~21px from center),
+    // so the full circular badge renders uncropped.
+    bottom: 8,
+    right: 8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.violetDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarAddBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.white,
+    lineHeight: 12,
   },
   nameInputColumn: {
     flex: 1,

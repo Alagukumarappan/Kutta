@@ -28,6 +28,19 @@ export interface TouchPoint {
   y: number;
 }
 
+// Converts a touch's PAGE-space position (pageX/pageY — always
+// window-absolute, unaffected by any transform applied to intervening
+// views) into the position local to some view, given that view's own
+// on-screen origin (as reported by a native `measureInWindow` call). Used
+// in place of trusting `nativeEvent.locationX/locationY` directly, which
+// has been observed to report inconsistently for a touch inside a
+// transformed (scaled/translated) view hierarchy on some real Android
+// devices — the "finger touches one point, paint/cursor appears at a
+// different point" bug class this exists to avoid.
+export function pagePointToLocalPoint(pageX: number, pageY: number, origin: Point): Point {
+  return { x: pageX - origin.x, y: pageY - origin.y };
+}
+
 // Inverts the screen->canvas mapping described above. Guards against a
 // zero/non-finite scale (should never happen given clampTransform's own
 // minScale floor, but keeps this safe to unit-test with adversarial input

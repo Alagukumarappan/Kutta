@@ -113,56 +113,47 @@ describe('PuzzleGallery', () => {
     await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
   });
 
-  // Redesign requirement: every tile must be a comfortable, large tap
-  // target (Material's 48dp minimum) — checked statically off the tile's
-  // own declared width/height rather than a measured layout, the same way
-  // this suite already checks the retry button's hitSlop below rather than
-  // simulating a real tap-and-measure.
-  // Regression test for the premium-polish performance pass: every tile is
-  // a fixed 128x128 square in a fixed 4-column grid, so FlatList can be
-  // given `getItemLayout` to skip measuring each row as it renders/scrolls
-  // — a real win once a folder holds dozens-to-hundreds of pictures (the
-  // project brief's own "1000 images" bug-hunt scenario).
-  it('gives the FlatList a getItemLayout matching the real fixed 128px tile / 4-column grid', async () => {
+  // Regression test for a real bug seen on-device: this gallery used to be
+  // its own different-looking grid (a fixed 128x128 tile in 4 columns).
+  // Unified onto ColoringGallery's exact responsive 3-per-row shape
+  // instead, which carries the same incomplete-last-row risk Coloring hit:
+  // a lone tile in the final row would stretch to fill the whole row width
+  // (FlatList's `flex: 1` + incomplete-last-row interaction). The fix pads
+  // the data with invisible filler tiles up to a multiple of 3.
+  it('pads an incomplete last row with invisible filler tiles instead of leaving the last image alone in its row', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
-      'content://tree/pictures/beach.jpg',
+      'content://tree/pictures/1.jpg',
+      'content://tree/pictures/2.jpg',
+      'content://tree/pictures/3.jpg',
+      'content://tree/pictures/4.jpg',
     ]);
 
-    const { findByTestId } = await render(
+    const { findByTestId, queryAllByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
       </LanguageProvider>
     );
 
-    const list = await findByTestId('puzzle-gallery-list');
-    const getItemLayout = list.props.getItemLayout;
-    expect(getItemLayout).toBeInstanceOf(Function);
-
-    // With numColumns > 1, FlatList's internal item count becomes the ROW
-    // count, and it calls getItemLayout with that same row-scale index —
-    // not the flat index into the image list — so index 0/1/2 here map to
-    // row 0/1/2, not individual tiles. Row height = 128px tile + 12px
-    // (spacing.sm) gap = 140.
-    expect(getItemLayout(null, 0)).toEqual({ length: 140, offset: 0, index: 0 });
-    expect(getItemLayout(null, 1)).toEqual({ length: 140, offset: 140, index: 1 });
-    expect(getItemLayout(null, 2)).toEqual({ length: 140, offset: 280, index: 2 });
+    await findByTestId('puzzle-item-content://tree/pictures/4.jpg');
+    const fillers = queryAllByTestId(/puzzle-item-filler-/);
+    expect(fillers).toHaveLength(2);
   });
 
-  it('renders picture tiles at least 48dp in each dimension (comfortable touch target)', async () => {
+  it('adds no filler tiles when the image count is already an exact multiple of 3', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
-      'content://tree/pictures/beach.jpg',
+      'content://tree/pictures/1.jpg',
+      'content://tree/pictures/2.jpg',
+      'content://tree/pictures/3.jpg',
     ]);
 
-    const { findByTestId } = await render(
+    const { findByTestId, queryAllByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
       </LanguageProvider>
     );
 
-    const tile = await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
-    const flatStyle = [tile.props.style].flat(Infinity).reduce((acc, s) => ({ ...acc, ...s }), {});
-    expect(flatStyle.width).toBeGreaterThanOrEqual(48);
-    expect(flatStyle.height).toBeGreaterThanOrEqual(48);
+    await findByTestId('puzzle-item-content://tree/pictures/3.jpg');
+    expect(queryAllByTestId(/puzzle-item-filler-/)).toHaveLength(0);
   });
 
   it('gives the retry button a real >=48dp tap target (a raised design-system card, not a bare text label)', async () => {

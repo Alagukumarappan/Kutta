@@ -34,6 +34,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import Slider from '@react-native-community/slider';
 import {
   screenPointToCanvasPoint,
+  pagePointToLocalPoint,
   applyPinchPan,
   clampTransform,
   IDENTITY_TRANSFORM,
@@ -206,6 +207,16 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // the two touches' screen positions at that same frame.
   const pinchStartTransformRef = useRef<CanvasTransform>(IDENTITY_TRANSFORM);
   const lastTouchesRef = useRef<[TouchPoint, TouchPoint] | null>(null);
+
+  // The touch-area's own on-screen (window) origin, kept in sync via
+  // onLayout below — needed to convert a touch's PAGE-space position
+  // (pageX/pageY, always window-absolute) into the LOCAL position relative
+  // to this view's own top-left corner, the same space
+  // screenPointToCanvasPoint's model and the touch-cursor's rendering both
+  // assume. See touchesFromEvent's own comment for why pageX/pageY is
+  // preferred over nativeEvent.locationX/locationY in the first place.
+  const touchAreaRef = useRef<View>(null);
+  const touchAreaOriginRef = useRef({ x: 0, y: 0 });
 
   // --- Touch cursor indicator ------------------------------------------
   // Raw SCREEN point (locationX/Y within coloring-canvas-touch-area, the
@@ -381,25 +392,48 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     setCurrentPath(null);
   }
 
-  // Reads the current gesture's touch points as plain {x,y} pairs, in PAGE
-  // space (pageX/pageY) rather than location space: pinch math only cares
-  // about RELATIVE distances/midpoint deltas between two consecutive
-  // frames, so either coordinate space works as long as it's used
-  // consistently — pageX/pageY is preferable here because
-  // nativeEvent.touches[].locationX/Y for the non-primary touch is less
-  // reliable cross-platform in RN's responder system, while pageX/pageY is
-  // always populated. Falls back to a single-touch reading (from
-  // locationX/Y) when `touches` is absent/empty — this is what every
-  // existing test's fake responder event shape already looks like (they
-  // only ever set locationX/Y, never a `touches` array), so this fallback
-  // is exactly what keeps all of them passing unmodified alongside the new
-  // pinch/pan behavior.
+  // Reads the current gesture's touch points as plain {x,y} pairs, in the
+  // SAME local coordinate space as screenPointToCanvasPoint's own model
+  // (relative to coloring-canvas-touch-area's own top-left corner) —
+  // computed from pageX/pageY (always window-absolute and populated) minus
+  // this view's own measured window origin (touchAreaOriginRef, kept in
+  // sync via onLayout below), rather than trusting
+  // nativeEvent.locationX/locationY directly. locationX/Y is documented to
+  // mean "relative to this view," but real devices (especially under the
+  // New Architecture, and especially for a view sitting under a
+  // scaled/translated transformed ancestor like this canvas's zoom/pan
+  // wrapper) have been observed to report it inconsistently — the exact
+  // "finger touches one point, paint fills a visibly different point" bug
+  // this fixes. pageX/pageY has no such ambiguity: it's the touch's
+  // absolute position on the physical screen, unaffected by any transform
+  // applied to intervening views. Falls back to a single-touch reading
+  // (from locationX/Y, unchanged) when `touches` is absent/empty — this is
+  // what every existing test's fake responder event shape already looks
+  // like (they only ever set locationX/Y, never a `touches` array, and
+  // never a real window origin either), so this fallback is exactly what
+  // keeps all of them passing unmodified.
   function touchesFromEvent(evt: GestureResponderEvent): TouchPoint[] {
     const touches = evt.nativeEvent.touches;
     if (!touches || touches.length === 0) {
       return [{ x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY }];
     }
-    return touches.map((touch) => ({ x: touch.pageX, y: touch.pageY }));
+    const origin = touchAreaOriginRef.current;
+    return touches.map((touch) => pagePointToLocalPoint(touch.pageX, touch.pageY, origin));
+  }
+
+  // onPanResponderRelease fires after the finger has already lifted, so
+  // nativeEvent.touches is already empty — touchesFromEvent would always
+  // fall through to its (stale/less reliable) locationX/Y fallback here.
+  // `changedTouches` is RN's own record of the touch(es) that just ended,
+  // still carrying that final pageX/pageY — the same reliable space
+  // touchesFromEvent already prefers for an in-progress touch.
+  function releasePointFromEvent(evt: GestureResponderEvent): TouchPoint {
+    const changedTouches = evt.nativeEvent.changedTouches;
+    if (!changedTouches || changedTouches.length === 0) {
+      return { x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY };
+    }
+    const origin = touchAreaOriginRef.current;
+    return pagePointToLocalPoint(changedTouches[0].pageX, changedTouches[0].pageY, origin);
   }
 
   const panResponder = useRef<PanResponderInstance>(
@@ -433,7 +467,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         }
 
         lastTouchesRef.current = null;
-        const { locationX, locationY } = evt.nativeEvent;
+        const { x: locationX, y: locationY } = touches[0];
         // The RAW screen point drives the touch-cursor indicator regardless
         // of tool mode — a fill tap gets a brief cursor too, not just pen
         // strokes.
@@ -494,7 +528,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 
         // Fell back to (or stayed at) 1 finger.
         lastTouchesRef.current = null;
-        const { locationX, locationY } = evt.nativeEvent;
+        const { x: locationX, y: locationY } = touches[0];
         setTouchCursor({ x: locationX, y: locationY });
         if (toolModeRef.current !== 'pen' || !activePathRef.current) return;
         const { x, y } = screenPointToCanvasPoint(locationX, locationY, transformRef.current);
@@ -511,7 +545,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           finishActiveStroke();
           return;
         }
-        const { locationX, locationY } = evt.nativeEvent;
+        const { x: locationX, y: locationY } = releasePointFromEvent(evt);
         const { x, y } = screenPointToCanvasPoint(locationX, locationY, transformRef.current);
         handleCanvasTap(x, y);
       },
@@ -728,7 +762,21 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           </View>
         ) : (
           <>
-            <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
+            <View
+              testID="coloring-canvas-touch-area"
+              ref={touchAreaRef}
+              // Keeps touchAreaOriginRef in sync with this view's real
+              // on-screen position — measureInWindow needs a mounted native
+              // view, so onLayout (which fires after every mount AND after
+              // any later resize, e.g. an orientation change) is the right
+              // trigger, not a one-time effect on mount alone.
+              onLayout={() => {
+                touchAreaRef.current?.measureInWindow((x, y) => {
+                  touchAreaOriginRef.current = { x, y };
+                });
+              }}
+              {...panResponder.panHandlers}
+            >
               {/* Clips zoomed/panned content to the canvas's own footprint
                   so panning never visually spills past its original bounds
                   into the rest of the screen. */}

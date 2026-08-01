@@ -1,5 +1,6 @@
 import {
   screenPointToCanvasPoint,
+  pagePointToLocalPoint,
   clampTransform,
   touchDistance,
   touchMidpoint,
@@ -7,6 +8,20 @@ import {
   IDENTITY_TRANSFORM,
   type CanvasTransform,
 } from '../../src/coloring/canvasTransform';
+
+describe('pagePointToLocalPoint', () => {
+  it('returns the page point unchanged when the origin is (0, 0)', () => {
+    expect(pagePointToLocalPoint(120, 80, { x: 0, y: 0 })).toEqual({ x: 120, y: 80 });
+  });
+
+  it('subtracts the given origin from the page point', () => {
+    expect(pagePointToLocalPoint(120, 80, { x: 20, y: 30 })).toEqual({ x: 100, y: 50 });
+  });
+
+  it('can produce a negative local point when the page point is above/left of the origin', () => {
+    expect(pagePointToLocalPoint(10, 10, { x: 50, y: 50 })).toEqual({ x: -40, y: -40 });
+  });
+});
 
 describe('screenPointToCanvasPoint', () => {
   it('returns the input unchanged at the identity transform', () => {

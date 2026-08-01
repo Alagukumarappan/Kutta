@@ -27,19 +27,38 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 // getActivityPalette) — carried through onto every tile's border here so
 // the gallery already reads as "puzzle" before a child taps into it.
 const PUZZLE_PALETTE = getActivityPalette('puzzle');
-const TILE_SIZE = 128;
-const GRID_COLUMNS = 4;
-// Every row's rendered height, in px: the tile's own fixed height plus the
-// `gridRow` style's marginBottom gap below it (see styles.gridRow/tile
-// below) — both are compile-time constants (fixed tile size, fixed column
-// count), never derived from async-loaded content, so this can be computed
-// once up front instead of measured. Feeds `getItemLayout` below.
-const ROW_HEIGHT = TILE_SIZE + spacing.sm;
+// Matches ColoringGallery's own grid exactly (3 responsive columns filling
+// the row width, not a fixed 128px tile in 4 columns) — this used to be its
+// own, different-looking grid; unifying it means a parent sees the same
+// "3 pictures per row" shape in every gallery, not just Coloring's.
+const GRID_COLUMNS = 3;
 const DIFFICULTY_OPTIONS: readonly PuzzleDifficulty[] = [4, 6, 9, 12];
 
 function isImageFile(uri: string): boolean {
   const lower = uri.toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+// FlatList's `numColumns` combined with a `flex: 1` tile (needed so each
+// tile fills an even 1/3 share of the row's width) has a well-known side
+// effect on an INCOMPLETE last row: with fewer than GRID_COLUMNS items in
+// the final row, each one's `flex: 1` expands to fill the ENTIRE row width
+// instead of just its own 1/3 share — see the identical fix already applied
+// to ColoringGallery.tsx. Padding the data with invisible, non-tappable
+// filler entries up to a multiple of GRID_COLUMNS keeps every real tile
+// locked to its normal 1/3-width slot.
+const GALLERY_FILLER_PREFIX = '__puzzle-gallery-filler__';
+
+function isGalleryFiller(uri: string): boolean {
+  return uri.startsWith(GALLERY_FILLER_PREFIX);
+}
+
+function withRowFillers(images: string[]): string[] {
+  const remainder = images.length % GRID_COLUMNS;
+  if (remainder === 0) return images;
+  const fillerCount = GRID_COLUMNS - remainder;
+  const fillers = Array.from({ length: fillerCount }, (_, i) => `${GALLERY_FILLER_PREFIX}${i}`);
+  return [...images, ...fillers];
 }
 
 export function PuzzleGallery({
@@ -238,29 +257,16 @@ export function PuzzleGallery({
       ) : (
         <FlatList
           testID="puzzle-gallery-list"
-          data={images}
+          data={withRowFillers(images)}
           keyExtractor={(uri) => uri}
           numColumns={GRID_COLUMNS}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.gridRow}
           showsVerticalScrollIndicator={false}
-          // Every tile is a fixed 128x128 square in a fixed 4-column grid
-          // (see TILE_SIZE/GRID_COLUMNS above) — giving FlatList this ahead
-          // of time lets it jump straight to any scroll offset instead of
-          // measuring each row's real layout as it renders, which matters
-          // once a folder holds dozens-to-hundreds of pictures. With
-          // numColumns > 1, FlatList's internal item COUNT becomes the row
-          // count (data.length / numColumns) and it calls getItemLayout
-          // with that SAME row-scale index — not the flat index into
-          // `images` — so the offset is `ROW_HEIGHT * index` directly, with
-          // no further division by GRID_COLUMNS (that would double-divide
-          // and collapse every row to offset 0).
-          getItemLayout={(_, index) => ({
-            length: ROW_HEIGHT,
-            offset: ROW_HEIGHT * index,
-            index,
-          })}
           renderItem={({ item }) => {
+            if (isGalleryFiller(item)) {
+              return <View testID={`puzzle-item-filler-${item}`} style={styles.tile} />;
+            }
             const isSelected = selectedUris.has(item);
             return (
               <RaisedCard
@@ -279,7 +285,7 @@ export function PuzzleGallery({
                 selected={selectionMode ? isSelected : undefined}
               >
                 <>
-                  <Image source={{ uri: item }} style={styles.tileImage} />
+                  <Image source={{ uri: item }} style={styles.tileImage} resizeMode="cover" />
                   {selectionMode && (
                     <View
                       testID={`puzzle-item-check-${item}`}
@@ -421,19 +427,19 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   gridRow: {
-    columnGap: spacing.sm,
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  // 128x128 (well above the 48dp minimum touch target) so each tile is both
-  // a comfortable tap target and large enough for a 2-8 year old to
-  // recognize the picture inside it at a glance.
+  // Same responsive, 3-per-row shape as ColoringGallery: each tile fills an
+  // even 1/3 share of the row's width (flex: 1) and stays square
+  // (aspectRatio: 1), well above the 48dp minimum touch target on any
+  // real device width.
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+    flex: 1,
+    aspectRatio: 1,
   },
   tileImage: {
-    width: '100%',
-    height: '100%',
+    flex: 1,
   },
   selectionBadge: {
     position: 'absolute',
