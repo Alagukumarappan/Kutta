@@ -197,6 +197,8 @@ export const UI_STRINGS = {
   // action than wiping every pen stroke), so an extra confirmation tap
   // would just be friction for a 2-8 year old, not a real safety need.
   undoFill: { en: 'Undo', de: 'Rückgängig' },
+  toolbarExpand: { en: 'Show tools', de: 'Werkzeuge anzeigen' },
+  toolbarCollapse: { en: 'Hide tools', de: 'Werkzeuge ausblenden' },
   loadError: {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
