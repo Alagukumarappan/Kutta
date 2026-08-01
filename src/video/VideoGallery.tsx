@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
-import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
-import { removeGalleryItems } from '../storage/galleryRemoval';
+import { useSelectableGallery } from '../components/useSelectableGallery';
 import {
   colors,
   spacing,
@@ -57,75 +55,18 @@ export function VideoGallery({
     paddingRight: insets.right,
     paddingBottom: insets.bottom,
   };
-  const [videos, setVideos] = useState<string[] | null>(null);
-  // Which currently-displayed videos came from an individual "+" pick
-  // (fileReferenceStore) rather than the configured folder — needed at
-  // removal time so removeGalleryItems knows whether to drop just the
-  // reference or actually delete the real file. See galleryRemoval.ts.
-  const [referencedUris, setReferencedUris] = useState<Set<string>>(new Set());
-  const [error, setError] = useState(false);
-  // Bumped on Retry (or after adding/removing files) to force a fresh load
-  // attempt even when videosFolderUri itself hasn't changed.
-  const [retryToken, setRetryToken] = useState(0);
-
-  // Long-press-to-multi-select-and-remove — same pattern as
-  // ColoringGallery/PuzzleGallery. Entering this mode never affects
-  // navigation (onSelect); a tap while selecting toggles selection instead,
-  // and reverts to normal tap-to-open the moment the selection empties out.
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
-  const [removing, setRemoving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setError(false);
-    setVideos(null);
-
-    Promise.all([
-      FileSystem.StorageAccessFramework.readDirectoryAsync(videosFolderUri).then((entries: string[]) =>
-        entries.filter(isVideoFile)
-      ),
-      // Videos the parent added individually (outside the configured
-      // folder) via AddFilesButton — pruneMissingFileReferences silently
-      // drops any that have since become unreachable rather than throwing,
-      // so it never causes this Promise.all to reject on its own.
-      pruneMissingFileReferences('video'),
-    ])
-      .then(([folderVideos, extraVideos]) => {
-        if (cancelled) return;
-        const merged = [...folderVideos, ...extraVideos.filter((uri) => !folderVideos.includes(uri))];
-        setVideos(merged);
-        setReferencedUris(new Set(extraVideos));
-      })
-      .catch(() => {
-        // The SAF grant may have been revoked, the folder deleted externally,
-        // or an SD card unmounted — surface a retry state instead of leaving
-        // an unhandled rejection and a permanently blank loading screen.
-        if (!cancelled) setError(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [videosFolderUri, retryToken]);
-
-  function toggleSelected(uri: string) {
-    setSelectedUris((prev) => {
-      const next = new Set(prev);
-      if (next.has(uri)) {
-        next.delete(uri);
-      } else {
-        next.add(uri);
-      }
-      if (next.size === 0) setSelectionMode(false);
-      return next;
-    });
-  }
-
-  function handleLongPress(uri: string) {
-    setSelectionMode(true);
-    setSelectedUris((prev) => new Set(prev).add(uri));
-  }
+  const {
+    items: videos,
+    error,
+    selectionMode,
+    selectedUris,
+    removing,
+    retry,
+    toggleSelected,
+    handleLongPress,
+    handleCancelSelection,
+    handleRemoveSelected,
+  } = useSelectableGallery(videosFolderUri, 'video', isVideoFile);
 
   function handleRowPress(uri: string) {
     if (selectionMode) {
@@ -133,40 +74,6 @@ export function VideoGallery({
     } else {
       onSelect(uri);
     }
-  }
-
-  function handleCancelSelection() {
-    setSelectionMode(false);
-    setSelectedUris(new Set());
-  }
-
-  function handleRemoveSelected() {
-    const uris = Array.from(selectedUris);
-    if (uris.length === 0) return;
-
-    Alert.alert(
-      t('galleryRemoveConfirmTitle'),
-      t('galleryRemoveConfirmBody'),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('galleryRemove'),
-          style: 'destructive',
-          onPress: async () => {
-            setRemoving(true);
-            const { failedCount } = await removeGalleryItems('video', uris, referencedUris);
-            setRemoving(false);
-            setSelectionMode(false);
-            setSelectedUris(new Set());
-            if (failedCount > 0) {
-              Alert.alert(t('galleryRemoveError'));
-            }
-            setRetryToken((n) => n + 1);
-          },
-        },
-      ],
-      { cancelable: true }
-    );
   }
 
   if (error) {
@@ -178,7 +85,7 @@ export function VideoGallery({
             <RaisedPrimaryButton
               testID="video-gallery-retry"
               label={t('retry')}
-              onPress={() => setRetryToken((n) => n + 1)}
+              onPress={retry}
               color={palette.accent}
               textColor={colors.ink}
               accessibilityLabel={t('retry')}
@@ -235,7 +142,7 @@ export function VideoGallery({
             label={t('addVideo')}
             contentType="video"
             mimeType="video/*"
-            onAdded={() => setRetryToken((n) => n + 1)}
+            onAdded={retry}
             compact
           />
         )}

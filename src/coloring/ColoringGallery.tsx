@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Image, Pressable, Alert, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, FlatList, Image, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system/legacy';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
-import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
-import { removeGalleryItems } from '../storage/galleryRemoval';
+import { useSelectableGallery } from '../components/useSelectableGallery';
 import {
   colors,
   spacing,
@@ -52,75 +50,18 @@ export function ColoringGallery({
     paddingRight: insets.right,
     paddingBottom: insets.bottom,
   };
-  const [images, setImages] = useState<string[] | null>(null);
-  // Which currently-displayed images came from an individual "+" pick
-  // (fileReferenceStore) rather than the configured folder — needed at
-  // removal time so removeGalleryItems knows whether to drop just the
-  // reference or actually delete the real file. See galleryRemoval.ts.
-  const [referencedUris, setReferencedUris] = useState<Set<string>>(new Set());
-  const [error, setError] = useState(false);
-  // Bumped on Retry (or after adding/removing files) to force a fresh load
-  // attempt even when coloringFolderUri itself hasn't changed.
-  const [retryToken, setRetryToken] = useState(0);
-
-  // Long-press-to-multi-select-and-remove. Entering this mode never affects
-  // navigation (onSelect) — a tile tap while selecting toggles selection
-  // instead of opening the picture, and reverts to normal tap-to-open the
-  // moment the selection empties out.
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
-  const [removing, setRemoving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setError(false);
-    setImages(null);
-
-    Promise.all([
-      FileSystem.StorageAccessFramework.readDirectoryAsync(coloringFolderUri).then((entries) =>
-        entries.filter(isImageFile)
-      ),
-      // Files the parent added individually (outside the configured
-      // folder) via AddFilesButton — pruneMissingFileReferences silently
-      // drops any that have since become unreachable rather than throwing,
-      // so it never causes this Promise.all to reject on its own.
-      pruneMissingFileReferences('coloring'),
-    ])
-      .then(([folderImages, extraImages]) => {
-        if (cancelled) return;
-        const merged = [...folderImages, ...extraImages.filter((uri) => !folderImages.includes(uri))];
-        setImages(merged);
-        setReferencedUris(new Set(extraImages));
-      })
-      .catch(() => {
-        // The SAF grant may have been revoked, the folder deleted externally,
-        // or an SD card unmounted — surface a retry state instead of leaving
-        // an unhandled rejection and a permanently blank loading screen.
-        if (!cancelled) setError(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [coloringFolderUri, retryToken]);
-
-  function toggleSelected(uri: string) {
-    setSelectedUris((prev) => {
-      const next = new Set(prev);
-      if (next.has(uri)) {
-        next.delete(uri);
-      } else {
-        next.add(uri);
-      }
-      if (next.size === 0) setSelectionMode(false);
-      return next;
-    });
-  }
-
-  function handleLongPress(uri: string) {
-    setSelectionMode(true);
-    setSelectedUris((prev) => new Set(prev).add(uri));
-  }
+  const {
+    items: images,
+    error,
+    selectionMode,
+    selectedUris,
+    removing,
+    retry,
+    toggleSelected,
+    handleLongPress,
+    handleCancelSelection,
+    handleRemoveSelected,
+  } = useSelectableGallery(coloringFolderUri, 'coloring', isImageFile);
 
   function handleTilePress(uri: string) {
     if (selectionMode) {
@@ -130,47 +71,13 @@ export function ColoringGallery({
     }
   }
 
-  function handleCancelSelection() {
-    setSelectionMode(false);
-    setSelectedUris(new Set());
-  }
-
-  async function handleRemoveSelected() {
-    const uris = Array.from(selectedUris);
-    if (uris.length === 0) return;
-
-    Alert.alert(
-      t('galleryRemoveConfirmTitle'),
-      t('galleryRemoveConfirmBody'),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('galleryRemove'),
-          style: 'destructive',
-          onPress: async () => {
-            setRemoving(true);
-            const { failedCount } = await removeGalleryItems('coloring', uris, referencedUris);
-            setRemoving(false);
-            setSelectionMode(false);
-            setSelectedUris(new Set());
-            if (failedCount > 0) {
-              Alert.alert(t('galleryRemoveError'));
-            }
-            setRetryToken((n) => n + 1);
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  }
-
   if (error) {
     return (
       <View testID="coloring-gallery-error" style={[styles.centeredMessage, insetStyle]}>
         <Text style={styles.errorText}>{t('loadError')}</Text>
         <RaisedCard
           testID="coloring-gallery-retry"
-          onPress={() => setRetryToken((n) => n + 1)}
+          onPress={retry}
           color={accent.accent}
           borderColor={accent.accentDark}
           tilt="compact"
@@ -231,7 +138,7 @@ export function ColoringGallery({
             label={t('addColoringPicture')}
             contentType="coloring"
             mimeType="image/*"
-            onAdded={() => setRetryToken((n) => n + 1)}
+            onAdded={retry}
             compact
           />
         )}

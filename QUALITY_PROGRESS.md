@@ -113,8 +113,51 @@ guards, the `increment()` read-then-write pattern's theoretical-but-
 unreachable lost-update risk, and gamification tone/no-shaming
 compliance).
 
+### Iteration 4 — Architecture: extract `useSelectableGallery`, dedup the 3 galleries
+**Area:** Architecture.
+
+**Problem:** `ColoringGallery.tsx`, `PuzzleGallery.tsx`, and `VideoGallery.tsx`
+each independently implemented an identical ~90-line state machine: load a
+folder's contents (merged with individually-"+"-added file references via
+`pruneMissingFileReferences`), a retry token, and a full
+long-press-to-multi-select-and-remove flow (toggle/cancel/
+remove-with-confirm via `removeGalleryItems`). The only genuine differences
+between the three copies were the `FileReferenceContentType` string
+('coloring'/'puzzle'/'video') and the file-extension filter predicate. Any
+future selection-flow bug would have needed the same fix applied three
+times, with an easy chance of the copies drifting.
+
+**Fix:** Extracted `useSelectableGallery(folderUri, contentType,
+isValidFile)` into `src/components/useSelectableGallery.ts` — a single
+shared hook the three galleries now consume. `PuzzleGallery.tsx` correctly
+keeps its own difficulty-picker state (`difficulty`,
+`difficultyModalVisible`, the `getPuzzleDifficulty`/`savePuzzleDifficulty`
+effect) local, since that part is genuinely puzzle-only, not shared.
+
+**Verified behavior-preserving, not just "should be":** every pre-existing
+test in `ColoringGallery.test.tsx`, `PuzzleGallery.test.tsx`, and
+`VideoGallery.test.tsx` passed **unmodified** after the refactor — not one
+test file needed a single change. That's the strongest possible evidence
+this was a pure extraction with zero behavior change, not a rewrite.
+Net line count actually dropped despite adding a new, well-commented file:
+1435 lines (583+420+432) before → 1296 lines (490+327+339+140) after.
+
+**Tests:** 9 new tests in `__tests__/components/useSelectableGallery.test.ts`
+covering the hook in isolation (load+merge+dedup, error/retry, selection
+toggle/auto-exit-on-empty, remove-with-confirm threading the right
+`contentType` through, remove-failure error message, no-op when nothing
+selected). Full suite: 618/618 passing. `npx tsc --noEmit` clean. Reviewed
+by an independent agent — no issues found (checked the `isValidFile`
+dependency-omission safety, that Puzzle's difficulty state was correctly
+NOT extracted, no leftover `setRetryToken`/dead imports, and that the
+`renderHook`/`act` async patterns in the new test file are used correctly
+— this RTL version's `renderHook` is itself `async`, which caused a real
+1000ms timeout during development until every state-changing call was
+wrapped in `await act(async () => ...)` instead of a plain sync `act()`).
+
 ## Architecture improvements
-(none yet this pass)
+- Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
+  galleries' load+selection logic. See above.
 
 ## Gamification improvements
 - Iteration 3: local, offline "activities completed" counter (quizzes +
@@ -128,16 +171,8 @@ compliance).
 
 ## Remaining opportunities
 (from the initial research pass; two candidates below were investigated in
-iteration 2's planning and found NOT to be real issues — see "Review notes")
-- **Architecture (L):** `PuzzleGallery.tsx`, `ColoringGallery.tsx`, and
-  `VideoGallery.tsx` each independently implement an almost-identical
-  selection/removal/reload state machine (`images`/`videos`, `error`,
-  `retryToken`, `selectionMode`, `selectedUris`, `removing`, and handlers
-  `toggleSelected`/`handleLongPress`/`handleCancelSelection`/
-  `handleRemoveSelected`). A shared `useSelectableGallery` hook would cut
-  ~150-200 duplicated lines and centralize future selection-bug fixes.
-  Large — worth splitting into its own iteration(s), extracted only if it
-  genuinely simplifies all three call sites without behavior change.
+iteration 2's planning and found NOT to be real issues — see "Review notes";
+the gallery-hook Architecture candidate was completed in iteration 4)
 - **Gamification (S, follow-up to iteration 3 — DONE, see above):** the
   activity-log counter now exists (quiz+puzzle only). A natural next step,
   once there's a sense the current summary is useful, would be a manual
