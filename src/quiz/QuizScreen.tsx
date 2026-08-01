@@ -172,6 +172,13 @@ export function QuizScreen({
   }, [quizFolderUri, childAge, retryToken]);
 
   const insetStyle = {
+    // This screen is now shown with headerShown:false (see RootNavigator —
+    // the native header/back-button was dropped for every activity screen
+    // in favor of the device's own hardware/gesture back), so unlike
+    // before, nothing else consumes the top safe-area inset — it has to be
+    // added here explicitly, the same way HomeScreen (also headerShown:
+    // false) already accounts for its own insets.top.
+    paddingTop: spacing.lg + insets.top,
     paddingLeft: spacing.lg + insets.left,
     paddingRight: spacing.lg + insets.right,
     paddingBottom: spacing.lg + insets.bottom,

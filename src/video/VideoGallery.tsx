@@ -45,12 +45,14 @@ export function VideoGallery({
   onSelect: (videoUri: string) => void;
 }) {
   const { t, language } = useLanguage();
-  // Shown with headerShown:true (see RootNavigator), so the native header
-  // already covers the top inset — only left/right/bottom are ours to
-  // handle here (a notch or gesture-nav bar sits at one of the sides in this
-  // landscape-only app).
+  // Shown with headerShown:false (see RootNavigator — every activity
+  // screen dropped the native header/back-button in favor of the device's
+  // own hardware/gesture back), so this screen now has to account for
+  // insets.top itself too, the same way HomeScreen (also headerShown:
+  // false) already does.
   const insets = useSafeAreaInsets();
   const insetStyle = {
+    paddingTop: insets.top,
     paddingLeft: insets.left,
     paddingRight: insets.right,
     paddingBottom: insets.bottom,

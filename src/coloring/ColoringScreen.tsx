@@ -122,14 +122,15 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's on-screen
   // nav bar; they don't know about *this* device's actual notch/gesture-bar
   // geometry, which varies (e.g. a Samsung S22's cutout and 3-button/gesture
-  // nav differ from the emulator's). Add the real, per-device bottom/left/
-  // right insets on top of those fixed margins so the canvas never shrinks
-  // *into* what it originally reserved (the fixed constants still cover the
-  // footer chrome; the insets cover the additional system-reserved area
-  // outside that). insets.top is deliberately NOT added here: this screen is
-  // shown with headerShown:true (see RootNavigator), so the native header
-  // already consumes the top inset before this component's flex:1 container
-  // gets its share of the window — adding it again would double-count it.
+  // nav differ from the emulator's). Add the real, per-device insets on top
+  // of those fixed margins so the canvas never shrinks *into* what it
+  // originally reserved (the fixed constants still cover the footer chrome;
+  // the insets cover the additional system-reserved area outside that).
+  // insets.top now DOES need to be added here (unlike before): this screen
+  // is shown with headerShown:false (see RootNavigator — every activity
+  // screen dropped the native header/back-button in favor of the device's
+  // own hardware/gesture back), so nothing else consumes the top inset for
+  // this screen any more.
   // Rectangular, not square: a landscape phone is short-but-wide, so
   // constraining the canvas to a square would shrink its width down to
   // match the tighter height budget, wasting most of the screen's width as
@@ -139,7 +140,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const { width: canvasWidth, height: canvasHeight } = computeResponsiveRectSize(
     width,
     height,
-    CANVAS_RESERVED_HEIGHT + (toolMode === 'pen' ? PEN_SIZE_ROW_RESERVED_HEIGHT : 0) + insets.bottom,
+    CANVAS_RESERVED_HEIGHT + (toolMode === 'pen' ? PEN_SIZE_ROW_RESERVED_HEIGHT : 0) + insets.top + insets.bottom,
     CANVAS_RESERVED_WIDTH + insets.left + insets.right,
     CANVAS_MIN_SIZE,
     CANVAS_MAX_SIZE
@@ -496,6 +497,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       style={{
         flex: 1,
         backgroundColor: colors.canvas,
+        paddingTop: insets.top,
         paddingLeft: insets.left,
         paddingRight: insets.right,
       }}

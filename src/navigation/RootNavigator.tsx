@@ -215,7 +215,12 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
+      {/* Every activity screen below (and its gallery/setup screen) is
+          headerShown:false, same as Home — none of them need the native
+          back arrow since the device's own hardware/gesture back already
+          does that job, and removing it gives each activity's content the
+          full screen height instead of losing a strip to a header bar. */}
+      <Stack.Screen name="quiz" options={{ headerShown: false, title: titleFor('homeQuiz') }}>
         {({ navigation }) => (
           <QuizScreen
             quizFolderUri={folderUris.quiz}
@@ -224,7 +229,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="coloring" options={{ title: titleFor('homeColoring') }}>
+      <Stack.Screen name="coloring" options={{ headerShown: false, title: titleFor('homeColoring') }}>
         {({ navigation }) => (
           <ColoringGallery
             coloringFolderUri={folderUris.coloring}
@@ -232,10 +237,10 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="coloring-detail" options={{ title: titleFor('coloringDetailTitle') }}>
+      <Stack.Screen name="coloring-detail" options={{ headerShown: false, title: titleFor('coloringDetailTitle') }}>
         {({ route }) => <ColoringScreen imageUri={route.params.imageUri} />}
       </Stack.Screen>
-      <Stack.Screen name="puzzle" options={{ title: titleFor('homePuzzle') }}>
+      <Stack.Screen name="puzzle" options={{ headerShown: false, title: titleFor('homePuzzle') }}>
         {({ navigation }) => (
           <PuzzleGallery
             picturesFolderUri={folderUris.pictures}
@@ -243,7 +248,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="puzzle-detail" options={{ title: titleFor('puzzleDetailTitle') }}>
+      <Stack.Screen name="puzzle-detail" options={{ headerShown: false, title: titleFor('puzzleDetailTitle') }}>
         {({ navigation, route }) => (
           <PuzzleScreen
             imageUri={route.params.imageUri}
@@ -252,7 +257,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="video" options={{ title: titleFor('homeVideo') }}>
+      <Stack.Screen name="video" options={{ headerShown: false, title: titleFor('homeVideo') }}>
         {({ navigation }) => (
           <VideoGallery
             videosFolderUri={folderUris.videos}
@@ -260,17 +265,17 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="video-detail" options={{ title: titleFor('videoDetailTitle') }}>
+      <Stack.Screen name="video-detail" options={{ headerShown: false, title: titleFor('videoDetailTitle') }}>
         {({ route }) => <VideoPlayerScreen videoUri={route.params.videoUri} />}
       </Stack.Screen>
-      <Stack.Screen name="tictactoe" options={{ title: titleFor('tictactoeSetupTitle') }}>
+      <Stack.Screen name="tictactoe" options={{ headerShown: false, title: titleFor('tictactoeSetupTitle') }}>
         {({ navigation }) => (
           <TicTacToeSetupScreen
             onStart={(mode, difficulty) => navigation.navigate('tictactoe-game', { mode, difficulty })}
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="tictactoe-game" options={{ title: titleFor('tictactoeDetailTitle') }}>
+      <Stack.Screen name="tictactoe-game" options={{ headerShown: false, title: titleFor('tictactoeDetailTitle') }}>
         {({ navigation, route }) => (
           <TicTacToeScreen
             mode={route.params.mode}
