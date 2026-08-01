@@ -194,9 +194,63 @@ regression called `saveProfile` unconditionally), and the double-tap guard
 just the guard, reran, restored). Full suite: 621/621 passing. `npx tsc
 --noEmit` clean.
 
+### Iteration 6 — Architecture: remove genuinely dead code found while investigating a Visual Consistency candidate
+**Area:** Architecture / Technical debt (started as a Visual Consistency investigation).
+
+**Starting point:** the plan was to migrate `src/components/{AgePicker,LanguageSelector,AddFilesButton,EmptyState,PieceCountPicker}.tsx`
+and `src/splash/SplashScreen.tsx` off the OLD `src/theme/tokens.ts` palette
+onto `src/design-system/`, per a candidate flagged in an earlier research
+pass. Investigating each file's actual color usage first (rather than
+mechanically swapping imports) found this is NOT a safe mechanical
+refactor: the old palette's `colors.ink` (`#2D3142`) isn't even the same
+hex as the new design-system's `colors.ink` (`#241B3A`), and several old
+colors used directly (`coral`, `mint`, `pink`, `periwinkle`, `sun`) have NO
+equivalent at all in the new palette — closing this gap for real would mean
+picking new colors for every one of those usages, which is genuine visual
+redesign work on live, high-traffic screens (Onboarding, Settings, all 3
+galleries) that this loop's own "do not redesign the UI from scratch" rule
+correctly forbids doing autonomously, and that can't be verified without a
+real device. **Deferred, not done** — see Remaining opportunities below.
+
+**What the investigation actually found:** two of the six flagged files —
+`src/components/EmptyState.tsx` and `src/components/PieceCountPicker.tsx`
+— are genuinely dead code. A repo-wide grep confirmed zero imports from any
+live screen or component for either; the three galleries that once used
+`EmptyState.tsx` had already migrated to a different, still-live component
+(`src/design-system/EmptyStatePanel.tsx`) in an earlier redesign pass,
+leaving the old one orphaned with a now-stale comment inside
+`EmptyStatePanel.tsx` still claiming it "is still used." `PieceCountPicker.tsx`
+had already been flagged as dead in `POLISH_PROGRESS.md` (iteration 13 of
+a prior loop) but was never actually deleted.
+
+**Fix:** Deleted `src/components/EmptyState.tsx`,
+`src/components/PieceCountPicker.tsx`, their now-pointless test file
+`__tests__/components/EmptyState.test.tsx`, and the now-orphaned
+`puzzlePickPieces` i18n string (was `PieceCountPicker.tsx`'s only caller —
+caught by an independent review, not by my own initial pass). Corrected
+`EmptyStatePanel.tsx`'s stale comment to describe the current (not
+year-old) state.
+
+**Why the removed test doesn't count as "reduced test coverage":** the
+code under test no longer exists after this diff — there is nothing left
+to cover. The live replacement, `EmptyStatePanel`, already has its own
+separate, still-present test file
+(`__tests__/design-system/EmptyStatePanel.test.tsx`), unaffected by this
+change.
+
+**Tests:** none new (pure deletion). Full suite: 618/618 passing (down
+from 621 only because the 3 tests for now-nonexistent code were removed
+alongside it — every other test unaffected). `npx tsc --noEmit` clean
+(confirms nothing else in the codebase referenced either deleted file).
+Reviewed by an independent agent, which re-confirmed the dead-code claim
+via its own grep, confirmed no documentation contradicts the deletion, and
+caught the orphaned `puzzlePickPieces` string that my own pass missed.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
+- Iteration 6: removed two genuinely dead components (`EmptyState.tsx`,
+  `PieceCountPicker.tsx`) and an orphaned i18n string. See above.
 
 ## Gamification improvements
 - Iteration 3: local, offline "activities completed" counter (quizzes +
@@ -224,9 +278,26 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   iteration 2 planning and ruled out (every literal checked was a genuine
   circle radius = exactly half its element's diameter, not token drift).
   See "Review notes" below.
+- **Visual Consistency (M, DEFERRED — needs a human/visual pass, not an
+  autonomous iteration):** `src/components/{AgePicker,LanguageSelector,
+  AddFilesButton}.tsx` and `src/splash/SplashScreen.tsx` still import from
+  the OLD `src/theme/tokens.ts` palette instead of `src/design-system/`.
+  (The other two files originally flagged here — `EmptyState.tsx`,
+  `PieceCountPicker.tsx` — turned out to be dead code and were removed in
+  iteration 6 instead; see above.) This is a REAL gap, but migrating it
+  properly requires picking new colors for several values with no
+  equivalent in the new palette (`coral`, `mint`, `pink`, `periwinkle`,
+  `sun`) and verifying the result on a real device/screenshot — genuine
+  visual redesign work, not a mechanical import swap, and out of scope for
+  an autonomous "no redesign" iteration.
 
 ## Technical debt removed
-(none yet this pass)
+- Iteration 6: `src/components/EmptyState.tsx` (superseded by
+  `src/design-system/EmptyStatePanel.tsx`, orphaned since all 3 galleries
+  migrated away from it in an earlier redesign pass) and
+  `src/components/PieceCountPicker.tsx` (dead since a prior loop,
+  flagged then but never removed), plus the `puzzlePickPieces` i18n string
+  that was `PieceCountPicker.tsx`'s only caller.
 
 ## Review notes
 - Iteration 1's review agent confirmed the fix is real (regression tests
@@ -254,3 +325,9 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   while a migration is in progress, preventing a double submit" test
   already exercises exactly this: a second press while migrating does not
   call `migrateContent` again. No genuine gap found.
+- **Iteration 6's review agent** independently re-confirmed the dead-code
+  claim (its own repo-wide grep, not just trusting mine), confirmed no
+  documentation contradicts the deletion, confirmed the removed test
+  doesn't count as a real coverage loss, and caught a genuinely missed
+  follow-up (the orphaned `puzzlePickPieces` i18n string) that I fixed
+  before committing.

@@ -116,7 +116,6 @@ export const UI_STRINGS = {
   // regardless of score, so neither label references performance at all.
   quizPlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
   quizGoHome: { en: 'Home', de: 'Start' },
-  puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleDifficultyLabel: { en: 'Difficulty: {count}', de: 'Schwierigkeit: {count}' },
   // Accessibility labels for the difficulty-picker modal opened from the
   // pill above — same "positional/value fallback label" idiom as
