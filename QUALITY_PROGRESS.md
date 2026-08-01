@@ -356,6 +356,46 @@ independent agent — found the real style-placement issue described above
 review-caught issues this loop has fixed so far, versus most reviews
 finding the change already sound as submitted).
 
+### Iteration 10 — Bug fix: HomeScreen's settings icon had no double-tap guard
+**Area:** Bug Hunting.
+
+**Problem:** `HomeScreen.tsx`'s `handleCardPress` guards every activity
+card against a rapid double-tap via a `navLockRef` (keyed per-card,
+re-armed 800ms later) — but the settings gear icon called
+`onNavigate('settings')` directly with no guard at all. Since Home stays
+mounted underneath a pushed screen (React Navigation's native stack, per
+this file's own existing comment on why cards need the guard), a rapid
+double-tap on the gear could push Settings twice, the exact same risk
+class already handled for cards but missed for this one control.
+
+**Fix:** Added `handleSettingsPress`, reusing the SAME `navLockRef`/
+`rearmTimeoutsRef` refs with a new key (`'settings-icon'`, verified
+distinct from every card's own `'home-card-*'`-prefixed testID) — same
+guard-and-rearm shape as `handleCardPress`, so the settings icon's re-arm
+timer is cleaned up on unmount identically to card timers.
+
+**Deliberately NOT done:** extracting a shared `guardedNavigate(key,
+destination)` helper for `handleCardPress`/`handleSettingsPress` — flagged
+by review as a legitimate but marginal call for only 2 near-identical
+sites; same judgment already applied to the tracked (and still deferred)
+HomeScreen/TicTacToeSetupScreen nav-debounce duplication in "Remaining
+opportunities" below. Also not done: enforcing the key-uniqueness
+guarantee at the type level (`CardSpec.testID` stays a plain `string`) —
+today's 5 cards all follow the `'home-card-*'` convention with no actual
+collision, and adding an enforcement mechanism for a currently-hypothetical
+future mistake would be complexity spent on a problem that doesn't exist
+yet.
+
+**Tests:** 2 new tests in `__tests__/home/HomeScreen.test.tsx` (double-tap
+on the settings icon is blocked; a card press right after doesn't get
+blocked by the settings icon's own lock, proving the guard is per-control).
+Verified to genuinely fail without the fix via `git stash` ("Expected: 1,
+Received: 2"). Full suite: 626/626 passing. `npx tsc --noEmit` clean.
+Reviewed by an independent agent, which caught one small but real
+documentation bug: the new code comment claimed the reused lock key was
+`'settings'` when the code actually used `'settings-icon'` — fixed before
+committing.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -371,6 +411,7 @@ finding the change already sound as submitted).
 - Iteration 5: `FolderErrorScreen`'s Retry was a dead end for a permanently-revoked SAF grant — no way back to Settings' folder picker. See above.
 - Iteration 7: "Reset everything" left individually-added file references and puzzle difficulty behind for the next profile. See above.
 - Iteration 8: OnboardingScreen's "Choose content folder" had no double-tap guard, unlike its neighboring Save button. See above.
+- Iteration 10: HomeScreen's settings icon had no double-tap guard, unlike every activity card. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.

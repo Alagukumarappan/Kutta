@@ -128,6 +128,42 @@ describe('HomeScreen', () => {
       expect(onNavigate).toHaveBeenNthCalledWith(1, 'coloring');
       expect(onNavigate).toHaveBeenNthCalledWith(2, 'quiz');
     });
+
+    // Regression test for a real bug fix: unlike every activity card, the
+    // settings icon previously called onNavigate('settings') directly with
+    // no double-tap guard at all — a rapid double-tap could push Settings
+    // twice, since Home stays mounted underneath a pushed screen.
+    it('guards a rapid double-tap on the settings icon against double navigation', async () => {
+      const onNavigate = jest.fn();
+      const { getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+        </LanguageProvider>
+      );
+
+      const settingsIcon = getByTestId('home-settings-icon');
+      await fireEvent.press(settingsIcon);
+      await fireEvent.press(settingsIcon);
+
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith('settings');
+    });
+
+    it('does NOT block a card from navigating right after the settings icon was pressed (the guard is per-control, not shared)', async () => {
+      const onNavigate = jest.fn();
+      const { getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+        </LanguageProvider>
+      );
+
+      await fireEvent.press(getByTestId('home-settings-icon'));
+      await fireEvent.press(getByTestId('home-card-coloring'));
+
+      expect(onNavigate).toHaveBeenCalledTimes(2);
+      expect(onNavigate).toHaveBeenNthCalledWith(1, 'settings');
+      expect(onNavigate).toHaveBeenNthCalledWith(2, 'coloring');
+    });
   });
 
   describe('redesigned layout (horizontal scrolling carousel, design-system cards)', () => {

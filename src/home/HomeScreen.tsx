@@ -159,6 +159,25 @@ export function HomeScreen({
     rearmTimeoutsRef.current.push(timeoutId);
   }
 
+  // Every card above goes through handleCardPress's navLockRef guard, but
+  // the settings icon called onNavigate('settings') directly, with no guard
+  // at all — Home stays mounted underneath a pushed screen (see this file's
+  // own comment on why cards need this guard in the first place), so a
+  // rapid double-tap on the gear could push Settings twice. Reuses the same
+  // navLockRef record (a distinct 'settings-icon' key, so it can never collide
+  // with a card's own testID) rather than a separate ref, since the guard
+  // logic itself is identical.
+  const SETTINGS_NAV_LOCK_KEY = 'settings-icon';
+  function handleSettingsPress() {
+    if (navLockRef.current[SETTINGS_NAV_LOCK_KEY]) return;
+    navLockRef.current[SETTINGS_NAV_LOCK_KEY] = true;
+    onNavigate('settings');
+    const timeoutId = setTimeout(() => {
+      navLockRef.current[SETTINGS_NAV_LOCK_KEY] = false;
+    }, 800);
+    rearmTimeoutsRef.current.push(timeoutId);
+  }
+
   // Landscape gives ample width and limited height, so the row of cards
   // scrolls horizontally rather than stacking. CARD_WIDTH is a fixed
   // fraction of the screen (clamped to a sane range) rather than dividing
@@ -239,7 +258,7 @@ export function HomeScreen({
 
         <AnimatedPressable
           testID="home-settings-icon"
-          onPress={() => onNavigate('settings')}
+          onPress={handleSettingsPress}
           tilt="compact"
           style={styles.settingsHitArea}
           innerStyle={styles.settingsButton}
