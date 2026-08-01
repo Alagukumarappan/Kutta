@@ -448,6 +448,59 @@ documented pattern and the full suite (traced through both the "new
 question" and "Try Again" reset paths) stayed green throughout. Full
 suite: 627/627 passing. `npx tsc --noEmit` clean.
 
+### Iteration 12 — Bug fix: VideoPlayerScreen showed no feedback while a video was still loading
+**Area:** Bug Hunting.
+
+**Problem:** `VideoPlayerScreen.tsx`'s `statusChange` listener only ever
+reacted to `'error'` — between mount and the player actually becoming
+ready (e.g. a large file on slow SAF-backed storage), a child just saw an
+empty frame with no feedback that anything was happening, unlike every
+other async-load screen in the app (all 3 galleries, `QuizScreen`,
+`ColoringScreen`), which show an explicit spinner.
+
+**Fix:** Added a `loading` state (`useState(true)`, since the player
+begins loading immediately on mount), driven by the same `statusChange`
+listener (`'idle'`/`'loading'` count as still-loading; only
+`'readyToPlay'` clears it, and an error clears it via the existing error
+branch instead). `handleRetry` also re-sets `loading` to `true`, since
+replacing the source re-triggers the same load sequence. Renders the
+existing shared `LoadingPanel` (same component every gallery already
+uses) between the error and normal-player branches.
+
+**Caught and fixed during review (a genuine mount-time race, the fourth
+real issue this review step has caught across the loop):** `useVideoPlayer`
+creates the player and calls `play()` SYNCHRONOUSLY, before
+`VideoPlayerScreen`'s own effect ever subscribes to `statusChange` — so a
+real player's status can already have settled (e.g. a small/cached local
+file reaching `'readyToPlay'` almost immediately) by the time that
+subscription happens. Since a status only transitions once, missing that
+first change would leave `loading` stuck `true` forever with no later
+event ever arriving to clear it. Fixed by also reading the player's own
+synchronous `status` getter once, up front, when the effect first
+subscribes — not just listening for future changes.
+
+**Also bundled (trivial, unrelated):** fixed a stale comment in
+`TicTacToeScreen.tsx` that claimed a "200ms pacing" figure for
+`COMPUTER_MOVE_DELAY_MS`, which is actually `500`. Pure comment fix, no
+logic change, verified via the full `__tests__/tictactoe` suite passing
+unmodified.
+
+**Tests:** Because nearly every existing test in
+`__tests__/video/VideoPlayerScreen.test.tsx` previously assumed the video
+view renders immediately with no status event ever needing to fire, most
+were updated to call a new `emitReady()` helper before asserting
+`video-view` is present — confirmed each still exercises its original
+intent (not weakened into tautological). Added 4 new tests: a basic
+loading-then-ready test, an `'idle'`-specifically-still-loading test, and
+2 tests for the mount-race fix (player already settled to `readyToPlay`
+or `error` before the screen ever subscribes, with NO `statusChange` event
+emitted at all). All new tests verified via manual revert-and-rerun to
+genuinely fail without their respective fixes (the 2 race tests
+specifically: "Unable to find element" for `video-view`/`video-player-error`
+respectively, both stuck showing the spinner instead, when the
+`player.status` seed line is removed). Full suite: 631/631 passing. `npx
+tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -465,6 +518,7 @@ suite: 627/627 passing. `npx tsc --noEmit` clean.
 - Iteration 8: OnboardingScreen's "Choose content folder" had no double-tap guard, unlike its neighboring Save button. See above.
 - Iteration 10: HomeScreen's settings icon had no double-tap guard, unlike every activity card. See above.
 - Iteration 11: QuestionRenderer could silently overwrite a child's answer on a rapid double-tap between two different options. See above.
+- Iteration 12: VideoPlayerScreen showed no feedback while a video was still loading, and could get stuck loading forever if the player settled before the screen subscribed. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.

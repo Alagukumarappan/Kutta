@@ -27,10 +27,11 @@ import {
 
 const PALETTE = getActivityPalette('tictactoe');
 
-// Same 200ms pacing the source Angular algorithm used before playing the
-// computer's move (see ticTacToeEngine.ts's port notes) — purely a UX beat
-// so the move doesn't feel instantaneous/robotic, not part of the algorithm
-// itself.
+// A brief pause before playing the computer's move — purely a UX beat so
+// the move doesn't feel instantaneous/robotic, not part of the algorithm
+// itself (ticTacToeEngine.ts has no delay of its own; this is presentation
+// only). Corrected from an earlier version of this comment, which claimed
+// a stale 200ms figure that no longer matched the constant below.
 const COMPUTER_MOVE_DELAY_MS = 500;
 
 export function TicTacToeScreen({
