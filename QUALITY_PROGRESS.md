@@ -832,6 +832,85 @@ error state is. Verified via `git stash` to genuinely fail without the
 fix (rendering the bare canvas/toolbar instead). Full suite: 650/650
 passing. `npx tsc --noEmit` clean.
 
+### Iteration 22 — 4 real bugs found on a physical device (Samsung Galaxy S22), not the autonomous loop
+**Area:** Bug Hunting. This iteration is different from every other entry in
+this log: the developer installed the actual APK on real hardware and
+reported 4 concrete, screenshot-verified bugs directly, pausing the
+autonomous loop to fix them. All 4 landed in one focused session (still one
+git commit per fix, per this log's usual discipline).
+
+**Bug 1 — Coloring gallery grid stretch:** with e.g. 4 images in the
+3-column grid, the 4th tile — alone in the last row — stretched to fill
+the entire row width (and grew much taller via its `aspectRatio: 1`)
+instead of matching the first row's tile size. FlatList's own `flex: 1` +
+incomplete-last-row interaction: a lone child in a flex row still expands
+to fill 100% of it. **Fix:** `ColoringGallery.tsx` now pads the images
+array with invisible, non-tappable filler entries up to a multiple of
+`GALLERY_COLUMNS` before handing it to `FlatList`, so every real tile
+always has full row-mates and keeps its normal 1/3-width flex share.
+
+**Bug 2 — Coloring "+ add picture" failed with "This picture could not be
+loaded for coloring.":** `ColoringScreen.tsx` needs a picked image's raw
+bytes (via `expo-file-system` + Skia decode, for flood-fill pixel access),
+and the `content://` URI a system picker hands back for an arbitrary photo
+(Google Photos, a cloud-backed gallery app, etc.) isn't guaranteed to stay
+reliably byte-readable that way. **Fix:** `AddFilesButton.tsx` now passes
+`copyToCacheDirectory: true` for images (copying the picked bytes into the
+app's own cache directory up front, sidestepping the original provider
+entirely) while leaving videos uncopied (referenced in place — they're
+only ever streamed through `expo-video`'s player, never read as raw
+bytes, and copying could duplicate a large file for no benefit).
+Trade-off noted in a code comment: the OS can evict cache-directory files
+under storage pressure, but `pruneMissingFileReferences` already handles a
+vanished reference gracefully, so this trades "picture never loads" for
+the much rarer "picture disappears later."
+
+**Bug 3 — Video playback showed only a thin orange line, no video
+frames:** `VideoPlayerScreen.tsx`'s `<VideoView>` sits inside a
+`RaisedCard`, which clips with `overflow: 'hidden'` (rounded corners) and
+carries an Android elevation shadow. The default `surfaceType:
+'surfaceView'` renders through a separate hardware-compositor layer that
+can fail to composite correctly under a clipped/elevated parent on some
+Android devices — native controls (plain Views) showed, but no actual
+video frames did. **Fix:** added `surfaceType="textureView"` to
+`<VideoView>`, which `expo-video`'s own type docs recommend verbatim for
+"overlapping/clipped video views." No DRM/protected-content concern
+applies (this app only plays local files).
+
+**Bug 4 — Onboarding was still portrait; developer wanted it landscape
+like Settings:** `RootNavigator.tsx` locked portrait until
+`readyForAppStack` (profile + folders fully resolved) — a
+deliberate-at-the-time design choice, but `OnboardingScreen.tsx` had
+already been laid out with the same Settings-style `RaisedCard` row
+pattern, just squeezed into a stale portrait lock. **Fix:** changed the
+gating variable to `profileResolved = profile !== undefined` (false only
+during the very first splash instant, before we even know whether to show
+onboarding or the app stack), so onboarding now locks landscape
+immediately once shown. Also added `useSafeAreaInsets()` to
+`OnboardingScreen.tsx`'s scroll container padding, matching
+`SettingsScreen.tsx`'s pattern, since this screen renders with no native
+header and must reserve its own insets in landscape.
+
+**Review:** an independent review confirmed all 4 fixes are correct and
+low-risk, and surfaced one bonus finding: the OLD orientation-gating logic
+included `!folderError`, so if a SAF grant was revoked *after* the app
+stack was already showing landscape, the lock would incorrectly flip back
+to portrait while rendering `FolderErrorScreen` — a genuine pre-existing
+secondary bug. The new `profileResolved` gate no longer depends on
+`folderError`, so `FolderErrorScreen` now correctly stays landscape too,
+fixed as a side effect of Bug 4's change.
+
+**Tests:** 1 new regression test per bug (4 total), each verified via
+`git stash` to genuinely fail without its fix: `ColoringGallery.test.tsx`
+(asserts exactly 2 filler tiles render for a 4-image folder),
+`AddFilesButton.test.tsx` (asserts `copyToCacheDirectory: true` for
+images, `false` for videos), `VideoPlayerScreen.test.tsx` (asserts
+`surfaceType: 'textureView'` on the rendered `VideoView`), and
+`RootNavigator.test.tsx` (asserts landscape locks as soon as onboarding
+itself is showing, not just once the app stack is ready — the old
+portrait-during-onboarding test was updated to reflect the new intended
+behavior). Full suite: 655/655 passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -857,6 +936,7 @@ passing. `npx tsc --noEmit` clean.
 - Iteration 19: CelebrationOverlay (shared completion dialog) never notified screen readers it had appeared. See above.
 - Iteration 20: the child's own name (Onboarding/Settings) had no length cap, same overflow risk as the friend name. See above.
 - Iteration 21: ColoringScreen showed a blank, fully-interactive canvas with no feedback while the photo was still decoding. See above.
+- Iteration 22 (found on a real device): the coloring gallery's 4th tile stretched to fill its own row; a "+"-added picture failed to load for coloring; video playback showed no frames (only a line); onboarding stayed portrait instead of the intended landscape. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.

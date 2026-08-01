@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
 import { saveProfile } from '../storage/profileStore';
@@ -46,6 +47,11 @@ const CHILD_NAME_MAX_LENGTH = 20;
 
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
+  // Rendered directly (not inside a Stack.Screen), so there's no native
+  // header ever — this screen has to reserve its own safe-area insets, same
+  // as every other landscape screen (Home, Settings), so a side notch or
+  // gesture-nav bar never covers content.
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [age, setAge] = useState<number | null>(null);
   const [ageModalVisible, setAgeModalVisible] = useState(false);
@@ -122,7 +128,15 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
     <View style={styles.outer}>
     <ScrollView
       style={styles.scrollView}
-      contentContainerStyle={styles.screen}
+      contentContainerStyle={[
+        styles.screen,
+        {
+          paddingTop: spacing.sm + insets.top,
+          paddingLeft: spacing.sm + insets.left,
+          paddingRight: spacing.sm + insets.right,
+          paddingBottom: spacing.sm + insets.bottom,
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.brandBadge}>🐾</Text>
@@ -317,16 +331,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.sm,
     alignItems: 'stretch',
-    // Centered rather than top-anchored: this form's content was originally
-    // sized for a short, wide landscape viewport, and now renders in a
-    // taller portrait one (onboarding is portrait-only, see
-    // RootNavigator.tsx) — top-anchoring left a large empty gap below the
-    // form on a real phone. Centering keeps the same compact cards but
-    // balances them within the extra vertical space instead of stranding it
-    // at the bottom. Only takes effect once content is shorter than the
-    // viewport (flexGrow:1 already handles the reverse: a smaller screen or
+    // Centered rather than top-anchored, matching this screen's short, wide
+    // landscape viewport (see RootNavigator.tsx's orientation lock) —
+    // flexGrow:1 already handles the reverse case too: a smaller screen or
     // more content still scrolls normally, since a ScrollView never clips
-    // content shorter than justifyContent would otherwise want to show).
+    // content shorter than justifyContent would otherwise want to show.
     justifyContent: 'center',
   },
   brandBadge: {

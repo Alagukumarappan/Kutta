@@ -399,15 +399,16 @@ export function RootNavigator({
     };
   }, []);
 
-  // Everything up through onboarding (splash, name/age/folder setup) stays
-  // portrait — it's a vertical, form-like flow. Only once a profile AND its
-  // folders are both resolved does the app actually reveal Home/AppStack,
-  // which is the landscape-designed part of the app, so the lock flips here
-  // rather than the moment a profile is merely loaded (a returning user with
-  // an already-complete profile still needs `folderUris` resolved first).
-  const readyForAppStack = Boolean(profile?.rootFolderUri) && folderUris !== null && !folderError;
+  // Only the initial splash instant (profile not yet resolved at all) stays
+  // portrait. Onboarding is landscape-designed exactly like every other
+  // screen (same RaisedCard row layout Settings uses) — it just used to be
+  // squeezed into a portrait lock left over from an earlier design, which
+  // this flips to landscape as soon as we know whether to show onboarding
+  // or the app stack (i.e. profile !== undefined), not just once the app
+  // stack itself is ready.
+  const profileResolved = profile !== undefined;
   useEffect(() => {
-    const targetLock = readyForAppStack
+    const targetLock = profileResolved
       ? ScreenOrientation.OrientationLock.LANDSCAPE
       : ScreenOrientation.OrientationLock.PORTRAIT_UP;
     ScreenOrientation.lockAsync(targetLock).catch((err) => {
@@ -416,7 +417,7 @@ export function RootNavigator({
       // about during development.
       console.warn('Failed to lock orientation', err);
     });
-  }, [readyForAppStack]);
+  }, [profileResolved]);
 
   useEffect(() => {
     let cancelled = false;

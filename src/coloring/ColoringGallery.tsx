@@ -19,6 +19,31 @@ import {
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const GALLERY_COLUMNS = 3;
 
+// FlatList's `numColumns` combined with a `flex: 1` tile (see `styles.tile`
+// below — needed so each tile fills an even 1/3 share of the row's width)
+// has a well-known side effect on an INCOMPLETE last row: with only 1 or 2
+// items in a row of 3 columns, `columnWrapperStyle`'s flex row still only
+// contains those 1-2 real children, so each one's `flex: 1` expands to fill
+// the ENTIRE row width instead of just its own 1/3 share — visibly
+// stretching (and, combined with `aspectRatio: 1`, growing much taller
+// too). Padding the data with invisible, non-tappable filler entries up to
+// a multiple of GALLERY_COLUMNS keeps every real tile locked to its normal
+// 1/3-width slot, the same fix FlatList's own docs recommend for this exact
+// "flex + numColumns" interaction.
+const GALLERY_FILLER_PREFIX = '__coloring-gallery-filler__';
+
+function isGalleryFiller(uri: string): boolean {
+  return uri.startsWith(GALLERY_FILLER_PREFIX);
+}
+
+function withRowFillers(images: string[]): string[] {
+  const remainder = images.length % GALLERY_COLUMNS;
+  if (remainder === 0) return images;
+  const fillerCount = GALLERY_COLUMNS - remainder;
+  const fillers = Array.from({ length: fillerCount }, (_, i) => `${GALLERY_FILLER_PREFIX}${i}`);
+  return [...images, ...fillers];
+}
+
 function isImageFile(uri: string): boolean {
   const lower = uri.toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
@@ -152,12 +177,15 @@ export function ColoringGallery({
         />
       ) : (
         <FlatList
-          data={images}
+          data={withRowFillers(images)}
           keyExtractor={(uri) => uri}
           numColumns={GALLERY_COLUMNS}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
+            if (isGalleryFiller(item)) {
+              return <View testID={`coloring-item-filler-${item}`} style={styles.tile} />;
+            }
             const isSelected = selectedUris.has(item);
             return (
               <RaisedCard

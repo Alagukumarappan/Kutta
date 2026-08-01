@@ -99,6 +99,29 @@ describe('VideoPlayerScreen', () => {
     expect(queryByTestId('video-player-error')).toBeNull();
   });
 
+  // Regression test for a real bug seen on-device: nativeControls showed
+  // (native controls are plain Views), but no actual video frames ever
+  // appeared — just the control bar. The player frame around VideoView is a
+  // RaisedCard, which clips with overflow:'hidden' for rounded corners and
+  // carries an Android elevation shadow; the default 'surfaceView' renderer
+  // draws via a separate hardware-compositor layer that doesn't always
+  // composite correctly nested under a clipped/elevated parent on real
+  // devices. 'textureView' renders through the normal view hierarchy
+  // instead, which expo-video's own docs recommend for exactly this
+  // "overlapping/clipped video view" scenario.
+  it('uses textureView rendering, not the default surfaceView, to avoid disappearing under the clipped/elevated player frame', async () => {
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await emitReady();
+
+    const videoView = await findByTestId('video-view');
+    expect(videoView.props.surfaceType).toBe('textureView');
+  });
+
   // Regression test for a real gap: previously this screen showed NO
   // feedback at all while the video was still loading (only 'error' was
   // ever handled) — a child would just see an empty frame with no signal

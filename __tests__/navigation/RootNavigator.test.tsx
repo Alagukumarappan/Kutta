@@ -303,14 +303,32 @@ describe('RootNavigator orientation lock', () => {
     jest.clearAllMocks();
   });
 
-  it('locks portrait while showing onboarding (no profile yet), never landscape', async () => {
-    (profileStore.getProfile as jest.Mock).mockResolvedValue(null);
+  it('locks portrait only for the initial splash instant, before the profile has resolved either way', async () => {
+    // Never resolve getProfile() during this test — this is the one moment
+    // (profile === undefined) the app can't yet tell whether to show
+    // onboarding or the app stack, so it's the only time portrait applies.
+    (profileStore.getProfile as jest.Mock).mockReturnValue(new Promise(() => {}));
 
     await render(<RootNavigator />);
 
     await waitFor(() => expect(ScreenOrientation.lockAsync).toHaveBeenCalled());
     expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('PORTRAIT_UP');
     expect(ScreenOrientation.lockAsync).not.toHaveBeenCalledWith('LANDSCAPE');
+  });
+
+  // Regression test: onboarding used to stay portrait-locked even once it
+  // was actually showing (a leftover from an earlier design) — but it's
+  // landscape-designed exactly like every other screen (the same RaisedCard
+  // row layout Settings uses), so it should lock landscape as soon as we
+  // know we're showing it, not wait for the (much later) app-stack-ready
+  // moment.
+  it('locks landscape once onboarding itself is showing (no profile at all), not just once the app stack is ready', async () => {
+    (profileStore.getProfile as jest.Mock).mockResolvedValue(null);
+
+    const { findByTestId } = await render(<RootNavigator />);
+
+    await findByTestId('onboarding-name-input');
+    await waitFor(() => expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('LANDSCAPE'));
   });
 
   it('locks landscape once the Home/AppStack screen is actually ready to show', async () => {

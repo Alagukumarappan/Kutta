@@ -150,7 +150,22 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     <View style={[styles.container, insetStyle(insets)]}>
       <RaisedCard color={colors.surfaceRaised} borderColor={palette.accentDark} elevationLevel="level3" style={styles.playerFrame}>
         <View style={styles.playerInner}>
-          <VideoView player={player} style={styles.videoView} nativeControls />
+          <VideoView
+            player={player}
+            style={styles.videoView}
+            nativeControls
+            // The player frame above (RaisedCard) clips its content with
+            // overflow:'hidden' for rounded corners and carries an Android
+            // elevation shadow. The default 'surfaceView' renderer draws
+            // via a separate hardware compositor layer that doesn't always
+            // composite correctly nested under a clipped/elevated parent —
+            // on some devices this shows native controls (which ARE normal
+            // Views) but no actual video frames underneath. 'textureView'
+            // renders through the normal view hierarchy instead, at a
+            // small performance cost, and is exactly what expo-video's own
+            // docs recommend for "overlapping/clipped video views".
+            surfaceType="textureView"
+          />
         </View>
       </RaisedCard>
 

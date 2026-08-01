@@ -50,7 +50,23 @@ export function AddFilesButton({
       const result = await DocumentPicker.getDocumentAsync({
         type: mimeType,
         multiple: true,
-        copyToCacheDirectory: false,
+        // Images need their raw bytes read later (ColoringScreen decodes
+        // them via expo-file-system + Skia for flood-fill), and the content://
+        // URI a picker hands back for an arbitrary photo (Google Photos,
+        // a cloud-backed gallery app, etc.) isn't guaranteed to stay
+        // reliably byte-readable that way — copying it into the app's own
+        // cache directory up front sidesteps the original provider
+        // entirely. Videos stay uncopied (referenced in place): they're
+        // only ever streamed through expo-video's own player, never read
+        // as raw bytes, and copying could mean duplicating a large file.
+        // Trade-off: the OS can evict files from the cache directory under
+        // storage pressure, which would make a previously-added picture
+        // silently vanish on a later app restart — pruneMissingFileReferences
+        // (fileReferenceStore.ts) already handles that gracefully by
+        // quietly dropping the now-missing reference rather than erroring,
+        // so this trades "picture never loads" for the much rarer "picture
+        // disappears later," not a new failure mode.
+        copyToCacheDirectory: mimeType.startsWith('image/'),
       });
       if (!result.canceled && result.assets.length > 0) {
         await addFileReferences(

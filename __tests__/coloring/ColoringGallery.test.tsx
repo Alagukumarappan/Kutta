@@ -82,6 +82,37 @@ describe('ColoringGallery', () => {
     expect(onSelect).toHaveBeenCalledWith('content://tree/coloring/cat-outline.png');
   });
 
+  // Regression test for a real bug seen on-device: with 4 images (one more
+  // than the 3-column grid), the 4th tile — alone in its own row — visibly
+  // stretched to fill the ENTIRE row width (and, via aspectRatio:1, grew
+  // much taller too) instead of staying the same size as the 3 tiles
+  // above it. This is FlatList's well-known `flex: 1` + incomplete-last-row
+  // interaction: a lone child in a flex row still expands to fill 100% of
+  // it. RNTL doesn't run real Yoga layout, so this can't be asserted by
+  // measuring rendered size directly — instead, assert on the actual
+  // mechanism the fix relies on: the data is padded with invisible,
+  // non-tappable filler tiles up to a full row, so the real 4th tile has
+  // proper row-mates (2 fillers) keeping it locked to its normal 1/3-width
+  // flex share instead of being alone in its row.
+  it('pads an incomplete last row with invisible filler tiles instead of leaving the last image alone in its row', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/coloring/1.png',
+      'content://tree/coloring/2.png',
+      'content://tree/coloring/3.png',
+      'content://tree/coloring/4.png',
+    ]);
+
+    const { findByTestId, queryAllByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-item-content://tree/coloring/4.png');
+    const fillers = queryAllByTestId(/coloring-item-filler-/);
+    expect(fillers).toHaveLength(2);
+  });
+
   it('shows the empty state when the coloring folder has no images', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
 
