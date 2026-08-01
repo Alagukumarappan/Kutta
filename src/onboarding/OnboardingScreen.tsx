@@ -37,6 +37,13 @@ import {
 // and most consequential action, uses the full RaisedPrimaryButton instead —
 // its size='large' preset already clears touchTarget.primaryCTA (64dp) on
 // its own, no hitSlop trick required.
+// Same length-cap idiom as TicTacToeSetupScreen's friend-name field
+// (quality-evolution iteration 18): this name is later rendered centered
+// and unbounded on TicTacToeScreen's statusText and the shared
+// CelebrationOverlay's completion title, neither of which truncates or
+// scrolls — an arbitrarily long name could push those layouts off-screen.
+const CHILD_NAME_MAX_LENGTH = 20;
+
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
   const [name, setName] = useState('');
@@ -54,6 +61,10 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [pictureUri, setPictureUri] = useState<string | undefined>(undefined);
   const [pictureModalVisible, setPictureModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+
+  function handleNameChange(text: string) {
+    setName(text.slice(0, CHILD_NAME_MAX_LENGTH));
+  }
 
   const nameValid = name.trim().length > 0;
   const ageValid = age !== null;
@@ -148,7 +159,8 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
                 <TextInput
                   testID="onboarding-name-input"
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={handleNameChange}
+                  maxLength={CHILD_NAME_MAX_LENGTH}
                   style={[styles.textInput, nameValid ? styles.textInputFilled : styles.textInputEmpty]}
                   placeholder="Name"
                   placeholderTextColor={colors.inkMuted}

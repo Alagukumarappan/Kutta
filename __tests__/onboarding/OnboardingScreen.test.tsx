@@ -38,6 +38,36 @@ describe('OnboardingScreen', () => {
     jest.clearAllMocks();
   });
 
+  // Regression test: this name is later rendered centered and unbounded on
+  // TicTacToeScreen's statusText and the shared CelebrationOverlay's
+  // completion title, neither of which truncates or scrolls (same risk
+  // fixed for the friend name in quality-evolution iteration 18).
+  it('caps the child name at a sensible maximum length', async () => {
+    const { getByTestId } = await renderScreen();
+
+    expect(getByTestId('onboarding-name-input').props.maxLength).toBe(20);
+  });
+
+  it('clamps the underlying name state itself, not just the input prop', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+    (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByTestId, getByText } = await renderScreen();
+
+    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'x'.repeat(50));
+    await selectAge(getByTestId, 4);
+    await fireEvent.press(getByText('Choose content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    await fireEvent.press(getByText('Save'));
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'x'.repeat(20) })
+      )
+    );
+  });
+
   it('saves the profile and calls onComplete after a successful folder pick', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
     (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);

@@ -69,6 +69,14 @@ function FadeInBanner({
 // read it, short enough not to feel like the app is stuck after a tap.
 const SAVED_TOAST_DURATION_MS = 1200;
 
+// Same length-cap idiom as TicTacToeSetupScreen's friend-name field and
+// OnboardingScreen's own name field (quality-evolution iterations 18/20):
+// this name is later rendered centered and unbounded on TicTacToeScreen's
+// statusText and the shared CelebrationOverlay's completion title, neither
+// of which truncates or scrolls — an arbitrarily long name could push
+// those layouts off-screen.
+const CHILD_NAME_MAX_LENGTH = 20;
+
 export function SettingsScreen({
   onProfileChanged,
   onGoHome,
@@ -400,7 +408,8 @@ export function SettingsScreen({
               <TextInput
                 testID="settings-name-input"
                 value={profile.name}
-                onChangeText={(name) => setProfile({ ...profile, name })}
+                onChangeText={(name) => setProfile({ ...profile, name: name.slice(0, CHILD_NAME_MAX_LENGTH) })}
+                maxLength={CHILD_NAME_MAX_LENGTH}
                 style={styles.textInput}
               />
             </View>

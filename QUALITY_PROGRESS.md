@@ -751,6 +751,47 @@ async leakage via `mockClear()` after the initial invisible mount). Both
 verified via manual revert-and-rerun to genuinely fail without their
 respective fixes. Full suite: 645/645 passing. `npx tsc --noEmit` clean.
 
+### Iteration 20 — Bug fix: the child's own name had no length cap either
+**Area:** Bug Hunting.
+
+**Problem:** Iteration 18 capped `TicTacToeSetupScreen.tsx`'s friend-name
+field at 20 characters because that name is later rendered centered and
+unbounded on `TicTacToeScreen.tsx`'s `statusText` and the shared
+`CelebrationOverlay`'s completion title. The exact same risk existed for
+the child's OWN name (`profile.name`) — it flows through `childName` into
+those same render surfaces — but neither place it's set
+(`OnboardingScreen.tsx`'s first-launch entry, `SettingsScreen.tsx`'s
+later edit) had any cap at all.
+
+**Fix:** Added the same `CHILD_NAME_MAX_LENGTH = 20` pattern to both
+screens — matching iteration 18's friend-name cap exactly, since both
+names funnel into the same downstream surfaces. `OnboardingScreen.tsx`
+gained a `handleNameChange` function (`setName(text.slice(0, 20))`) wired
+to `onChangeText`, plus `maxLength={20}`. `SettingsScreen.tsx`'s existing
+`onChangeText={(name) => setProfile({ ...profile, name })}` was changed
+to clamp inline (`name.slice(0, 20)`) before it ever reaches state, plus
+`maxLength={20}`.
+
+**Review:** independent review confirmed the fix doesn't interact badly
+with either screen's existing name-related logic — `OnboardingScreen`'s
+`nameValid`/`isValid`/Save-disabled chain and the avatar initial-letter
+placeholder, or `SettingsScreen`'s considerably more complex iteration-16
+save flow (`latestProfileRef`/`latestAgeRef` fresh-value reads, the
+blank-name-during-migration fallback) — none of that logic depends on
+string length being unbounded. No fixes needed this iteration; the review
+came back clean.
+
+**Tests:** 2 new tests per screen (4 total) in
+`__tests__/onboarding/OnboardingScreen.test.tsx` and
+`__tests__/settings/SettingsScreen.test.tsx` — one confirming the
+`maxLength` prop, one confirming the actual JS-side clamp by firing a
+50-character `changeText` and checking the value that reaches
+`saveProfile` is exactly 20 characters (RNTL's `fireEvent.changeText`
+bypasses native `maxLength` enforcement entirely, so this is the test
+that would actually catch a `maxLength`-only regression). All 4 verified
+via `git stash` to genuinely fail without their respective fixes. Full
+suite: 649/649 passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -774,6 +815,7 @@ respective fixes. Full suite: 645/645 passing. `npx tsc --noEmit` clean.
 - Iteration 16: SettingsScreen could silently discard a name/age/language/picture edit made during an in-flight migration. See above.
 - Iteration 18: TicTacToeSetupScreen's friend-name field had no length cap, risking layout overflow on the next screen. See above.
 - Iteration 19: CelebrationOverlay (shared completion dialog) never notified screen readers it had appeared. See above.
+- Iteration 20: the child's own name (Onboarding/Settings) had no length cap, same overflow risk as the friend name. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -814,14 +856,14 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
   version). Worth a small `useNavLock()` hook if a third copy ever appears;
   marginal value for just 2.
-- **Bug Hunting (S, from iteration 18's research, not yet done):** the
-  SAME unbounded-render risk fixed for the friend name in iteration 18
-  still exists for the child's OWN name (`profile.name`, editable in
-  Onboarding/Settings) — it flows through `childName` into the exact same
-  `TicTacToeScreen` `statusText`/`CelebrationOverlay` render paths, with
-  no length cap anywhere it's set. Lower urgency than the friend name
-  (typically shorter, chosen once at onboarding rather than per-game), but
-  the same fix pattern would apply directly.
+- **Architecture (S, from iteration 20, lower priority — only 3 copies
+  exist):** `CHILD_NAME_MAX_LENGTH`/`FRIEND_NAME_MAX_LENGTH` (both `= 20`)
+  are now duplicated as local constants across
+  `TicTacToeSetupScreen.tsx`, `OnboardingScreen.tsx`, and
+  `SettingsScreen.tsx`. Deliberately NOT extracted to a shared constant in
+  iteration 20 itself, to keep that bug-fix commit self-contained; worth
+  a small shared `profileName.ts` (or similar) constant if a 4th usage
+  ever appears, or proactively next time this area gets touched.
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by

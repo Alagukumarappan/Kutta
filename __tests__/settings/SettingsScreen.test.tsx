@@ -244,6 +244,42 @@ describe('SettingsScreen', () => {
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 
+  // Regression test: this name is later rendered centered and unbounded on
+  // TicTacToeScreen's statusText and the shared CelebrationOverlay's
+  // completion title, neither of which truncates or scrolls (same risk
+  // fixed for the friend name in quality-evolution iteration 18, and for
+  // OnboardingScreen's own name field in iteration 20).
+  it('caps the name field at a sensible maximum length', async () => {
+    const { getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    expect(getByTestId('settings-name-input').props.maxLength).toBe(20);
+  });
+
+  it('clamps the underlying name state itself, not just the input prop', async () => {
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.changeText(getByTestId('settings-name-input'), 'x'.repeat(50));
+    await fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'x'.repeat(20) })
+      )
+    );
+  });
+
   // Regression test for a real bug fix: unlike OnboardingScreen (which
   // disables Save entirely until the name is non-blank), SettingsScreen had
   // no name validation at all — a parent clearing the name field and
