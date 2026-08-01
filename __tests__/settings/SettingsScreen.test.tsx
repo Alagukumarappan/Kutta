@@ -226,6 +226,42 @@ describe('SettingsScreen', () => {
     await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Error', 'picker unavailable'));
   });
 
+  // Regression test for a real bug fix: unlike OnboardingScreen's and
+  // FolderErrorScreen's equivalent folder pickers (both already guarded),
+  // handlePickFolder had no re-entrancy guard at all — a rapid double-tap
+  // on "Change content folder" could fire two concurrent
+  // requestFolderAccess() calls whose resolved uris could land out of
+  // order.
+  it('guards "Change content folder" against a rapid double-tap, only picking once', async () => {
+    let resolveFolderPick!: (uri: string) => void;
+    (folderAccess.requestFolderAccess as jest.Mock).mockImplementation(
+      () => new Promise<string>((resolve) => { resolveFolderPick = resolve; })
+    );
+
+    const { getByText, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    const changeFolderButton = getByText('Change content folder');
+    // Two rapid presses on the SAME captured element before the mocked
+    // picker promise ever resolves — same "stale double-tap" shape as this
+    // codebase's other double-fire guard tests.
+    await act(async () => {
+      fireEvent.press(changeFolderButton);
+      fireEvent.press(changeFolderButton);
+    });
+
+    expect(folderAccess.requestFolderAccess).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFolderPick('content://tree/new-root');
+      await Promise.resolve();
+    });
+  });
+
   it('disables the Save button while a migration is in progress, preventing a double submit', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
     let resolveMigration!: (v: { success: true }) => void;

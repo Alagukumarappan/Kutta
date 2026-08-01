@@ -118,6 +118,14 @@ export function SettingsScreen({
   // orphaning the first timer, and both eventually fired onGoHome?.(),
   // navigating Home twice.
   const saveInFlightRef = useRef(false);
+  // Same re-entrancy guard idiom as OnboardingScreen's pickingFolderRef and
+  // FolderErrorScreen's pickingRef (both reuse this exact
+  // requestFolderAccess() primitive) — without it, a rapid double-tap on
+  // "Change content folder" could fire two concurrent SAF picker
+  // invocations, whose two resolved uris could resolve out of order and
+  // leave pendingFolderUri set to whichever one happened to finish first
+  // rather than the one the parent actually meant to end up with.
+  const pickingFolderRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -161,11 +169,15 @@ export function SettingsScreen({
   }
 
   async function handlePickFolder() {
+    if (pickingFolderRef.current) return;
+    pickingFolderRef.current = true;
     try {
       const uri = await requestFolderAccess();
       setPendingFolderUri(uri);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    } finally {
+      pickingFolderRef.current = false;
     }
   }
 

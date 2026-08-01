@@ -534,6 +534,29 @@ one minor, accepted UX note — a name saved with trailing whitespace will
 visibly "snap" to its trimmed form in the text field after Save, matching
 Onboarding's equivalent behavior).
 
+### Iteration 14 — Bug fix: SettingsScreen's "Change content folder" had no double-tap guard
+**Area:** Bug Hunting.
+
+**Problem:** `handlePickFolder` had no re-entrancy guard at all — a rapid
+double-tap on "Change content folder" could fire two concurrent
+`requestFolderAccess()` calls whose resolved uris could land out of order
+via `setPendingFolderUri`. This is the third time this exact bug class has
+been found and fixed in this codebase (`FolderErrorScreen`'s recovery
+picker, iteration 5; `OnboardingScreen`'s picker, iteration 8), both
+reusing the same `requestFolderAccess()` primitive.
+
+**Fix:** Added a synchronous `pickingFolderRef` check-and-set guard, same
+shape as the two prior fixes.
+
+**Tests:** 1 new test in `__tests__/settings/SettingsScreen.test.tsx`
+("guards 'Change content folder' against a rapid double-tap, only picking
+once"), verified via `git stash` to genuinely fail without the fix
+("Expected: 1, Received: 2"). Full suite: 635/635 passing. `npx tsc
+--noEmit` clean. Reviewed by an independent agent — no issues found
+(walked every exit path to confirm the guard can never get stuck, checked
+for interaction with the pre-existing `saveInFlightRef` guard in the same
+file, confirmed no fourth unguarded async action remains in this file).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -553,6 +576,7 @@ Onboarding's equivalent behavior).
 - Iteration 11: QuestionRenderer could silently overwrite a child's answer on a rapid double-tap between two different options. See above.
 - Iteration 12: VideoPlayerScreen showed no feedback while a video was still loading, and could get stuck loading forever if the player settled before the screen subscribed. See above.
 - Iteration 13: SettingsScreen had no name validation, letting a parent silently persist an empty name. See above.
+- Iteration 14: SettingsScreen's "Change content folder" had no double-tap guard, the third time this exact bug class has been found and fixed in this codebase. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -591,13 +615,6 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
   version). Worth a small `useNavLock()` hook if a third copy ever appears;
   marginal value for just 2.
-- **Bug Hunting (S, from iteration 13's research pass, not yet done):**
-  `SettingsScreen.tsx`'s `handlePickFolder` has no double-tap guard — the
-  same bug class already fixed twice elsewhere in this exact codebase
-  (`OnboardingScreen`'s equivalent in iteration 8, `FolderErrorScreen`'s in
-  iteration 5), both reusing the same `requestFolderAccess()` primitive. A
-  rapid double-tap on "Change content folder" could fire two concurrent
-  calls whose resolutions land out of order via `setPendingFolderUri`.
 - **Bug Hunting (M, from iteration 13's research pass, not yet done, more
   investigation needed before implementing):** `SettingsScreen.tsx`'s
   `handleSave` reads `profile` into a local `nextProfile` before `await`ing
