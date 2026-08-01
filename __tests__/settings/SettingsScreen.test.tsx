@@ -84,6 +84,117 @@ describe('SettingsScreen', () => {
     );
   });
 
+  // Regression test for a real bug fix: handleSave previously built its
+  // "nextProfile" to save from a SNAPSHOT of the name/age/language/picture
+  // fields taken when Save was first pressed — a parent's edit made WHILE
+  // the migration confirmation Alert (or the migration copy itself) was
+  // still pending would be silently discarded the moment the in-flight
+  // save's own setProfile(nextProfile) finally ran, overwriting the
+  // parent's newer edit with the stale one.
+  it('does not silently discard a name edit made while the migration confirmation is still pending', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: true });
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    fireEvent.press(getByText('Save changes'));
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Move content?', expect.any(String), expect.any(Array), expect.any(Object)));
+
+    // Edit the name WHILE the confirmation Alert is still up — i.e. after
+    // Save was first pressed, but before the parent has actually confirmed
+    // the migration.
+    await fireEvent.changeText(getByTestId('settings-name-input'), 'Samuel');
+
+    await confirmAlertWith('Move content');
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Samuel', rootFolderUri: 'content://tree/new' })
+      )
+    );
+  });
+
+  // Regression test for a real issue caught during review of the fix
+  // above: an earlier version of the fresh-value re-read ALSO re-blocked
+  // Save on a blank name using the freshest value — but by the time that
+  // check runs, a successful migration has already irreversibly happened
+  // (migrateContent deletes the old folder's content once its copy is
+  // verified). Aborting the save at that point would leave the profile
+  // pointing at now-deleted content with no way back. The fix must still
+  // persist the migration result even if the name went blank mid-flight,
+  // falling back to the last-known-valid name rather than the blank one.
+  it('still saves the migration result if the name is blanked mid-flight, falling back to the last valid name', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: true });
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    fireEvent.press(getByText('Save changes'));
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Move content?', expect.any(String), expect.any(Array), expect.any(Object)));
+
+    // Blank the name WHILE the confirmation Alert is still up.
+    await fireEvent.changeText(getByTestId('settings-name-input'), '');
+
+    await confirmAlertWith('Move content');
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: initialProfile.name, rootFolderUri: 'content://tree/new' })
+      )
+    );
+  });
+
+  // Confirms the name-blank fallback above is scoped to JUST the name field
+  // — an age edit made in that same mid-flight window must still be
+  // honored, not accidentally reverted alongside the name.
+  it('still honors a fresh age edit even when the name fallback kicks in in the same save', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: true });
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    fireEvent.press(getByText('Save changes'));
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Move content?', expect.any(String), expect.any(Array), expect.any(Object)));
+
+    // Blank the name AND change the age, both while the confirmation Alert
+    // is still up.
+    await fireEvent.changeText(getByTestId('settings-name-input'), '');
+    await fireEvent.press(getByTestId('settings-age-picker'));
+    await fireEvent.press(getByTestId('settings-age-option-6'));
+
+    await confirmAlertWith('Move content');
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: initialProfile.name, age: 6, rootFolderUri: 'content://tree/new' })
+      )
+    );
+  });
+
   it('does NOT migrate or save the new folder if the user cancels the confirmation', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
     (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: true });

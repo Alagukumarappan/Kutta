@@ -587,6 +587,53 @@ the existing `disabled`-state handling on Save/Reset, confirmed the
 pictureUri mock in the new test doesn't leak into sibling tests via the
 shared `beforeEach`).
 
+### Iteration 16 — Bug fix: SettingsScreen could silently discard an edit made during an in-flight migration
+**Area:** Bug Hunting. This is the most subtle fix in the loop so far — required two full review passes, the first of which caught a genuine, self-introduced regression before it shipped.
+
+**Problem:** `handleSave` built its `nextProfile` to persist from a SNAPSHOT
+of `profile`/`age` captured before two potentially-slow `await`s
+(`confirmMigration()` — a real Alert button press; `migrateContent()` — a
+real file copy). If a parent edited name/age/language/picture WHILE either
+await was pending, `handleSave`'s already-running closure kept referencing
+the stale snapshot, so the final `setProfile(nextProfile)` silently
+overwrote the parent's newer edit — the exact gap flagged (but not yet
+fixed) in iteration 13's research.
+
+**Fix (first pass):** Added `latestProfileRef`/`latestAgeRef`, kept in
+sync via `useEffect`s, and read those refs right before building the final
+`nextProfile` instead of the original closure values — but deliberately
+NOT for the folder-migration decision itself (`pendingFolderUri` stays
+pinned to the snapshot from when Save was pressed, so a later folder pick
+mid-migration can't retroactively redirect a migration already running).
+
+**Regression caught by review, then fixed:** the first pass ALSO
+re-validated the fresh name for blankness right before the final save — but
+by that point, a successful migration may have already irreversibly
+happened (`migrateContent` deletes the OLD folder's content once its copy
+is verified, confirmed in iteration 7's investigation). Blocking
+persistence at that point over a blank name would leave the profile
+pointing at now-deleted content with no way back — a brand-new, more
+severe bug than the one being fixed. Fixed by never blocking persistence
+of a completed migration: if the name went blank mid-flight, it silently
+falls back to the last-known-valid name (the one that already passed the
+top-of-function guard) instead of aborting — matching this codebase's
+established "best-effort, never block core functionality on a secondary
+concern" convention (`activityLog.ts`, `fileReferenceStore.ts`).
+
+**Tests:** 4 new tests in `__tests__/settings/SettingsScreen.test.tsx`: a
+valid mid-flight name edit is preserved (verified via `git stash` to
+genuinely fail without the fix), a mid-flight blank-name edit still lets
+the migration result save (falls back to the old name — verified by
+temporarily reintroducing JUST the regressed version of the code, showing
+`saveProfile` is called 0 times without this specific piece), and a
+combined name-blank+age-edit test proving the name fallback doesn't
+accidentally also revert the fresh age edit. Full suite: 640/640 passing.
+`npx tsc --noEmit` clean. Reviewed by an independent agent TWICE — the
+first pass found the migration-orphaning regression described above
+(this loop's 5th genuine review-caught issue); the second, follow-up pass
+after the fix gave a clean bill of health and suggested the age/language
+combination test, which was added.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -607,6 +654,7 @@ shared `beforeEach`).
 - Iteration 12: VideoPlayerScreen showed no feedback while a video was still loading, and could get stuck loading forever if the player settled before the screen subscribed. See above.
 - Iteration 13: SettingsScreen had no name validation, letting a parent silently persist an empty name. See above.
 - Iteration 14: SettingsScreen's "Change content folder" had no double-tap guard, the third time this exact bug class has been found and fixed in this codebase. See above.
+- Iteration 16: SettingsScreen could silently discard a name/age/language/picture edit made during an in-flight migration. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -646,17 +694,6 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
   version). Worth a small `useNavLock()` hook if a third copy ever appears;
   marginal value for just 2.
-- **Bug Hunting (M, from iteration 13's research pass, not yet done, more
-  investigation needed before implementing):** `SettingsScreen.tsx`'s
-  `handleSave` reads `profile` into a local `nextProfile` before `await`ing
-  a potentially slow `migrateContent(...)`, and nothing disables the name
-  input/AgePicker/LanguageSelector/picture buttons during `migrating` — only
-  Save itself is disabled. An edit made to name/age/picture WHILE a
-  migration is in flight could be silently overwritten the moment the
-  in-flight `handleSave`'s `setProfile(nextProfile)` finally runs. Needs
-  more thought on the right fix (disable the other fields too during
-  migration? re-read the latest edits before the final setProfile? both?)
-  before implementing, not a quick mechanical fix like the guard above.
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by

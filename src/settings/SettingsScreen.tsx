@@ -126,6 +126,32 @@ export function SettingsScreen({
   // leave pendingFolderUri set to whichever one happened to finish first
   // rather than the one the parent actually meant to end up with.
   const pickingFolderRef = useRef(false);
+  // handleSave awaits confirmMigration()/migrateContent() before persisting
+  // — both potentially slow (a real confirmation dialog, a real file copy)
+  // — but nothing disables the name/age/language/picture fields while that
+  // await is pending. Without these refs, handleSave would build its
+  // "nextProfile" to save from a SNAPSHOT of `profile`/`age` taken before
+  // those awaits, so any edit the parent makes to those fields WHILE a
+  // migration is in flight would be silently discarded the moment the
+  // in-flight save's own `setProfile(nextProfile)` finally runs, overwriting
+  // the parent's newer edit with the stale one. Kept in sync on every
+  // render below so handleSave can read the FRESHEST values right before
+  // actually persisting, instead of the ones captured when Save was first
+  // pressed. Deliberately NOT applied to the folder-migration decision
+  // itself (`pendingFolderUri`) — which folder migrateContent actually
+  // migrates FROM/TO must stay pinned to the snapshot taken when Save was
+  // pressed, not silently redirected if the parent picks yet another folder
+  // mid-migration.
+  const latestProfileRef = useRef(profile);
+  const latestAgeRef = useRef(age);
+
+  useEffect(() => {
+    latestProfileRef.current = profile;
+  }, [profile]);
+
+  useEffect(() => {
+    latestAgeRef.current = age;
+  }, [age]);
 
   useEffect(() => {
     return () => {
@@ -257,11 +283,12 @@ export function SettingsScreen({
     try {
       setMigrationError(null);
 
-      let nextProfile: Profile = {
-        ...profile,
-        name: profile.name.trim(),
-        age: age !== null ? age : profile.age,
-      };
+      // Which folder to migrate FROM/TO is decided from the snapshot taken
+      // when Save was pressed, deliberately NOT re-read from the latest
+      // state below — if the parent somehow picked yet another folder while
+      // this migration is already in flight, that later pick must not
+      // retroactively change what's already being migrated.
+      let migratedRootFolderUri: string | undefined;
 
       if (pendingFolderUri && pendingFolderUri !== profile.rootFolderUri) {
         const oldUri = profile.rootFolderUri;
@@ -281,8 +308,36 @@ export function SettingsScreen({
           setMigrationError(t('migrationFailed'));
           return;
         }
-        nextProfile = { ...nextProfile, rootFolderUri: pendingFolderUri };
+        migratedRootFolderUri = pendingFolderUri;
       }
+
+      // Read the FRESHEST name/age/language/picture right before
+      // persisting, not the snapshot from when Save was first pressed —
+      // see latestProfileRef/latestAgeRef's own comment above for why.
+      const latestProfile = latestProfileRef.current;
+      const latestAge = latestAgeRef.current;
+      if (!latestProfile) return;
+
+      // If the name went blank during the migration confirm/copy above,
+      // fall back to the ORIGINAL, already-validated name instead of
+      // blocking persistence entirely. By this point a folder migration may
+      // already have irreversibly happened — migrateContent deletes the old
+      // folder's content once its copy is verified — so aborting the save
+      // here (as an earlier version of this fix did) would leave the
+      // profile pointing at now-deleted content with no way back. The
+      // freshest name is still used whenever it's actually valid; only the
+      // specific "went blank mid-flight" case silently falls back, and only
+      // for the name field — every other fresh edit (age/language/picture)
+      // is still honored below.
+      const freshName = latestProfile.name.trim();
+      const nameToSave = freshName.length > 0 ? freshName : profile.name.trim();
+
+      const nextProfile: Profile = {
+        ...latestProfile,
+        name: nameToSave,
+        age: latestAge !== null ? latestAge : latestProfile.age,
+        rootFolderUri: migratedRootFolderUri ?? latestProfile.rootFolderUri,
+      };
 
       await saveProfile(nextProfile);
       setProfile(nextProfile);
