@@ -3,7 +3,7 @@ import { View, Text, FlatList, Pressable, Image, Modal, StyleSheet, Alert } from
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLanguage } from '../i18n/LanguageContext';
-import { colors, radii, spacing, elevation, withAlpha } from '../design-system';
+import { colors, radii, spacing, elevation, withAlpha, LoadingPanel } from '../design-system';
 
 // Grid layout for the thumbnail list — 3 columns reads as a proper "picture
 // grid" (per this redesign's brief) instead of the previous single-column
@@ -167,7 +167,9 @@ export function ProfilePicturePicker({
           )}
 
           {picturesFolderUri && !error && images === null && (
-            <View testID="profile-picture-picker-loading" style={styles.stateBox} />
+            <View testID="profile-picture-picker-loading" style={styles.stateBox}>
+              <LoadingPanel color={colors.parent.accent} message={t('galleryLoading')} />
+            </View>
           )}
 
           {picturesFolderUri && !error && images !== null && images.length === 0 && (

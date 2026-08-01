@@ -45,6 +45,34 @@ describe('ProfilePicturePicker', () => {
     expect(onSelect).toHaveBeenCalledWith('content://tree/pictures/beach.jpg');
   });
 
+  // Regression test for a real visual-consistency gap: the loading state
+  // previously rendered a totally blank <View/> with no spinner, text, or
+  // accessibility label — exactly the anti-pattern the shared LoadingPanel
+  // was built to eliminate everywhere else (galleries, QuizScreen,
+  // ColoringScreen), which this modal-based picker had been missed by.
+  it('shows a real loading spinner (not a blank box) while the folder is still being read', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
+      () => new Promise(() => {}) // never resolves — keeps this in the loading state
+    );
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ProfilePicturePicker
+          visible
+          picturesFolderUri="content://tree/pictures"
+          onSelect={jest.fn()}
+          onClose={jest.fn()}
+        />
+      </LanguageProvider>
+    );
+
+    await findByTestId('profile-picture-picker-loading');
+    // LoadingPanel's own ActivityIndicator has no reliable cross-platform
+    // testID, so its message text is the simplest, most reliable signal
+    // from outside that this is genuinely LoadingPanel and not a bare View.
+    await findByText('Getting things ready...');
+  });
+
   it('does not list the folder at all while not visible', () => {
     render(
       <LanguageProvider initialLanguage="en">

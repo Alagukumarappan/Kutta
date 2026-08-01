@@ -634,6 +634,43 @@ first pass found the migration-orphaning regression described above
 after the fix gave a clean bill of health and suggested the age/language
 combination test, which was added.
 
+### Iteration 17 — Visual Consistency: ProfilePicturePicker's loading state was a blank box
+**Area:** Visual Consistency.
+
+**Problem:** `ProfilePicturePicker.tsx`'s loading state rendered a totally
+blank `<View testID="profile-picture-picker-loading" style={styles.stateBox} />`
+— no spinner, no text, no accessibility signal — while every other
+async-load screen/component in the app (galleries, QuizScreen,
+ColoringScreen) uses the shared `LoadingPanel`. This modal was added after
+those other screens converged on `LoadingPanel` and was missed. On a slow
+SAF read it looked broken/frozen with zero feedback, sighted or
+screen-reader.
+
+**Fix:** Wrapped `LoadingPanel` inside that same `View`, using
+`color={colors.parent.accent}` (matching every other colored element
+already in this file — this modal uses the calmer "parent" register) and
+`message={t('galleryLoading')}` (reused, same as `VideoPlayerScreen`'s
+equivalent fix in iteration 12).
+
+**Investigated, accepted as-is (no code change):** review flagged that
+`LoadingPanel`'s internal `flex: 1` has no sized flex-container ancestor
+here to grow into (unlike the gallery reference usage, which wraps it in
+a `flex: 1` screen-level container) — Yoga falls back to content-based
+sizing, so the spinner won't collapse or render invisible, just sit
+closer to the empty/error states' layout rather than centered in a full
+screen region. Cosmetic only, and this modal's bounded card container was
+never going to match a full-screen layout anyway, so no fix needed.
+
+**Tests:** 1 new test in `__tests__/settings/ProfilePicturePicker.test.tsx`
+("shows a real loading spinner (not a blank box) while the folder is
+still being read"), verified via `git stash` to genuinely fail without
+the fix (times out looking for the loading message). Full suite: 641/641
+passing. `npx tsc --noEmit` clean. Reviewed by an independent agent — no
+blocking issues found (confirmed the color/string choices match this
+file's own established convention, confirmed the never-resolving test
+promise doesn't leak or cause act() warnings, confirmed no other blank
+state remains in this file).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -659,6 +696,7 @@ combination test, which was added.
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
 - Iteration 15: SettingsScreen's own Pressables gained accessibilityRole/accessibilityLabel, matching the rest of the app's convention. See above.
+- Iteration 17: ProfilePicturePicker's loading state now uses the shared LoadingPanel instead of a blank box. See above.
 
 ## Remaining opportunities
 (from the initial research pass; two candidates below were investigated in
@@ -694,6 +732,22 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
   version). Worth a small `useNavLock()` hook if a third copy ever appears;
   marginal value for just 2.
+- **Bug Hunting (M, from iteration 17's research pass, not yet done):**
+  `src/design-system/CelebrationOverlay.tsx` — shared by Puzzle, Quiz, and
+  TicTacToe's completion moment — has no `accessibilityViewIsModal` on its
+  `Modal`, and its title `Text` has no `accessibilityRole="alert"`/
+  `accessibilityLiveRegion`. A screen-reader user isn't notified the
+  completion dialog appeared at all. Fixing here helps every activity's
+  win screen at once, since it's the shared component — higher leverage
+  than a per-screen fix, worth its own careful iteration given it's a
+  widely-shared component (unlike the smaller isolated fixes so far).
+- **Bug Hunting (S, from iteration 17's research pass, not yet done):**
+  `TicTacToeSetupScreen.tsx`'s friend-name `TextInput` has no `maxLength`.
+  This screen's own existing comments document a prior real bug where
+  oversized elements pushed content off a short/landscape screen — an
+  unbounded friend name could reintroduce that same class of overflow on
+  the next screen (`TicTacToeScreen`'s `statusText`/`CelebrationOverlay`
+  title, both of which render the name centered and unbounded).
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by
