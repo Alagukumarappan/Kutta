@@ -738,7 +738,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
                     // (cx,cy) lands on screen at (cx*scale+translateX,
                     // cy*scale+translateY), which only holds with a
                     // top-left transform origin.
-                    transformOrigin: [0, 0],
+                    transformOrigin: [0, 0, 0],
                     transform: [{ translateX: panXY.x }, { translateY: panXY.y }, { scale: scaleAnim }],
                   }}
                 >
