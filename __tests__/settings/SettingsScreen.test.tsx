@@ -318,6 +318,29 @@ describe('SettingsScreen', () => {
     expect(folderHitSlop.bottom).toBeGreaterThanOrEqual(4);
   });
 
+  // Regression test for a real accessibility gap: unlike the rest of the
+  // app's convention (every button in VideoGallery.tsx, AgePicker.tsx,
+  // LanguageSelector.tsx explicitly sets both), this screen's own Pressables
+  // previously had only a testID+style, with no accessibilityRole or
+  // accessibilityLabel at all — a screen-reader user had no way to tell
+  // what these controls were or that they were tappable.
+  it('gives Save, Reset, and Change-folder an accessible role and label', async () => {
+    const { getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+
+    expect(getByTestId('settings-folder-picker').props.accessibilityRole).toBe('button');
+    expect(getByTestId('settings-folder-picker').props.accessibilityLabel).toBe('Change content folder');
+    expect(getByTestId('settings-save').props.accessibilityRole).toBe('button');
+    expect(getByTestId('settings-save').props.accessibilityLabel).toBe('Save changes');
+    expect(getByTestId('settings-reset').props.accessibilityRole).toBe('button');
+    expect(getByTestId('settings-reset').props.accessibilityLabel).toBe('Reset everything');
+  });
+
   describe('profile picture', () => {
     beforeEach(() => {
       (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
@@ -336,6 +359,27 @@ describe('SettingsScreen', () => {
       expect(queryByTestId('settings-picture-choose')).toBeNull();
       // No picture ever set -> the placeholder avatar shows, not a broken image.
       expect(await findByTestId('settings-picture-placeholder')).toBeTruthy();
+    });
+
+    it('gives Choose-picture and Remove-picture an accessible role and label', async () => {
+      (profileStore.getProfile as jest.Mock).mockResolvedValue({
+        ...initialProfile,
+        pictureUri: 'content://tree/pictures/old.jpg',
+      });
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen picturesFolderUri="content://tree/pictures" />
+        </LanguageProvider>
+      );
+
+      const chooseButton = await findByTestId('settings-picture-choose');
+      expect(chooseButton.props.accessibilityRole).toBe('button');
+      expect(chooseButton.props.accessibilityLabel).toBe('Choose a picture');
+
+      const removeButton = await findByTestId('settings-picture-remove');
+      expect(removeButton.props.accessibilityRole).toBe('button');
+      expect(removeButton.props.accessibilityLabel).toBe('Remove picture');
     });
 
     it('lets the parent pick a picture from the pictures folder and stages it (not yet saved)', async () => {

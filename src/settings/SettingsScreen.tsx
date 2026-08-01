@@ -391,6 +391,8 @@ export function SettingsScreen({
               <Pressable
                 testID="settings-folder-picker"
                 onPress={handlePickFolder}
+                accessibilityRole="button"
+                accessibilityLabel={t('settingsChangeFolder')}
                 style={({ pressed }) => [styles.folderButton, pressed && styles.pressedSubtle]}
                 hitSlop={{ top: 8, bottom: 8 }}
               >
@@ -419,6 +421,8 @@ export function SettingsScreen({
                   <Pressable
                     testID="settings-picture-choose"
                     onPress={handleChoosePicture}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profilePictureChoose')}
                     style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
                     hitSlop={{ top: 6, bottom: 6 }}
                   >
@@ -429,6 +433,8 @@ export function SettingsScreen({
                   <Pressable
                     testID="settings-picture-remove"
                     onPress={handleRemovePicture}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profilePictureRemove')}
                     style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
                     hitSlop={{ top: 6, bottom: 6 }}
                   >
@@ -459,6 +465,8 @@ export function SettingsScreen({
             testID="settings-save"
             onPress={handleSave}
             disabled={migrating}
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsSave')}
             style={({ pressed }) => [
               styles.saveButton,
               migrating ? styles.saveButtonDisabled : styles.saveButtonEnabled,
@@ -474,6 +482,8 @@ export function SettingsScreen({
             testID="settings-reset"
             onPress={handleReset}
             disabled={resetting}
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsReset')}
             style={({ pressed }) => [
               styles.resetButton,
               resetting && styles.resetButtonDisabled,

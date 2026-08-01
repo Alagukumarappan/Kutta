@@ -557,6 +557,36 @@ once"), verified via `git stash` to genuinely fail without the fix
 for interaction with the pre-existing `saveInFlightRef` guard in the same
 file, confirmed no fourth unguarded async action remains in this file).
 
+### Iteration 15 — Visual Consistency / Accessibility: SettingsScreen's Pressables gained real accessibility labels
+**Area:** Visual Consistency (Accessibility).
+
+**Problem:** `SettingsScreen.tsx`'s own Pressables (Change-folder,
+Choose-picture, Remove-picture, Save, Reset) previously had only
+`testID`+style, no `accessibilityRole`/`accessibilityLabel` — unlike the
+rest of the app's convention (every button in `VideoGallery.tsx`,
+`AgePicker.tsx`, `LanguageSelector.tsx`, `FolderErrorScreen`, and the
+other galleries explicitly sets both). A screen-reader user had no way to
+tell what these 5 controls were or that they were tappable.
+
+**Fix:** Added `accessibilityRole="button"` and `accessibilityLabel={t('...')}`
+to all 5, reusing each button's own existing visible-text i18n key as the
+label (matching the established pattern already used everywhere else in
+the app — no new strings needed, and every one of these 5 buttons already
+has clear, unambiguous visible text worth reusing directly).
+
+**Tests:** 2 new tests in `__tests__/settings/SettingsScreen.test.tsx`
+(Save/Reset/Change-folder; Choose-picture/Remove-picture, the latter
+needing a profile with a `pictureUri` set so the Remove button renders at
+all), verified via `git stash` to genuinely fail without the fix
+("Expected: 'button', Received: undefined"). Full suite: 637/637 passing.
+`npx tsc --noEmit` clean. Reviewed by an independent agent — no issues
+found (confirmed all 5 Pressables in the file were covered with none
+missed, confirmed each label matches its own button's semantic action
+against `strings.ts` with none cross-wired, confirmed no interaction with
+the existing `disabled`-state handling on Save/Reset, confirmed the
+pictureUri mock in the new test doesn't leak into sibling tests via the
+shared `beforeEach`).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -580,6 +610,7 @@ file, confirmed no fourth unguarded async action remains in this file).
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
+- Iteration 15: SettingsScreen's own Pressables gained accessibilityRole/accessibilityLabel, matching the rest of the app's convention. See above.
 
 ## Remaining opportunities
 (from the initial research pass; two candidates below were investigated in
@@ -626,13 +657,6 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   more thought on the right fix (disable the other fields too during
   migration? re-read the latest edits before the final setProfile? both?)
   before implementing, not a quick mechanical fix like the guard above.
-- **Visual Consistency / Accessibility (S, from iteration 13's research
-  pass, not yet done):** `SettingsScreen.tsx`'s own Pressables (Save,
-  Reset, Change-folder, Choose-picture, Remove-picture) have only
-  `testID`+style, no `accessibilityRole="button"`/explicit
-  `accessibilityLabel`, unlike the rest of the app's convention (every
-  button in `VideoGallery.tsx`, `AgePicker.tsx`, `LanguageSelector.tsx`
-  explicitly sets both).
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by
