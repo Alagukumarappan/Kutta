@@ -1,6 +1,7 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { RootNavigator } from '../../src/navigation/RootNavigator';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import type { NavigationContainerRef } from '@react-navigation/native';
+import { RootNavigator, type RootStackParamList } from '../../src/navigation/RootNavigator';
 import * as profileStore from '../../src/storage/profileStore';
 import * as folderAccess from '../../src/storage/folderAccess';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -102,6 +103,31 @@ describe('RootNavigator header titles', () => {
     await findByTestId('folder-resolve-error');
     await findByLabelText('Retry');
   });
+
+  // Regression test for the premium-polish visual-consistency pass:
+  // FolderErrorScreen previously had NO styling at all (a bare `<Text>` and
+  // an unstyled `<Pressable>`) — the one error state in the app that never
+  // converged on the RaisedCard/RaisedPrimaryButton shape every other error
+  // state (VideoPlayerScreen, ColoringGallery, PuzzleGallery, VideoGallery)
+  // already uses. This is reachable in real use whenever the SAF grant is
+  // revoked or a content folder is deleted/renamed outside the app, so it's
+  // not a hypothetical edge case.
+  it('gives FolderErrorScreen a real styled background and card, not the old bare unstyled layout', async () => {
+    const { StyleSheet } = require('react-native');
+    (folderAccess.ensureContentStructure as jest.Mock).mockRejectedValueOnce(
+      new Error('SAF grant revoked')
+    );
+
+    const { findByTestId } = await render(<RootNavigator />);
+
+    const errorScreen = await findByTestId('folder-resolve-error');
+    const flattened = StyleSheet.flatten(errorScreen.props.style);
+    // A real background color (not the default undefined/transparent a bare
+    // <View> would have) is the simplest, most reliable signal from outside
+    // that this screen now goes through the design-system's styling instead
+    // of rendering completely bare.
+    expect(flattened.backgroundColor).toBeDefined();
+  });
 });
 
 // The app opens portrait-only (splash, onboarding) and only switches to
@@ -109,6 +135,77 @@ describe('RootNavigator header titles', () => {
 // RootNavigator.tsx's `readyForAppStack`-driven lock effect. Getting this
 // wrong previously showed as a visible portrait->landscape->portrait->
 // landscape flicker across the splash/onboarding boundary on a real device.
+describe('Tic-Tac-Toe "Menu" navigation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (profileStore.getProfile as jest.Mock).mockResolvedValue(profile);
+    (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+    (folderAccess.findChildUri as jest.Mock).mockImplementation(async (_root: string, name: string) => {
+      return `content://tree/root/${name}`;
+    });
+  });
+
+  // Regression test for a real, reported bug: winning a game, pressing
+  // "Menu", then pressing the device's back button re-showed the
+  // just-finished game with its old "you won" overlay still up. Root cause
+  // (confirmed by reading @react-navigation/routers' StackRouter source):
+  // plain `navigation.navigate(name)` only jumps back to an EXISTING route
+  // of that name when the CURRENT route already has that name, or when
+  // `{ pop: true }`/a matching `getId` is used — none of which applied here
+  // (current route was 'tictactoe-game', target was 'tictactoe', and plain
+  // `navigate(name)` sets `pop: undefined`) — so it silently PUSHED A
+  // SECOND 'tictactoe' screen on top of the stack instead of popping back
+  // to the original one. The finished 'tictactoe-game' screen (with its old
+  // board/win state) was left sitting one level further back in history,
+  // exactly where a single subsequent back-navigation would reveal it.
+  // Fixed by using `navigation.goBack()` instead (the same pattern this
+  // file already uses for PuzzleScreen's onNext), which unconditionally
+  // pops exactly the one screen that was pushed to get here — leaving no
+  // extra duplicate for a later back-navigation to fall onto.
+  it('cleanly returns to Home on a further back-navigation after Menu — never re-reveals the finished game/win-overlay', async () => {
+    const navigationRef = React.createRef<NavigationContainerRef<RootStackParamList>>();
+    const { findByTestId, getByTestId, queryByTestId } = await render(
+      <RootNavigator navigationRef={navigationRef} />
+    );
+
+    await fireEvent.press(await findByTestId('home-card-tictactoe'));
+    await fireEvent.press(await findByTestId('tictactoe-opponent-friend'));
+    await fireEvent.press(getByTestId('tictactoe-start-game'));
+
+    // Play out a quick X win (top row: cells 0, 1, 2), same move sequence
+    // used by TicTacToeScreen.test.tsx's own win test.
+    await fireEvent.press(await findByTestId('tictactoe-cell-0')); // X
+    await fireEvent.press(getByTestId('tictactoe-cell-3')); // O
+    await fireEvent.press(getByTestId('tictactoe-cell-1')); // X
+    await fireEvent.press(getByTestId('tictactoe-cell-4')); // O
+    await fireEvent.press(getByTestId('tictactoe-cell-2')); // X wins
+
+    await fireEvent.press(await findByTestId('tictactoe-menu'));
+
+    // Back on the setup screen...
+    await findByTestId('tictactoe-opponent-computer');
+
+    // ...now simulate the ADDITIONAL back-navigation the user actually
+    // performed (a hardware/gesture back press) by driving the real
+    // navigation container's own goBack() directly — this is the exact
+    // step the earlier version of this test omitted, which is why it could
+    // not tell a correct `goBack()` fix apart from the buggy `navigate()`
+    // call (both looked identical right after Menu; they only diverge one
+    // step further back).
+    await act(async () => {
+      navigationRef.current?.goBack();
+    });
+
+    // Under the fix, this back-navigation goes all the way to Home (the
+    // only screen left below the setup screen) — under the old bug, it
+    // would have landed back on the finished 'tictactoe-game' screen,
+    // showing the win overlay and the old marks again.
+    await findByTestId('home-card-tictactoe');
+    expect(queryByTestId('tictactoe-complete')).toBeNull();
+    expect(queryByTestId('tictactoe-opponent-friend')).toBeNull();
+  });
+});
+
 describe('RootNavigator orientation lock', () => {
   beforeEach(() => {
     jest.clearAllMocks();

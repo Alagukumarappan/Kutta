@@ -1,4 +1,5 @@
 import React from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { render, fireEvent, within } from '@testing-library/react-native';
 import { QuestionRenderer } from '../../src/quiz/QuestionRenderer';
 import type { Question } from '../../src/types/quiz';
@@ -40,9 +41,50 @@ const combinedQuestion: Question = {
   correctOptionId: 'a',
 };
 
+// Options with an image but no text are still a structurally-supported
+// shape (see e.g. the "correct-answer reveal" describe block below, which
+// exercises "a correct option with an image but no text") even though the
+// bundled sample content always pairs image+text — this fixture exercises
+// that path directly for accessibility.
+const imageOnlyOptionsQuestion: Question = {
+  id: 'q3',
+  category: 'image',
+  minAge: 2,
+  maxAge: 8,
+  question: { image: 'content://tree/quiz/images/apple.png', text: { en: 'Which one is red?', de: 'Welches ist rot?' } },
+  options: [
+    { id: 'a', image: 'content://tree/quiz/images/apple.png' },
+    { id: 'b', image: 'content://tree/quiz/images/banana.png' },
+    { id: 'c', image: 'content://tree/quiz/images/grape.png' },
+    { id: 'd', image: 'content://tree/quiz/images/pear.png' },
+  ],
+  correctOptionId: 'a',
+};
+
 describe('QuestionRenderer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  // Regression test for the premium-polish accessibility pass: an
+  // image-only option previously got `accessibilityLabel={undefined}`,
+  // leaving a screen-reader user with an unlabeled "Button" for every one
+  // of a question's four picture answers.
+  it('gives every image-only option a positional accessibility label instead of none at all', async () => {
+    const { findByLabelText } = await render(
+      <QuestionRenderer
+        question={imageOnlyOptionsQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    expect(await findByLabelText('Answer option 1')).toBeTruthy();
+    expect(await findByLabelText('Answer option 2')).toBeTruthy();
+    expect(await findByLabelText('Answer option 3')).toBeTruthy();
+    expect(await findByLabelText('Answer option 4')).toBeTruthy();
   });
 
   it('falls back to a placeholder when the question image fails to load', async () => {
@@ -1136,6 +1178,75 @@ describe('QuestionRenderer', () => {
       const untouchedFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-0').props.style);
       const untouchedScale = untouchedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
       expect(untouchedScale).toBeCloseTo(1);
+    });
+
+    // Regression test for the premium-polish accessibility pass: this dot
+    // pop always sprang from a smaller/larger starting ratio up to scale 1,
+    // ignoring the OS reduce-motion setting, and can fire up to 20 times per
+    // session. With the setting on, both dots should already be at their
+    // resting scale immediately — no bounce to settle from.
+    it('skips the dot-pop spring when the OS reduce-motion setting is on, landing both dots directly on their resting scale', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+
+      const { getByTestId, rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={5}
+        />
+      );
+      // Let the async reduce-motion check resolve before the real advance
+      // below — same reasoning as this codebase's other reduce-motion
+      // tests (e.g. CelebrationOverlay's own).
+      await rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={2}
+          totalQuestions={5}
+        />
+      );
+
+      await rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+          currentIndex={3}
+          totalQuestions={5}
+        />
+      );
+
+      const { StyleSheet } = require('react-native');
+      const newCurrentFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-3').props.style);
+      const newCurrentScale = newCurrentFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      const justDoneFlattened = StyleSheet.flatten(getByTestId('quiz-progress-dot-2').props.style);
+      const justDoneScale = justDoneFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+
+      expect(newCurrentScale).toBeCloseTo(1);
+      expect(justDoneScale).toBeCloseTo(1);
+
+      // `restoreAllMocks()` alone can't undo this specific mock:
+      // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+      // jest.fn() (a native module method), so `jest.spyOn` above just
+      // returns that same mock rather than wrapping a real implementation
+      // — there's no "original" to restore to, and the mocked `true` value
+      // otherwise silently leaks into every later test in this file (a
+      // real, verified bug — see ColoringScreen's iteration 30 notes for
+      // the full mechanism). Explicitly resetting it back to `false` here
+      // is what actually fixes it; `restoreAllMocks()` is kept for the
+      // OTHER real (non-automocked) spies this test uses.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
+      jest.restoreAllMocks();
     });
 
     it('does not render a progress row at all when currentIndex/totalQuestions are not provided', async () => {

@@ -397,6 +397,52 @@ describe('SettingsScreen', () => {
       });
       jest.useRealTimers();
     });
+
+    // Regression test for the premium-polish bug-hunt pass: the previous
+    // `disabled={migrating}` guard on Save only ever engaged during a
+    // folder migration — the common "just edited name/age" case had no
+    // protection, so a rapid double-tap (trivial for a child) re-entered
+    // handleSave a second time while the first call was still awaiting
+    // saveProfile(), each scheduling its own onGoHome timer and eventually
+    // navigating Home twice.
+    it('guards Save against a rapid double-tap, saving and navigating home only once', async () => {
+      jest.useFakeTimers();
+      let resolveSave!: () => void;
+      (profileStore.saveProfile as jest.Mock).mockImplementation(
+        () => new Promise<void>((resolve) => { resolveSave = resolve; })
+      );
+      const onGoHome = jest.fn();
+
+      const { getByText, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onGoHome={onGoHome} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      const saveButton = getByText('Save changes');
+      // Two rapid presses before saveProfile's promise ever resolves —
+      // same "stale double-tap" shape as this codebase's other guard tests
+      // (e.g. HomeScreen's per-card navLockRef test).
+      await act(async () => {
+        fireEvent.press(saveButton);
+        fireEvent.press(saveButton);
+      });
+
+      expect(profileStore.saveProfile).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveSave();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(1200);
+      });
+
+      expect(onGoHome).toHaveBeenCalledTimes(1);
+      jest.useRealTimers();
+    });
   });
 
   describe('reset everything', () => {

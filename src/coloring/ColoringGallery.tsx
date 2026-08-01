@@ -7,7 +7,16 @@ import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { pruneMissingFileReferences } from '../storage/fileReferenceStore';
 import { removeGalleryItems } from '../storage/galleryRemoval';
-import { colors, spacing, radii, elevation, getActivityPalette, EmptyStatePanel, RaisedCard } from '../design-system';
+import {
+  colors,
+  spacing,
+  radii,
+  elevation,
+  getActivityPalette,
+  EmptyStatePanel,
+  LoadingPanel,
+  RaisedCard,
+} from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const GALLERY_COLUMNS = 3;
@@ -31,12 +40,14 @@ export function ColoringGallery({
   onSelect: (imageUri: string) => void;
 }) {
   const { t, language } = useLanguage();
-  // Shown with headerShown:true (see RootNavigator), so the native header
-  // already covers the top inset — only left/right/bottom are ours to
-  // handle (a notch or gesture-nav bar sits at one of the sides in this
-  // landscape-only app).
+  // Shown with headerShown:false (see RootNavigator — every activity
+  // screen dropped the native header/back-button in favor of the device's
+  // own hardware/gesture back), so this screen now has to account for
+  // insets.top itself too, the same way HomeScreen (also headerShown:
+  // false) already does.
   const insets = useSafeAreaInsets();
   const insetStyle = {
+    paddingTop: insets.top,
     paddingLeft: insets.left,
     paddingRight: insets.right,
     paddingBottom: insets.bottom,
@@ -174,7 +185,13 @@ export function ColoringGallery({
     );
   }
 
-  if (images === null) return <View testID="coloring-gallery-loading" style={[{ flex: 1 }, insetStyle]} />;
+  if (images === null) {
+    return (
+      <View style={[{ flex: 1 }, insetStyle]}>
+        <LoadingPanel testID="coloring-gallery-loading" color={accent.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.screen, insetStyle]}>
@@ -244,6 +261,11 @@ export function ColoringGallery({
                 borderColor={isSelected ? accent.accent : accent.accentDark}
                 tilt="compact"
                 style={styles.tile}
+                // Only meaningful once multi-select mode is actually
+                // active — outside it, this tile has no "selected" concept
+                // at all, so `selected` is omitted entirely (not `false`)
+                // to leave its accessibilityState untouched.
+                selected={selectionMode ? isSelected : undefined}
               >
                 <>
                   <Image source={{ uri: item }} style={styles.tileImage} resizeMode="cover" />

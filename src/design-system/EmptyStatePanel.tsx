@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { colors, elevation, radii, spacing, typography } from './tokens';
 import { RaisedPrimaryButton } from './Buttons';
+import { useReducedMotion } from './useReducedMotion';
 
 // The richer "empty-state panel" the brief calls for: icon/emoji + TITLE +
 // message + an optional action button, replacing the current bare-text (or,
@@ -32,11 +33,21 @@ export function EmptyStatePanel({
   testID?: string;
 }) {
   const bounce = useRef(new Animated.Value(0)).current;
+  // A CONTINUOUS/infinite loop is exactly the kind of motion the OS
+  // reduce-motion setting exists to suppress — unlike a one-time pop-in
+  // that finishes in well under a second, this bounce keeps running for as
+  // long as the empty state stays on screen. Checked here rather than
+  // deferred like the app's other one-shot spring animations were.
+  const reducedMotion = useReducedMotion();
 
   // Same gentle, slow, looping bounce EmptyState already established (no
   // flashing, no rapid motion) — stopped and cleaned up on unmount so it
   // never keeps animating off-screen.
   useEffect(() => {
+    if (reducedMotion) {
+      bounce.setValue(0);
+      return;
+    }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(bounce, { toValue: 1, duration: 900, useNativeDriver: true }),
@@ -45,7 +56,7 @@ export function EmptyStatePanel({
     );
     loop.start();
     return () => loop.stop();
-  }, [bounce]);
+  }, [bounce, reducedMotion]);
 
   const translateY = bounce.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
 

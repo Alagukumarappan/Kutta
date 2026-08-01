@@ -7,11 +7,11 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import {
   colors,
@@ -22,6 +22,8 @@ import {
   getActivityPalette,
   RaisedCard,
   CelebrationOverlay,
+  LoadingPanel,
+  useReducedMotion,
 } from '../design-system';
 import {
   computeGridDimensions,
@@ -64,6 +66,7 @@ function PuzzlePiece({
   containerHeight,
   selected,
   scale,
+  testID,
 }: {
   imageUri: string;
   rect: PieceRect;
@@ -71,6 +74,11 @@ function PuzzlePiece({
   containerHeight: number;
   selected: boolean;
   scale: Animated.Value;
+  // Exposes the animated scale wrapper itself (distinct from the outer
+  // Pressable's own testID) so tests can read its settled transform value
+  // directly — same "give the inner Animated.View its own testID"
+  // convention ColoringScreen's swatch/toolbar faces already use.
+  testID?: string;
 }) {
   // rects are computed over a containerWidth x containerHeight image (see computePieceRects
   // call below, which is now passed the board's real, aspect-ratio-correct width/height
@@ -81,6 +89,7 @@ function PuzzlePiece({
   // the moment it snaps into its correct slot, without affecting layout/siblings.
   return (
     <Animated.View
+      testID={testID}
       style={[
         styles.pieceSlot,
         {
@@ -124,7 +133,7 @@ export function PuzzleScreen({
   // a no-op so a stray Next press can never crash instead of navigating.
   onNext?: () => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // This screen is shown with headerShown:true (see RootNavigator), so the
@@ -189,6 +198,8 @@ export function PuzzleScreen({
     }
   }, [isSolved]);
 
+  const reducedMotion = useReducedMotion();
+
   useEffect(() => {
     if (order.length === 0) {
       prevCorrectRef.current = null;
@@ -200,6 +211,15 @@ export function PuzzleScreen({
       currentCorrect.forEach((correct, slotIndex) => {
         if (correct && !prev[slotIndex]) {
           const scale = getPieceScale(slotIndex);
+          // Same reduce-motion treatment as this app's other bouncy pop-ins
+          // (Coloring's palette swatch/toolbar buttons, Quiz's progress
+          // dots): land directly on the resting scale instead of playing
+          // the overshoot sequence. The piece's own position-snap already
+          // conveys that a correct placement just happened, on its own.
+          if (reducedMotion) {
+            scale.setValue(1);
+            return;
+          }
           // Brief celebratory pop — scale 1 -> 1.15 -> 1 — instead of the
           // instant snap that just happened to the piece's position.
           Animated.sequence([
@@ -210,7 +230,7 @@ export function PuzzleScreen({
       });
     }
     prevCorrectRef.current = currentCorrect;
-  }, [order]);
+  }, [order, reducedMotion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -291,21 +311,17 @@ export function PuzzleScreen({
     onNext();
   }
 
-  if (order.length === 0) {
-    // Briefly true only between mount and the shuffle effect above running —
-    // matches the loading spinner shown below while the photo's real size
-    // is still resolving.
+  // Two independent reasons the board isn't ready yet: `order` is briefly
+  // empty between mount and the shuffle effect running, and the photo's
+  // real width/height may still be resolving — either way, the same single
+  // spinner covers both (previously duplicated as two near-identical
+  // branches). Uses the same shared LoadingPanel every gallery's own
+  // loading state now uses, so this reads as the same "the app is working
+  // on it" moment everywhere rather than a screen-specific one-off.
+  if (order.length === 0 || !isImageSizeReady) {
     return (
-      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
-        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
-      </View>
-    );
-  }
-
-  if (!isImageSizeReady) {
-    return (
-      <View style={[styles.screen, styles.loadingContainer]} testID="puzzle-loading">
-        <ActivityIndicator size="large" color={PUZZLE_PALETTE.accentDark} />
+      <View testID="puzzle-loading" style={styles.screen}>
+        <LoadingPanel color={PUZZLE_PALETTE.accentDark} />
       </View>
     );
   }
@@ -365,8 +381,20 @@ export function PuzzleScreen({
                       key={slotIndex}
                       testID={`puzzle-slot-${slotIndex}`}
                       onPress={() => handleTapSlot(slotIndex)}
+                      // Each slot is a pure cropped-image fragment with no
+                      // text of its own — without an explicit label, a
+                      // screen-reader user gets an unlabeled, unroled
+                      // element for every one of the puzzle's pieces (the
+                      // entire game). accessibilityState communicates
+                      // whether this slot is the one currently "picked up"
+                      // awaiting a swap, mirroring the sighted selected-
+                      // border cue below.
+                      accessibilityRole="button"
+                      accessibilityLabel={tFormat('puzzlePieceSlotLabel', language, { position: slotIndex + 1 })}
+                      accessibilityState={{ selected: selectedSlot === slotIndex }}
                     >
                       <PuzzlePiece
+                        testID={`puzzle-piece-scale-${slotIndex}`}
                         imageUri={imageUri}
                         rect={rects[pieceIndex]}
                         containerWidth={board.width}
@@ -413,10 +441,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.canvas,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   row: {
     flexDirection: 'row',

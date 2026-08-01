@@ -36,6 +36,29 @@ describe('VideoGallery', () => {
     (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
+  // Regression test for the premium-polish pass: this gallery used to render
+  // a totally blank `<View />` (no spinner, no text) while its folder
+  // listing loaded. It must now show a real spinner instead.
+  it('shows a spinner (not a blank screen) while the folder is still loading', async () => {
+    let resolveListing!: (value: string[]) => void;
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => { resolveListing = resolve; })
+    );
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-gallery-loading');
+    expect(await findByText('Getting things ready...')).toBeTruthy();
+
+    await act(async () => {
+      resolveListing([]);
+    });
+  });
+
   it('lists videos and calls onSelect when tapped', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/videos/party.mp4',
@@ -62,6 +85,12 @@ describe('VideoGallery', () => {
       </LanguageProvider>
     );
 
+    // Regression test for the premium-polish visual-consistency pass: this
+    // empty state used to pass its whole instructional sentence as a single
+    // bold `title`, unlike ColoringGallery's own empty state, which already
+    // splits a warm short headline from a softer explanatory `message` — a
+    // real tone/hierarchy mismatch, now fixed to match.
+    await findByText('No videos yet');
     await findByText('No videos yet — add some to the videos folder!');
   });
 
@@ -233,6 +262,35 @@ describe('VideoGallery', () => {
       await findByTestId('video-gallery-selection-bar');
       await findByTestId('video-item-check-content://tree/videos/party.mp4');
       expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    // Regression test for the premium-polish accessibility pass: entering
+    // multi-select mode already showed a visible checkmark badge on
+    // selected tiles, but the underlying RaisedCard exposed no
+    // accessibilityState at all — a screen-reader user long-pressing into
+    // this mode had no way to tell which tiles were checked.
+    it('exposes accessibilityState.selected on tiles once multi-select mode is active', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/videos/party.mp4',
+        'content://tree/videos/other.mp4',
+      ]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('video-item-content://tree/videos/party.mp4');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('video-gallery-selection-bar');
+      expect(getByTestId('video-item-content://tree/videos/party.mp4').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(getByTestId('video-item-content://tree/videos/other.mp4').props.accessibilityState).toEqual({
+        selected: false,
+      });
     });
 
     it('Cancel exits selection mode without removing anything', async () => {

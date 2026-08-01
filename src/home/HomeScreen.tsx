@@ -293,8 +293,8 @@ export function HomeScreen({
                   <View style={styles.emojiBadge}>
                     <Text style={styles.cardEmoji}>{card.emoji}</Text>
                   </View>
-                  <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
-                  <Text style={styles.cardTagline}>{t(card.taglineKey)}</Text>
+                  <Text style={[styles.cardLabel, { color: palette.onAccentText }]}>{t(card.labelKey)}</Text>
+                  <Text style={[styles.cardTagline, { color: palette.onAccentText }]}>{t(card.taglineKey)}</Text>
                 </View>
               </RaisedCard>
             </Animated.View>
@@ -447,16 +447,19 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   cardLabel: {
+    // Color is set per-card via `palette.onAccentText` (see the render
+    // above) rather than a fixed value here — accent colors span too wide
+    // a luminance range for one text color to stay WCAG-accessible on all
+    // of them (white fails badly on the lighter jade/marigold/sky cards;
+    // see ActivityPalette's own `onAccentText` doc comment).
     fontSize: typography.h3.fontSize,
     fontWeight: typography.h3.fontWeight,
-    color: colors.white,
     textAlign: 'center',
   },
   cardTagline: {
     marginTop: spacing.xxs,
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: withAlpha(colors.white, 0.85),
     textAlign: 'center',
   },
 });

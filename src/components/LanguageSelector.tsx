@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 import { colors as dsColors, radii as dsRadii, elevation as dsElevation } from '../design-system/tokens';
+import { useLanguage } from '../i18n/LanguageContext';
 import type { Language } from '../types/profile';
 
 // The full set of selectable languages, in display order — a single list
@@ -43,6 +44,7 @@ export function LanguageSelector({
   testIDPrefix: string;
   variant: 'playful' | 'parent';
 }) {
+  const { t } = useLanguage();
   const playful = variant === 'playful';
   const selected = LANGUAGE_OPTIONS.find((option) => option.code === value);
 
@@ -64,8 +66,11 @@ export function LanguageSelector({
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
         <Pressable
+          testID={`${testIDPrefix}-modal-overlay`}
           style={[styles.modalOverlay, playful ? playfulStyles.modalOverlay : parentStyles.modalOverlay]}
           onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={t('languageModalCloseLabel')}
         >
           <View style={[styles.modalCard, playful ? playfulStyles.modalCard : parentStyles.modalCard]}>
             {LANGUAGE_OPTIONS.map((option) => {
@@ -82,6 +87,9 @@ export function LanguageSelector({
                     styles.optionRow,
                     isSelected && (playful ? playfulStyles.optionRowSelected : parentStyles.optionRowSelected),
                   ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <Text
                     style={[

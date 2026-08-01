@@ -1,6 +1,6 @@
 import React from 'react';
-import { Animated } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { AccessibilityInfo, Animated } from 'react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { QuizScreen } from '../../src/quiz/QuizScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as loadQuestionsModule from '../../src/quiz/loadQuestions';
@@ -71,6 +71,40 @@ describe('QuizScreen', () => {
     await fireEvent.press(getByTestId('quiz-next'));
 
     await waitFor(() => expect(getByText('Quiz done! Your score: 2 / 2')).toBeTruthy());
+  });
+
+  // Regression test for the premium-polish bug hunt: handleNext had no
+  // re-entrancy guard (every other completion action in this screen already
+  // has one). Two taps landing before the first setState's re-render commits
+  // both fired with the same stale selectedOptionId closure, so React
+  // applied two answerCurrentQuestion() updates from one tap — silently
+  // skipping q2 entirely and scoring it with q1's answer. Confirmed this
+  // fails (jumps straight to the finished screen) without the nextFiredRef
+  // guard in QuizScreen.tsx's handleNext.
+  it('guards Next against a rapid double-tap, advancing exactly one question per tap', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+    jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    const { findByText, getByText, getByTestId, queryByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText('2 + 2?');
+    await fireEvent.press(getByText('4'));
+    await findByText('Correct!');
+
+    const nextButton = getByTestId('quiz-next');
+    // Two rapid presses before the first setState's re-render ever commits —
+    // same "stale double-tap" shape as this codebase's other guard tests.
+    await act(async () => {
+      fireEvent.press(nextButton);
+      fireEvent.press(nextButton);
+    });
+
+    await findByText('1 + 1?');
+    expect(queryByText('Quiz done! Your score: 2 / 2')).toBeNull();
   });
 
   it('shows age-appropriate encouragement for a wrong answer but still advances and does not award a point', async () => {
@@ -180,6 +214,36 @@ describe('QuizScreen', () => {
     await fireEvent.press(await findByTestId('quiz-retry'));
 
     await findByText('2 + 2?');
+  });
+
+  // Regression test for the premium-polish visual-consistency pass:
+  // QuizScreen's error state had been left behind on the old theme/tokens
+  // look (a plain Pressable+text button) after every other gallery/player's
+  // error state converged on RaisedCard+RaisedPrimaryButton — see this
+  // file's own header comment, which explicitly flagged this as an
+  // intentional-but-deferred gap.
+  it('gives the error state a real design-system RaisedPrimaryButton, not the old bare Pressable', async () => {
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockRejectedValueOnce(new Error('SAF grant revoked'));
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    const retryButton = await findByTestId('quiz-retry');
+    // The old bare Pressable's style was a flat object (backgroundColor:
+    // colors.coral, borderColor, borderWidth: 2, ...radii.xl). Paper's
+    // Button (what RaisedPrimaryButton renders under the hood) instead
+    // always exposes its style as an array whose second entry is a plain
+    // `{ borderRadius }` — a reliable, non-brittle signal from outside that
+    // this button now goes through the shared design-system component
+    // instead of the old hand-rolled box.
+    expect(Array.isArray(retryButton.props.style)).toBe(true);
+    const { StyleSheet } = require('react-native');
+    const flattened = StyleSheet.flatten(retryButton.props.style);
+    expect(flattened.backgroundColor).toBeUndefined();
+    expect(flattened.borderWidth).toBeUndefined();
   });
 
   describe('progress indicator wiring to real session state', () => {
@@ -304,6 +368,57 @@ describe('QuizScreen', () => {
       expect(toValues).toContain(1);
 
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this
+    // score-card pop-in is a separate, hand-rolled spring animation (not
+    // routed through the shared CelebrationOverlay component, which
+    // already respects the OS reduce-motion setting as of an earlier
+    // iteration) — it needed its own opt-out.
+    it('skips the bouncy spring for the score card when the OS reduce-motion setting is on', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      (loadQuestionsModule.loadQuestions as jest.Mock).mockResolvedValue(twoQuestions);
+      jest.spyOn(Math, 'random').mockReturnValue(0.999999);
+      const springSpy = jest.spyOn(Animated, 'spring');
+      const timingSpy = jest.spyOn(Animated, 'timing');
+
+      const { findByText, getByText, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+        </LanguageProvider>
+      );
+
+      await findByText('2 + 2?');
+      await fireEvent.press(getByText('4'));
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('1 + 1?');
+      await fireEvent.press(getByText('2'));
+
+      // Baseline taken right before the final Next press that reveals the
+      // completion screen — QuestionRenderer's own option/feedback tilt
+      // presses (useTiltPress) also call Animated.spring for unrelated
+      // reasons throughout the quiz, so the assertion below checks for NO
+      // NEW spring calls caused specifically by the score-card entrance,
+      // rather than asserting spring was never called at all.
+      const springCallsBefore = springSpy.mock.calls.length;
+      const timingCallsBefore = timingSpy.mock.calls.length;
+
+      await fireEvent.press(getByTestId('quiz-next'));
+      await findByText('Quiz done! Your score: 2 / 2');
+
+      expect(springSpy.mock.calls.length).toBe(springCallsBefore);
+      expect(timingSpy.mock.calls.length).toBeGreaterThan(timingCallsBefore);
+
+      // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+      // jest.fn() (a native module method), so this file's own
+      // `afterEach(() => jest.restoreAllMocks())` can't undo the
+      // `mockResolvedValue(true)` above — there's no real "original"
+      // implementation for it to revert to, so the mocked value otherwise
+      // silently leaks into every later test in this file (a real,
+      // verified bug — see ColoringScreen's iteration 30 notes for the
+      // full mechanism). Explicitly resetting it back to `false` here is
+      // what actually fixes it.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
     });
 
     it('"Play Again" starts a genuinely fresh session — new shuffle, score and progress reset to zero', async () => {

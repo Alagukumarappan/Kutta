@@ -36,6 +36,29 @@ describe('PuzzleGallery', () => {
     (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
+  // Regression test for the premium-polish pass: this gallery used to render
+  // a totally blank `<View />` (no spinner, no text) while its folder
+  // listing loaded. It must now show a real spinner instead.
+  it('shows a spinner (not a blank screen) while the folder is still loading', async () => {
+    let resolveListing!: (value: string[]) => void;
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => { resolveListing = resolve; })
+    );
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('puzzle-gallery-loading');
+    expect(await findByText('Getting things ready...')).toBeTruthy();
+
+    await act(async () => {
+      resolveListing([]);
+    });
+  });
+
   it('lists images from the pictures folder and calls onSelect when tapped', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/pictures/beach.jpg',
@@ -64,6 +87,12 @@ describe('PuzzleGallery', () => {
       </LanguageProvider>
     );
 
+    // Regression test for the premium-polish visual-consistency pass: this
+    // empty state used to pass its whole instructional sentence as a single
+    // bold `title`, unlike ColoringGallery's own empty state, which already
+    // splits a warm short headline from a softer explanatory `message` — a
+    // real tone/hierarchy mismatch, now fixed to match.
+    await findByText('No pictures yet');
     await findByText('No pictures yet — add some to the pictures folder!');
   });
 
@@ -89,6 +118,36 @@ describe('PuzzleGallery', () => {
   // own declared width/height rather than a measured layout, the same way
   // this suite already checks the retry button's hitSlop below rather than
   // simulating a real tap-and-measure.
+  // Regression test for the premium-polish performance pass: every tile is
+  // a fixed 128x128 square in a fixed 4-column grid, so FlatList can be
+  // given `getItemLayout` to skip measuring each row as it renders/scrolls
+  // — a real win once a folder holds dozens-to-hundreds of pictures (the
+  // project brief's own "1000 images" bug-hunt scenario).
+  it('gives the FlatList a getItemLayout matching the real fixed 128px tile / 4-column grid', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/pictures/beach.jpg',
+    ]);
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    const list = await findByTestId('puzzle-gallery-list');
+    const getItemLayout = list.props.getItemLayout;
+    expect(getItemLayout).toBeInstanceOf(Function);
+
+    // With numColumns > 1, FlatList's internal item count becomes the ROW
+    // count, and it calls getItemLayout with that same row-scale index —
+    // not the flat index into the image list — so index 0/1/2 here map to
+    // row 0/1/2, not individual tiles. Row height = 128px tile + 12px
+    // (spacing.sm) gap = 140.
+    expect(getItemLayout(null, 0)).toEqual({ length: 140, offset: 0, index: 0 });
+    expect(getItemLayout(null, 1)).toEqual({ length: 140, offset: 140, index: 1 });
+    expect(getItemLayout(null, 2)).toEqual({ length: 140, offset: 280, index: 2 });
+  });
+
   it('renders picture tiles at least 48dp in each dimension (comfortable touch target)', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/pictures/beach.jpg',
@@ -261,6 +320,66 @@ describe('PuzzleGallery', () => {
     });
   });
 
+  // Regression tests for the premium-polish accessibility pass: the
+  // difficulty modal's dismiss backdrop and its 4 piece-count options had no
+  // accessibilityRole/Label/State at all — the trigger pill already had
+  // them, but opening the modal dropped a screen-reader user with no way to
+  // tell what each option meant or which one was currently chosen (the same
+  // class of gap iteration 12 fixed for AgePicker).
+  describe('difficulty modal accessibility', () => {
+    it('gives every difficulty option a button role, a pieces-count label, and marks only the current difficulty as selected', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+
+      for (const option of [4, 6, 9, 12]) {
+        const optionEl = getByTestId(`puzzle-difficulty-option-${option}`);
+        expect(optionEl.props.accessibilityRole).toBe('button');
+        expect(optionEl.props.accessibilityLabel).toBe(`${option} pieces`);
+        expect(optionEl.props.accessibilityState).toEqual({ selected: option === 4 });
+      }
+    });
+
+    it('gives the modal-dismiss backdrop a button role and a real label instead of leaving it unlabeled', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+
+      const overlay = getByTestId('puzzle-difficulty-modal-overlay');
+      expect(overlay.props.accessibilityRole).toBe('button');
+      expect(overlay.props.accessibilityLabel).toBe('Close difficulty picker');
+    });
+
+    it('translates the difficulty option and modal-close labels into German', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="de">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await fireEvent.press(await findByTestId('puzzle-difficulty-picker'));
+
+      expect(getByTestId('puzzle-difficulty-option-9').props.accessibilityLabel).toBe('9 Teile');
+      expect(getByTestId('puzzle-difficulty-modal-overlay').props.accessibilityLabel).toBe(
+        'Schwierigkeitsauswahl schließen'
+      );
+    });
+  });
+
   describe('long-press multi-select removal', () => {
     it('enters selection mode on long-press, shows a check badge, and does not call onSelect', async () => {
       (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
@@ -280,6 +399,35 @@ describe('PuzzleGallery', () => {
       await findByTestId('puzzle-gallery-selection-bar');
       await findByTestId('puzzle-item-check-content://tree/pictures/beach.jpg');
       expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    // Regression test for the premium-polish accessibility pass: entering
+    // multi-select mode already showed a visible checkmark badge on
+    // selected tiles, but the underlying RaisedCard exposed no
+    // accessibilityState at all — a screen-reader user long-pressing into
+    // this mode had no way to tell which tiles were checked.
+    it('exposes accessibilityState.selected on tiles once multi-select mode is active', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/pictures/beach.jpg',
+        'content://tree/pictures/forest.jpg',
+      ]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('puzzle-item-content://tree/pictures/beach.jpg');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('puzzle-gallery-selection-bar');
+      expect(getByTestId('puzzle-item-content://tree/pictures/beach.jpg').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(getByTestId('puzzle-item-content://tree/pictures/forest.jpg').props.accessibilityState).toEqual({
+        selected: false,
+      });
     });
 
     it('Cancel exits selection mode without removing anything', async () => {

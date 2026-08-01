@@ -17,6 +17,7 @@ import {
   RaisedCard,
   RaisedPrimaryButton,
   EmptyStatePanel,
+  LoadingPanel,
 } from '../design-system';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
@@ -44,12 +45,14 @@ export function VideoGallery({
   onSelect: (videoUri: string) => void;
 }) {
   const { t, language } = useLanguage();
-  // Shown with headerShown:true (see RootNavigator), so the native header
-  // already covers the top inset — only left/right/bottom are ours to
-  // handle here (a notch or gesture-nav bar sits at one of the sides in this
-  // landscape-only app).
+  // Shown with headerShown:false (see RootNavigator — every activity
+  // screen dropped the native header/back-button in favor of the device's
+  // own hardware/gesture back), so this screen now has to account for
+  // insets.top itself too, the same way HomeScreen (also headerShown:
+  // false) already does.
   const insets = useSafeAreaInsets();
   const insetStyle = {
+    paddingTop: insets.top,
     paddingLeft: insets.left,
     paddingRight: insets.right,
     paddingBottom: insets.bottom,
@@ -186,7 +189,13 @@ export function VideoGallery({
     );
   }
 
-  if (videos === null) return <View testID="video-gallery-loading" style={insetStyle} />;
+  if (videos === null) {
+    return (
+      <View style={[styles.container, insetStyle]}>
+        <LoadingPanel testID="video-gallery-loading" color={palette.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, insetStyle]}>
@@ -232,7 +241,12 @@ export function VideoGallery({
         )}
       </View>
       {videos.length === 0 ? (
-        <EmptyStatePanel testID="video-gallery-empty" emoji="🎥" title={t('emptyVideos')} />
+        <EmptyStatePanel
+          testID="video-gallery-empty"
+          emoji="🎥"
+          title={t('emptyVideosTitle')}
+          message={t('emptyVideos')}
+        />
       ) : (
         <FlatList
           data={videos}
@@ -251,6 +265,13 @@ export function VideoGallery({
                 elevationLevel="level2"
                 style={styles.videoRow}
                 accessibilityLabel={fileNameFromUri(item)}
+                // Only meaningful once multi-select mode is actually
+                // active — outside it, this tile has no "selected" concept
+                // at all, so `selected` is omitted entirely (not `false`)
+                // to leave its accessibilityState untouched, same
+                // distinction AgePicker/LanguageSelector/PuzzleGallery's
+                // difficulty options already draw.
+                selected={selectionMode ? isSelected : undefined}
               >
                 <View style={styles.videoRowContent}>
                   {selectionMode && (

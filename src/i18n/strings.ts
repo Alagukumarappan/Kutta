@@ -9,6 +9,12 @@ export const UI_STRINGS = {
   onboardingSave: { en: 'Save', de: 'Speichern' },
   onboardingSavingMessage: { en: 'First time setup can take a little while — please wait...', de: 'Die Ersteinrichtung kann etwas dauern - bitte warten...' },
   onboardingSelectAge: { en: 'Select age', de: 'Alter wählen' },
+  // Accessibility labels for AgePicker (used by both Onboarding and
+  // Settings) — same "positional/value fallback label" idiom as
+  // quizAnswerOptionLabel/puzzlePieceSlotLabel above.
+  ageOptionLabel: { en: '{age} years old', de: '{age} Jahre alt' },
+  ageModalCloseLabel: { en: 'Close age picker', de: 'Altersauswahl schließen' },
+  languageModalCloseLabel: { en: 'Close language picker', de: 'Sprachauswahl schließen' },
   onboardingNameMissing: { en: 'Please enter a name', de: 'Bitte gib einen Namen ein' },
   onboardingAgeMissing: { en: 'Please select an age', de: 'Bitte wähle ein Alter aus' },
   onboardingFolderMissing: { en: 'Please choose a content folder', de: 'Bitte wähle einen Inhaltsordner' },
@@ -62,11 +68,20 @@ export const UI_STRINGS = {
   emptyPictures: { en: 'No pictures yet — add some to the pictures folder!', de: 'Noch keine Bilder — füge welche zum Bilderordner hinzu!' },
   emptyVideos: { en: 'No videos yet — add some to the videos folder!', de: 'Noch keine Videos — füge welche zum Videoordner hinzu!' },
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },
-  // Title for ColoringGallery's redesigned EmptyStatePanel (design-system);
-  // `emptyColoring` above is reused unchanged as the panel's `message`, so
-  // this is purely an ADDITIONAL headline, not a replacement/rename of that
-  // existing key (which other code/tests may still rely on verbatim).
+  // Titles for the design-system EmptyStatePanel used by all three galleries
+  // (Coloring, Puzzle, Video). `emptyColoringTitle` predates this and was
+  // already applied to Coloring; `emptyPicturesTitle`/`emptyVideosTitle`
+  // extend the same title+message split to Puzzle/Video, which previously
+  // passed their whole instructional sentence as a single bold `title` with
+  // no softer `message` — a real tone/hierarchy mismatch against Coloring's
+  // warm short headline + gentler body pairing. `emptyPictures`/
+  // `emptyVideos` above are reused unchanged as each panel's `message`, so
+  // these are purely ADDITIONAL headlines, not replacements/renames of
+  // those existing keys (which other code/tests may still rely on
+  // verbatim).
   emptyColoringTitle: { en: 'No pictures yet', de: 'Noch keine Bilder' },
+  emptyPicturesTitle: { en: 'No pictures yet', de: 'Noch keine Bilder' },
+  emptyVideosTitle: { en: 'No videos yet', de: 'Noch keine Videos' },
   emptyQuiz: { en: 'No quiz questions for this age yet.', de: 'Noch keine Quizfragen für dieses Alter.' },
   quizScore: { en: 'Quiz done! Your score: {score} / {total}', de: 'Quiz fertig! Dein Ergebnis: {score} / {total}' },
   // Screen-reader-only accessible name for the progress-dots row in
@@ -75,6 +90,7 @@ export const UI_STRINGS = {
   // the screen — see QuestionRenderer's progressRow). {current} is always
   // 1-based (currentIndex + 1) to match how a person would count aloud.
   quizProgressLabel: { en: 'Question {current} of {total}', de: 'Frage {current} von {total}' },
+  quizAnswerOptionLabel: { en: 'Answer option {number}', de: 'Antwortoption {number}' },
   quizCorrect: { en: 'Correct!', de: 'Richtig!' },
   // Age-tiered wrong-answer feedback (replaces the old single `quizIncorrect`
   // wording — see QuestionRenderer). Never harsh/shaming; younger children
@@ -102,7 +118,16 @@ export const UI_STRINGS = {
   quizGoHome: { en: 'Home', de: 'Start' },
   puzzlePickPieces: { en: 'Choose difficulty', de: 'Schwierigkeit wählen' },
   puzzleDifficultyLabel: { en: 'Difficulty: {count}', de: 'Schwierigkeit: {count}' },
+  // Accessibility labels for the difficulty-picker modal opened from the
+  // pill above — same "positional/value fallback label" idiom as
+  // ageOptionLabel/ageModalCloseLabel.
+  puzzleDifficultyOptionLabel: { en: '{count} pieces', de: '{count} Teile' },
+  puzzleDifficultyModalCloseLabel: {
+    en: 'Close difficulty picker',
+    de: 'Schwierigkeitsauswahl schließen',
+  },
   puzzleMatchHint: { en: 'Match the picture!', de: 'Ordne die Teile zu!' },
+  puzzlePieceSlotLabel: { en: 'Puzzle piece, position {position}', de: 'Puzzleteil, Position {position}' },
   puzzleComplete: { en: 'Great job!', de: 'Super gemacht!' },
   tictactoeSetupTitle: { en: 'Tic-Tac-Toe', de: 'Tic-Tac-Toe' },
   tictactoeChooseOpponent: { en: 'Who do you want to play?', de: 'Gegen wen möchtest du spielen?' },
@@ -122,9 +147,14 @@ export const UI_STRINGS = {
   tictactoePlayerXWins: { en: 'Player X wins! 🎉', de: 'Spieler X hat gewonnen! 🎉' },
   tictactoePlayerOWins: { en: 'Player O wins! 🎉', de: 'Spieler O hat gewonnen! 🎉' },
   tictactoeDraw: { en: "It's a draw!", de: 'Unentschieden!' },
+  tictactoeTryAgainEncouragement: { en: 'Good try! Want to play again?', de: 'Gut versucht! Nochmal spielen?' },
   tictactoePlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },
   tictactoeChangeSetup: { en: 'Menu', de: 'Menü' },
+  tictactoeCellEmptyLabel: { en: 'Row {row}, column {column}, empty', de: 'Reihe {row}, Spalte {column}, leer' },
+  tictactoeCellFilledLabel: { en: 'Row {row}, column {column}, {mark}', de: 'Reihe {row}, Spalte {column}, {mark}' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
+  videoFinished: { en: 'Nice watching! 🎬', de: 'Schön geschaut! 🎬' },
+  videoWatchAgain: { en: 'Watch Again', de: 'Nochmal ansehen' },
   coloringImageLoadError: {
     en: 'This picture could not be loaded for coloring.',
     de: 'Dieses Bild konnte nicht zum Ausmalen geladen werden.',
@@ -167,10 +197,13 @@ export const UI_STRINGS = {
   // action than wiping every pen stroke), so an extra confirmation tap
   // would just be friction for a 2-8 year old, not a real safety need.
   undoFill: { en: 'Undo', de: 'Rückgängig' },
+  toolbarExpand: { en: 'Show tools', de: 'Werkzeuge anzeigen' },
+  toolbarCollapse: { en: 'Hide tools', de: 'Werkzeuge ausblenden' },
   loadError: {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
   },
+  galleryLoading: { en: 'Getting things ready...', de: 'Wird vorbereitet...' },
   // Generic Cancel label, deliberately separate from
   // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped
   // to their own specific confirmation flows) — this one backs the new

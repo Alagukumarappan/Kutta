@@ -40,6 +40,30 @@ describe('ColoringGallery', () => {
     (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
+  // Regression test for the premium-polish pass: this gallery used to render
+  // a totally blank `<View />` (no spinner, no text) while its folder
+  // listing loaded — a child staring at an empty white screen with zero
+  // feedback. It must now show a real spinner instead.
+  it('shows a spinner (not a blank screen) while the folder is still loading', async () => {
+    let resolveListing!: (value: string[]) => void;
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => { resolveListing = resolve; })
+    );
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-gallery-loading');
+    expect(await findByText('Getting things ready...')).toBeTruthy();
+
+    await act(async () => {
+      resolveListing([]);
+    });
+  });
+
   it('lists images from the coloring folder and calls onSelect when tapped', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
       'content://tree/coloring/cat-outline.png',
@@ -204,6 +228,35 @@ describe('ColoringGallery', () => {
       const check = await findByTestId('coloring-item-check-content://tree/coloring/cat.png');
       expect(check.props.children).toBeTruthy();
       expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    // Regression test for the premium-polish accessibility pass: entering
+    // multi-select mode already showed a visible checkmark badge on
+    // selected tiles, but the underlying RaisedCard exposed no
+    // accessibilityState at all — a screen-reader user long-pressing into
+    // this mode had no way to tell which tiles were checked.
+    it('exposes accessibilityState.selected on tiles once multi-select mode is active', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+        'content://tree/coloring/cat.png',
+        'content://tree/coloring/dog.png',
+      ]);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      const item = await findByTestId('coloring-item-content://tree/coloring/cat.png');
+      await fireEvent(item, 'longPress');
+
+      await findByTestId('coloring-gallery-selection-bar');
+      expect(getByTestId('coloring-item-content://tree/coloring/cat.png').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(getByTestId('coloring-item-content://tree/coloring/dog.png').props.accessibilityState).toEqual({
+        selected: false,
+      });
     });
 
     it('tapping a tile while selecting toggles it instead of opening it, and exits selection mode once nothing is selected', async () => {

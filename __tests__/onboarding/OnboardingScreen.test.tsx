@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { OnboardingScreen } from '../../src/onboarding/OnboardingScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -84,6 +84,49 @@ describe('OnboardingScreen', () => {
 
     resolveEnsure();
     await waitFor(() => expect(queryByTestId('onboarding-saving-overlay')).toBeNull());
+  });
+
+  // Regression test for the premium-polish bug hunt: handleSave's only
+  // guard was `!isValid || !folderUri || age === null` — it never checked
+  // `saving` itself, unlike SettingsScreen's equivalent Save button
+  // (iteration 6). `saveDisabled` only takes effect on the NEXT render, so
+  // a rapid double-tap on this first-run screen's Save button — trivial for
+  // a child — could re-enter handleSave while the first call was still
+  // awaiting ensureContentStructure/saveProfile, risking two concurrent
+  // sample-content copies and onComplete() firing twice.
+  it('guards Save against a rapid double-tap, only running first-time setup once', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+    let resolveEnsure!: () => void;
+    (folderAccess.ensureContentStructure as jest.Mock).mockImplementation(
+      () => new Promise<void>((resolve) => { resolveEnsure = resolve; })
+    );
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const onComplete = jest.fn();
+    const { getByTestId, getByText } = await renderScreen(onComplete);
+
+    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
+    await selectAge(getByTestId, 4);
+    await fireEvent.press(getByText('Choose content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+
+    // Two rapid presses before ensureContentStructure's mocked promise ever
+    // resolves — same "stale double-tap" shape as this codebase's other
+    // guard tests.
+    const saveButton = getByText('Save');
+    await act(async () => {
+      fireEvent.press(saveButton);
+      fireEvent.press(saveButton);
+    });
+
+    expect(folderAccess.ensureContentStructure).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveEnsure();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(profileStore.saveProfile).toHaveBeenCalledTimes(1));
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
   it('does not save when age has not been selected', async () => {

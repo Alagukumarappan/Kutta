@@ -70,6 +70,43 @@ describe('AddFilesButton', () => {
     expect(await getFileReferences('coloring')).toEqual([]);
   });
 
+  // Regression test for the premium-polish accessibility pass: RN's own
+  // Pressable already auto-derives accessibilityState.disabled from the
+  // `disabled` prop (verified directly against its source), but `busy` —
+  // the one signal that ISN'T automatic — was never set at all, so a
+  // screen reader had no way to announce that the file picker/write was
+  // in progress, only that the button was temporarily unavailable.
+  //
+  // Placed BEFORE "ignores a rapid second tap while the first pick is
+  // still in flight" below, not after: that test's own two-synchronous-
+  // taps-then-manual-act pattern was found (independently of this change)
+  // to leave the RNTL renderer unable to resolve a fresh `findByTestId` in
+  // whatever test runs next in this file — the same class of cross-test
+  // renderer corruption already documented elsewhere in this codebase
+  // (e.g. EmptyStatePanel.test.tsx's own test-ordering notes).
+  it('exposes accessibilityState.busy while a pick is in flight, and clears it once settled', async () => {
+    let resolvePicker: (value: unknown) => void = () => {};
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePicker = resolve;
+      })
+    );
+    const { findByTestId, getByTestId } = await renderButton();
+    const button = await findByTestId('add-files');
+
+    expect(button.props.accessibilityState).toEqual({ busy: false, disabled: false });
+
+    fireEvent.press(button);
+    await waitFor(() =>
+      expect(getByTestId('add-files').props.accessibilityState).toEqual({ busy: true, disabled: true })
+    );
+
+    resolvePicker({ canceled: true, assets: null });
+    await waitFor(() =>
+      expect(getByTestId('add-files').props.accessibilityState).toEqual({ busy: false, disabled: false })
+    );
+  });
+
   it('shows a friendly alert instead of crashing when the picker throws', async () => {
     (DocumentPicker.getDocumentAsync as jest.Mock).mockRejectedValue(new Error('boom'));
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});

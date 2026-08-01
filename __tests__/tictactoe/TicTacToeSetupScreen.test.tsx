@@ -65,4 +65,34 @@ describe('TicTacToeSetupScreen', () => {
 
     expect(onStart).toHaveBeenCalledWith('friend', null);
   });
+
+  // Regression test for the premium-polish bug hunt: handleStart had no
+  // double-fire guard before calling onStart (which RootNavigator wires
+  // straight to navigation.navigate) — unlike HomeScreen's own cards
+  // (navLockRef), a rapid double-tap here could push the game screen onto
+  // the stack twice, since this setup screen stays mounted (not unmounted)
+  // underneath the pushed screen.
+  it('guards a rapid double-tap on Start against navigating twice, but re-arms after a short delay for a later legitimate start', async () => {
+    jest.useFakeTimers();
+    const onStart = jest.fn();
+    const { getByTestId } = await renderScreen(onStart);
+
+    await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+
+    // Same "stale double-tap" shape as HomeScreen's own card guard test:
+    // press the SAME captured element twice without re-querying.
+    const startButton = getByTestId('tictactoe-start-game');
+    await fireEvent.press(startButton);
+    await fireEvent.press(startButton);
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+
+    // Re-arms after HomeScreen's own 800ms window — a parent backing out to
+    // this screen and legitimately starting again must still work.
+    jest.advanceTimersByTime(800);
+    await fireEvent.press(startButton);
+    expect(onStart).toHaveBeenCalledTimes(2);
+
+    jest.useRealTimers();
+  });
 });

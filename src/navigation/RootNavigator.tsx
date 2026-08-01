@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, type NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getProfile } from '../storage/profileStore';
 import { findChildUri, ensureContentStructure } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 import type { StringKey } from '../i18n/strings';
+import { colors, spacing, typography, RaisedCard, RaisedPrimaryButton } from '../design-system';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsScreen } from '../settings/SettingsScreen';
@@ -56,7 +58,7 @@ function delay(ms: number): Promise<void> {
 // unchecked against this list — a library type limitation, not something a
 // local fix can close without wrapping every render prop in a manually-typed
 // helper, which is out of scope here.
-type RootStackParamList = {
+export type RootStackParamList = {
   Home: undefined;
   settings: undefined;
   quiz: undefined;
@@ -113,22 +115,66 @@ async function resolveSubfolderUris(rootUri: string): Promise<SubfolderUris> {
   return { pictures, videos, coloring, quiz };
 }
 
+// This is the app's one truly global error screen — reached whenever the
+// SAF content folders can't be resolved (a revoked permission, a deleted
+// folder, an unmounted SD card), not tied to any single activity. Styled to
+// match every other error state already converged on this exact shape
+// (RaisedCard + RaisedPrimaryButton — see VideoPlayerScreen/ColoringGallery/
+// PuzzleGallery/VideoGallery's own error cards), using the calmer
+// `colors.parent` palette (the same one SettingsScreen uses) since this is a
+// parent-facing recovery moment, not a child-facing activity.
 function FolderErrorScreen({ onRetry }: { onRetry: () => void }) {
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   return (
-    <View testID="folder-resolve-error">
-      <Text>{t('folderResolveError')}</Text>
-      <Pressable
-        testID="folder-resolve-retry"
-        onPress={onRetry}
-        accessibilityRole="button"
-        accessibilityLabel={t('retry')}
-      >
-        <Text>{t('retry')}</Text>
-      </Pressable>
+    <View
+      testID="folder-resolve-error"
+      style={[
+        styles.centered,
+        { paddingLeft: spacing.md + insets.left, paddingRight: spacing.md + insets.right, paddingTop: spacing.md + insets.top, paddingBottom: spacing.md + insets.bottom },
+      ]}
+    >
+      <RaisedCard color={colors.parent.surface} borderColor={colors.parent.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
+        <View style={styles.errorCardInner}>
+          <Text style={styles.errorTitle}>{t('folderResolveError')}</Text>
+          <RaisedPrimaryButton
+            testID="folder-resolve-retry"
+            label={t('retry')}
+            onPress={onRetry}
+            color={colors.parent.accent}
+            textColor={colors.white}
+            accessibilityLabel={t('retry')}
+          />
+        </View>
+      </RaisedCard>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.parent.background,
+  },
+  errorCardOuter: {
+    width: '100%',
+    maxWidth: 420,
+  },
+  errorCardInner: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: colors.parent.ink,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+});
 
 function AppStack({
   profile,
@@ -169,7 +215,12 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="quiz" options={{ title: titleFor('homeQuiz') }}>
+      {/* Every activity screen below (and its gallery/setup screen) is
+          headerShown:false, same as Home — none of them need the native
+          back arrow since the device's own hardware/gesture back already
+          does that job, and removing it gives each activity's content the
+          full screen height instead of losing a strip to a header bar. */}
+      <Stack.Screen name="quiz" options={{ headerShown: false, title: titleFor('homeQuiz') }}>
         {({ navigation }) => (
           <QuizScreen
             quizFolderUri={folderUris.quiz}
@@ -178,7 +229,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="coloring" options={{ title: titleFor('homeColoring') }}>
+      <Stack.Screen name="coloring" options={{ headerShown: false, title: titleFor('homeColoring') }}>
         {({ navigation }) => (
           <ColoringGallery
             coloringFolderUri={folderUris.coloring}
@@ -186,10 +237,10 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="coloring-detail" options={{ title: titleFor('coloringDetailTitle') }}>
+      <Stack.Screen name="coloring-detail" options={{ headerShown: false, title: titleFor('coloringDetailTitle') }}>
         {({ route }) => <ColoringScreen imageUri={route.params.imageUri} />}
       </Stack.Screen>
-      <Stack.Screen name="puzzle" options={{ title: titleFor('homePuzzle') }}>
+      <Stack.Screen name="puzzle" options={{ headerShown: false, title: titleFor('homePuzzle') }}>
         {({ navigation }) => (
           <PuzzleGallery
             picturesFolderUri={folderUris.pictures}
@@ -197,7 +248,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="puzzle-detail" options={{ title: titleFor('puzzleDetailTitle') }}>
+      <Stack.Screen name="puzzle-detail" options={{ headerShown: false, title: titleFor('puzzleDetailTitle') }}>
         {({ navigation, route }) => (
           <PuzzleScreen
             imageUri={route.params.imageUri}
@@ -206,7 +257,7 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="video" options={{ title: titleFor('homeVideo') }}>
+      <Stack.Screen name="video" options={{ headerShown: false, title: titleFor('homeVideo') }}>
         {({ navigation }) => (
           <VideoGallery
             videosFolderUri={folderUris.videos}
@@ -214,22 +265,22 @@ function AppStack({
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="video-detail" options={{ title: titleFor('videoDetailTitle') }}>
+      <Stack.Screen name="video-detail" options={{ headerShown: false, title: titleFor('videoDetailTitle') }}>
         {({ route }) => <VideoPlayerScreen videoUri={route.params.videoUri} />}
       </Stack.Screen>
-      <Stack.Screen name="tictactoe" options={{ title: titleFor('tictactoeSetupTitle') }}>
+      <Stack.Screen name="tictactoe" options={{ headerShown: false, title: titleFor('tictactoeSetupTitle') }}>
         {({ navigation }) => (
           <TicTacToeSetupScreen
             onStart={(mode, difficulty) => navigation.navigate('tictactoe-game', { mode, difficulty })}
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="tictactoe-game" options={{ title: titleFor('tictactoeDetailTitle') }}>
+      <Stack.Screen name="tictactoe-game" options={{ headerShown: false, title: titleFor('tictactoeDetailTitle') }}>
         {({ navigation, route }) => (
           <TicTacToeScreen
             mode={route.params.mode}
             difficulty={route.params.difficulty}
-            onMenu={() => navigation.navigate('tictactoe')}
+            onMenu={() => navigation.goBack()}
           />
         )}
       </Stack.Screen>
@@ -237,7 +288,17 @@ function AppStack({
   );
 }
 
-export function RootNavigator() {
+export function RootNavigator({
+  navigationRef,
+}: {
+  // Optional escape hatch so a test can drive real navigation actions
+  // (goBack, getRootState) from outside the component tree — RootNavigator
+  // otherwise hardcodes its own NavigationContainer with no way to reach
+  // it. Never used by the real app (App.tsx renders <RootNavigator />
+  // with no props); purely additive, so this changes nothing for real
+  // usage.
+  navigationRef?: React.Ref<NavigationContainerRef<RootStackParamList>>;
+} = {}) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [folderUris, setFolderUris] = useState<SubfolderUris | null>(null);
   const [folderError, setFolderError] = useState(false);
@@ -341,7 +402,7 @@ export function RootNavigator() {
 
   return (
     <LanguageProvider initialLanguage={profile?.language ?? 'en'}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         {profile ? (
           folderError ? (
             <FolderErrorScreen onRetry={retryFolderResolution} />

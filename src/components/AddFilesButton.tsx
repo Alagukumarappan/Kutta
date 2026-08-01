@@ -74,6 +74,14 @@ export function AddFilesButton({
       disabled={busy}
       accessibilityRole="button"
       accessibilityLabel={label}
+      // `disabled` above is already merged into accessibilityState.disabled
+      // automatically by RN's own Pressable (verified against its source —
+      // it always overlays the `disabled` prop onto whatever
+      // accessibilityState is passed here), so this only needs to add the
+      // one thing that ISN'T automatic: `busy`, so a screen reader can
+      // announce that the file picker/write is in progress, not just that
+      // the button is temporarily unavailable.
+      accessibilityState={{ busy }}
       style={[styles.button, compact && styles.buttonCompact, busy && styles.buttonDisabled]}
       hitSlop={
         compact

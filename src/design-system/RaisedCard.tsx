@@ -33,6 +33,7 @@ export function RaisedCard({
   onPress,
   onLongPress,
   disabled,
+  selected,
   tilt = 'regular',
   elevationLevel = 'level3',
   style,
@@ -50,6 +51,11 @@ export function RaisedCard({
   // path below isn't a Pressable at all.
   onLongPress?: (event: GestureResponderEvent) => void;
   disabled?: boolean;
+  // Optional "selected" accessibility state, e.g. a gallery tile checked
+  // during long-press multi-select — only meaningful alongside onPress,
+  // for the same reason as onLongPress above (the static panel path isn't
+  // a Pressable, so it has no accessibilityState at all).
+  selected?: boolean;
   tilt?: TiltVariant;
   elevationLevel?: keyof typeof elevation;
   style?: StyleProp<ViewStyle>;
@@ -77,6 +83,7 @@ export function RaisedCard({
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
+      selected={selected}
       tilt={tilt}
       style={style}
       accessibilityLabel={accessibilityLabel}

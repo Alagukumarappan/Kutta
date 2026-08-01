@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -9,6 +9,7 @@ import {
   spacing,
   typography,
   elevation,
+  touchTarget,
   getActivityPalette,
   AnimatedPressable,
   RaisedPrimaryButton,
@@ -43,10 +44,31 @@ export function TicTacToeSetupScreen({
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
 
   const canStart = mode === 'friend' || (mode === 'computer' && difficulty !== null);
+  // Same time-based re-arm guard as HomeScreen's own navLockRef: this
+  // screen stays mounted (not unmounted) underneath 'tictactoe-game' when
+  // navigation.navigate pushes it, so a rapid double-tap on Start — before
+  // React Navigation's push has visually taken over — could otherwise fire
+  // onStart/navigate twice, pushing the game screen onto the stack twice.
+  // A permanent one-shot ref would work for that immediate double-tap but
+  // would also permanently disable Start if the parent backs out and wants
+  // to legitimately start again, so this re-arms after a short delay
+  // instead, exactly like HomeScreen's cards.
+  const navLockRef = useRef(false);
+  const rearmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rearmTimeoutRef.current) clearTimeout(rearmTimeoutRef.current);
+    };
+  }, []);
 
   function handleStart() {
-    if (!canStart || !mode) return;
+    if (!canStart || !mode || navLockRef.current) return;
+    navLockRef.current = true;
     onStart(mode, mode === 'computer' ? difficulty : null);
+    rearmTimeoutRef.current = setTimeout(() => {
+      navLockRef.current = false;
+    }, 800);
   }
 
   return (
@@ -132,7 +154,7 @@ export function TicTacToeSetupScreen({
           onPress={handleStart}
           disabled={!canStart}
           color={PALETTE.accent}
-          size="large"
+          size="compact"
           style={styles.startButton}
         />
       </View>
@@ -145,35 +167,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.canvas,
     alignItems: 'center',
+    // Deliberately NOT a ScrollView: this screen's total content (title +
+    // both option rows + Start) is small and fixed (never grows with user
+    // data, unlike a gallery), so once every element below is sized to fit
+    // even a short landscape-locked phone screen, scrolling would only add
+    // an extra gesture for no benefit. See the compacted sizes below —
+    // previously this screen used a much larger scale (h1 title, 120dp
+    // option cards, a full-size 64dp Start button) that could push the
+    // difficulty row and Start button off-screen with no way to reach them
+    // on a shorter viewport (a real, reported bug, not hypothetical).
+    justifyContent: 'center',
   },
   brandEmoji: {
-    fontSize: 32,
-    marginTop: spacing.xs,
+    fontSize: 22,
   },
   title: {
-    fontSize: typography.h1.fontSize,
-    fontWeight: typography.h1.fontWeight,
+    fontSize: typography.h2.fontSize,
+    fontWeight: typography.h2.fontWeight,
     color: colors.ink,
-    marginBottom: spacing.md,
+    marginTop: spacing.xxs,
+    marginBottom: spacing.sm,
   },
   stepLabel: {
-    fontSize: typography.body.fontSize,
-    fontWeight: typography.body.fontWeight,
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
     color: colors.inkMuted,
-    marginBottom: spacing.sm,
-    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    marginTop: spacing.xs,
   },
   optionRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   optionOuter: {
-    width: 140,
-    height: 120,
+    width: 112,
+    height: 88,
   },
   optionCard: {
     flex: 1,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 3,
     borderColor: colors.line,
     backgroundColor: colors.surface,
@@ -186,11 +218,11 @@ const styles = StyleSheet.create({
     backgroundColor: PALETTE.accentSoft,
   },
   optionEmoji: {
-    fontSize: 36,
-    marginBottom: spacing.xs,
+    fontSize: 26,
+    marginBottom: spacing.xxs,
   },
   optionText: {
-    fontSize: typography.bodySmall.fontSize,
+    fontSize: typography.caption.fontSize,
     fontWeight: '800',
     color: colors.ink,
   },
@@ -198,8 +230,12 @@ const styles = StyleSheet.create({
     color: PALETTE.accentDark,
   },
   difficultyOuter: {
-    width: 96,
-    height: 56,
+    // Width is comfortably above the 48dp minimum tap target guideline —
+    // height is exactly touchTarget.minimum (see below), the floor this
+    // app treats as non-negotiable for accessibility even while shrinking
+    // everything else to fit the screen.
+    width: 80,
+    height: touchTarget.minimum,
   },
   difficultyPill: {
     flex: 1,
@@ -215,7 +251,7 @@ const styles = StyleSheet.create({
     backgroundColor: PALETTE.accent,
   },
   difficultyText: {
-    fontSize: typography.bodySmall.fontSize,
+    fontSize: typography.caption.fontSize,
     fontWeight: '800',
     color: colors.ink,
   },
@@ -223,10 +259,10 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   startWrapper: {
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
     alignItems: 'center',
   },
   startButton: {
-    minWidth: 220,
+    minWidth: 200,
   },
 });

@@ -45,7 +45,35 @@ describe('getActivityPalette', () => {
       accent: colors.bubblegum,
       accentDark: colors.bubblegumDark,
       accentSoft: colors.bubblegumSoft,
+      onAccentText: colors.white,
     });
+  });
+
+  // Regression test for the premium-polish accessibility pass: computes
+  // the REAL WCAG contrast ratio for every activity's onAccentText against
+  // its own accent, rather than just pinning today's color choices — this
+  // stays meaningful even if `colors.ink`/individual accent hues change
+  // later, and would have caught the original bug (white text on
+  // jade/marigold/sky scored ~2.1:1/~1.8:1/~2.0:1, all well under the 3:1
+  // minimum for large/bold label text).
+  function relativeLuminance(hex: string): number {
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(1 + i, 3 + i), 16) / 255);
+    const linearize = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const [rl, gl, bl] = [r, g, b].map(linearize);
+    return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+  }
+  function contrastRatio(hexA: string, hexB: string): number {
+    const [lLight, lDark] = [relativeLuminance(hexA), relativeLuminance(hexB)].sort((a, b) => b - a);
+    return (lLight + 0.05) / (lDark + 0.05);
+  }
+
+  it("gives every activity's onAccentText at least a 3:1 contrast ratio against its own accent (WCAG AA for large/bold label text)", () => {
+    const activities = ['coloring', 'quiz', 'puzzle', 'video', 'tictactoe'] as const;
+    for (const activity of activities) {
+      const palette = getActivityPalette(activity);
+      const ratio = contrastRatio(palette.accent, palette.onAccentText);
+      expect(ratio).toBeGreaterThanOrEqual(3);
+    }
   });
 
   it('maps quiz to the violet family', () => {

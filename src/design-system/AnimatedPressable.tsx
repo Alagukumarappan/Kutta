@@ -20,6 +20,7 @@ export function AnimatedPressable({
   onPress,
   onLongPress,
   disabled,
+  selected,
   tilt = 'regular',
   style,
   innerStyle,
@@ -32,6 +33,11 @@ export function AnimatedPressable({
   onPress?: (event: GestureResponderEvent) => void;
   onLongPress?: (event: GestureResponderEvent) => void;
   disabled?: boolean;
+  // Optional "selected" accessibility state — e.g. a gallery tile checked
+  // during long-press multi-select. Omit entirely (rather than passing
+  // `false`) for controls that have no selected/unselected concept at all,
+  // so their `accessibilityState` stays exactly as before this was added.
+  selected?: boolean;
   // Which tilt geometry preset (from design-system/tokens.ts's `tilt`) to
   // use — 'compact' for smaller/closer-together controls, matching
   // QuestionRenderer's own reasoning for using a gentler angle on its 4
@@ -66,7 +72,11 @@ export function AnimatedPressable({
       disabled={disabled}
       accessibilityRole={accessibilityRole ?? 'button'}
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={disabled ? { disabled: true } : undefined}
+      accessibilityState={
+        disabled || selected !== undefined
+          ? { ...(disabled ? { disabled: true } : null), ...(selected !== undefined ? { selected } : null) }
+          : undefined
+      }
       hitSlop={hitSlop}
       style={style}
     >

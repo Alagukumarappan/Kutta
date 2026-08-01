@@ -92,6 +92,47 @@ describe('AnimatedPressable', () => {
     springSpy.mockRestore();
   });
 
+  // Regression tests for the premium-polish accessibility pass: this
+  // shared component had no way to expose a "selected" state at all —
+  // VideoGallery/ColoringGallery/PuzzleGallery's long-press multi-select
+  // mode visually checks a tile (a badge + border color change) but a
+  // screen-reader user had no indication which tiles were checked.
+  it('exposes accessibilityState.selected when the selected prop is provided', async () => {
+    const { getByTestId } = await render(
+      <AnimatedPressable testID="my-pressable" onPress={jest.fn()} selected>
+        <Text>Tap me</Text>
+      </AnimatedPressable>
+    );
+
+    expect(getByTestId('my-pressable').props.accessibilityState).toEqual({ selected: true });
+  });
+
+  it('does not report a disabled or selected accessibility state when neither is set', async () => {
+    const { getByTestId } = await render(
+      <AnimatedPressable testID="my-pressable" onPress={jest.fn()}>
+        <Text>Tap me</Text>
+      </AnimatedPressable>
+    );
+
+    // RN's Pressable normalizes an `undefined` accessibilityState prop into
+    // a full object with every field undefined at the host-component level
+    // (not a literal `undefined`), so check the meaningful fields directly
+    // rather than the object identity.
+    const state = getByTestId('my-pressable').props.accessibilityState;
+    expect(state?.disabled).toBeUndefined();
+    expect(state?.selected).toBeUndefined();
+  });
+
+  it('combines disabled and selected into one accessibilityState object when both are set', async () => {
+    const { getByTestId } = await render(
+      <AnimatedPressable testID="my-pressable" onPress={jest.fn()} disabled selected={false}>
+        <Text>Tap me</Text>
+      </AnimatedPressable>
+    );
+
+    expect(getByTestId('my-pressable').props.accessibilityState).toEqual({ disabled: true, selected: false });
+  });
+
   it('cleans up any in-flight animation on unmount without throwing', async () => {
     const { getByTestId, unmount } = await render(
       <AnimatedPressable testID="my-pressable" onPress={jest.fn()}>

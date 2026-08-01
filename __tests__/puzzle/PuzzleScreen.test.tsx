@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image } from 'react-native';
+import { Image, AccessibilityInfo } from 'react-native';
 import { render, fireEvent, within, waitFor } from '@testing-library/react-native';
 import { PuzzleScreen } from '../../src/puzzle/PuzzleScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -239,6 +239,34 @@ describe('PuzzleScreen', () => {
     expect(flatStyle.borderWidth).toBeGreaterThanOrEqual(4);
   });
 
+  // Regression test for the premium-polish accessibility pass: each slot is
+  // a pure cropped-image fragment with no text of its own, so it previously
+  // had no accessibilityRole/Label at all — a screen-reader dead end for
+  // the puzzle's entire core interaction.
+  describe('piece slot accessibility', () => {
+    it('gives every slot an accessible role and a distinct positional label', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+
+      for (let i = 0; i < 4; i++) {
+        const slot = utils.getByTestId(`puzzle-slot-${i}`);
+        expect(slot.props.accessibilityRole).toBe('button');
+        expect(slot.props.accessibilityLabel).toBe(`Puzzle piece, position ${i + 1}`);
+      }
+    });
+
+    it('marks the currently-picked-up slot as selected via accessibilityState, and only that one', async () => {
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      await fireEvent.press(getByTestId('puzzle-slot-0'));
+
+      expect(getByTestId('puzzle-slot-0').props.accessibilityState).toEqual({ selected: true });
+      expect(getByTestId('puzzle-slot-1').props.accessibilityState).toEqual({ selected: false });
+    });
+  });
+
   describe('piece-snap celebratory pop', () => {
     // Same "spy on Animated.spring's call args instead of the settled style"
     // technique established in ColoringScreen.test.tsx (jest's Animated mock
@@ -290,6 +318,47 @@ describe('PuzzleScreen', () => {
       expect(toValues).not.toContain(1.15);
 
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this pop
+    // always played the overshoot 1 -> 1.15 -> 1 sequence, ignoring the OS
+    // reduce-motion setting — the last remaining un-audited spot in the
+    // app's reduce-motion sweep (see ColoringScreen's swatch/toolbar pops,
+    // Quiz's progress dots, useTiltPress, CelebrationOverlay, and
+    // EmptyStatePanel's bounce, all already fixed the same way). Unlike the
+    // spring-spy tests above, `setValue` takes effect synchronously under
+    // Jest, so this reads the settled flattened style directly.
+    it('skips the pop spring when the OS reduce-motion setting is on, landing directly on the resting scale', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      const { StyleSheet } = require('react-native');
+
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      const before = readOrder(getByTestId);
+      const target = before.findIndex((pieceIndex, slotIndex) => pieceIndex !== slotIndex);
+      expect(target).toBeGreaterThanOrEqual(0);
+      const currentIndex = before.indexOf(target);
+
+      await fireEvent.press(getByTestId(`puzzle-slot-${target}`));
+      await fireEvent.press(getByTestId(`puzzle-slot-${currentIndex}`));
+
+      // Sanity: the swap really did place the target piece correctly.
+      expect(readOrder(getByTestId)[target]).toBe(target);
+
+      const flattened = StyleSheet.flatten(getByTestId(`puzzle-piece-scale-${target}`).props.style);
+      const scale = flattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(scale).toBeCloseTo(1);
+
+      // `jest.restoreAllMocks()` alone does NOT undo this specific mock —
+      // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+      // jest.fn() (a native module method), so `jest.spyOn` above just
+      // returns that same mock rather than wrapping a real implementation.
+      // Explicitly resetting the resolved value is what actually fixes it
+      // (see ColoringScreen's iteration 30 notes for the full mechanism).
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
+      jest.restoreAllMocks();
     });
   });
 

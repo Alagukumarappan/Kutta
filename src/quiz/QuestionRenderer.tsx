@@ -17,6 +17,7 @@ import {
   SurfaceWash,
   RaisedPrimaryButton,
   RaisedSecondaryButton,
+  useReducedMotion,
 } from '../design-system';
 
 // This screen rebuilds the quiz UI as a single-question, STACKED layout
@@ -360,6 +361,10 @@ export function QuestionRenderer({
   // — cheap even at the real 20-dot maximum, since idle dots simply sit at
   // rest (scale 1) with no animation running.
   const dotScalesRef = React.useRef<Map<number, Animated.Value>>(new Map());
+  // Same OS reduce-motion check already applied to CelebrationOverlay, the
+  // score card, and useTiltPress — this dot-pop is a small but genuine
+  // spring transform, and can fire up to 20 times per session.
+  const reducedMotion = useReducedMotion();
   function getDotScale(index: number): Animated.Value {
     let value = dotScalesRef.current.get(index);
     if (!value) {
@@ -388,6 +393,13 @@ export function QuestionRenderer({
     function pop(index: number, fromRatio: number) {
       const scale = getDotScale(index);
       activeDotAnimationsRef.current.get(index)?.stop();
+      if (reducedMotion) {
+        // Jump straight to the resting scale — the dot's width/height style
+        // swap (progressDotDone/Current) still conveys progress on its own;
+        // only the spring bounce itself is skipped.
+        scale.setValue(1);
+        return;
+      }
       scale.setValue(fromRatio);
       // Quick, light spring — well under 300ms — matching this file's other
       // small transient feedback springs (e.g. the feedback card's own
@@ -409,7 +421,7 @@ export function QuestionRenderer({
     if (typeof prevIndex === 'number') {
       pop(prevIndex, CURRENT_TO_DONE_RATIO);
     }
-  }, [currentIndex, showProgress]);
+  }, [currentIndex, showProgress, reducedMotion]);
 
   React.useEffect(() => {
     return () => {
@@ -449,7 +461,16 @@ export function QuestionRenderer({
           highlight === 'correct' && styles.optionCorrect,
           highlight === 'incorrect' && styles.optionIncorrect,
         ]}
-        accessibilityLabel={option.text ? option.text[language] : undefined}
+        // Image-only options (no `option.text`) previously fell through to
+        // `undefined` here, leaving a screen-reader user with an unlabeled
+        // "Button" for every one of a question's four picture answers — the
+        // entire interaction for that question type. Falls back to a plain
+        // positional label ("Answer option 2") so it's at least
+        // distinguishable and announced as tappable, same idea as
+        // quizProgressLabel's own `{number}`-templated announcement above.
+        accessibilityLabel={
+          option.text ? option.text[language] : tFormat('quizAnswerOptionLabel', language, { number: index + 1 })
+        }
       >
         <SurfaceWash />
         {option.image && (

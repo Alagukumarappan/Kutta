@@ -12,7 +12,16 @@ import {
   savePuzzleDifficulty,
   type PuzzleDifficulty,
 } from '../storage/puzzleDifficultyStore';
-import { colors, spacing, radii, elevation, getActivityPalette, RaisedCard, EmptyStatePanel } from '../design-system';
+import {
+  colors,
+  spacing,
+  radii,
+  elevation,
+  getActivityPalette,
+  RaisedCard,
+  EmptyStatePanel,
+  LoadingPanel,
+} from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
@@ -22,6 +31,12 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const PUZZLE_PALETTE = getActivityPalette('puzzle');
 const TILE_SIZE = 128;
 const GRID_COLUMNS = 4;
+// Every row's rendered height, in px: the tile's own fixed height plus the
+// `gridRow` style's marginBottom gap below it (see styles.gridRow/tile
+// below) — both are compile-time constants (fixed tile size, fixed column
+// count), never derived from async-loaded content, so this can be computed
+// once up front instead of measured. Feeds `getItemLayout` below.
+const ROW_HEIGHT = TILE_SIZE + spacing.sm;
 const DIFFICULTY_OPTIONS: readonly PuzzleDifficulty[] = [4, 6, 9, 12];
 
 function isImageFile(uri: string): boolean {
@@ -37,12 +52,14 @@ export function PuzzleGallery({
   onSelect: (imageUri: string, difficulty: PuzzleDifficulty) => void;
 }) {
   const { t, language } = useLanguage();
-  // Shown with headerShown:true (see RootNavigator), so the native header
-  // already covers the top inset — only left/right/bottom are ours to
-  // handle (a notch or gesture-nav bar sits at one of the sides in this
-  // landscape-only app).
+  // Shown with headerShown:false (see RootNavigator — every activity
+  // screen dropped the native header/back-button in favor of the device's
+  // own hardware/gesture back), so this screen now has to account for
+  // insets.top itself too, the same way HomeScreen (also headerShown:
+  // false) already does.
   const insets = useSafeAreaInsets();
   const insetStyle = {
+    paddingTop: insets.top,
     paddingLeft: insets.left,
     paddingRight: insets.right,
     paddingBottom: insets.bottom,
@@ -210,7 +227,13 @@ export function PuzzleGallery({
     );
   }
 
-  if (images === null) return <View testID="puzzle-gallery-loading" style={[styles.screen, insetStyle]} />;
+  if (images === null) {
+    return (
+      <View style={[styles.screen, insetStyle]}>
+        <LoadingPanel testID="puzzle-gallery-loading" color={PUZZLE_PALETTE.accent} message={t('galleryLoading')} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.screen, insetStyle]}>
@@ -270,7 +293,13 @@ export function PuzzleGallery({
       </View>
 
       <Modal visible={difficultyModalVisible} transparent animationType="fade" onRequestClose={() => setDifficultyModalVisible(false)}>
-        <Pressable style={styles.difficultyModalOverlay} onPress={() => setDifficultyModalVisible(false)}>
+        <Pressable
+          testID="puzzle-difficulty-modal-overlay"
+          style={styles.difficultyModalOverlay}
+          onPress={() => setDifficultyModalVisible(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t('puzzleDifficultyModalCloseLabel')}
+        >
           <View style={styles.difficultyModalCard}>
             {DIFFICULTY_OPTIONS.map((option) => (
               <Pressable
@@ -278,6 +307,9 @@ export function PuzzleGallery({
                 testID={`puzzle-difficulty-option-${option}`}
                 onPress={() => handleSelectDifficulty(option)}
                 style={[styles.difficultyOptionRow, option === difficulty && styles.difficultyOptionRowSelected]}
+                accessibilityRole="button"
+                accessibilityLabel={tFormat('puzzleDifficultyOptionLabel', language, { count: option })}
+                accessibilityState={{ selected: option === difficulty }}
               >
                 <Text
                   style={[styles.difficultyOptionText, option === difficulty && styles.difficultyOptionTextSelected]}
@@ -290,15 +322,37 @@ export function PuzzleGallery({
         </Pressable>
       </Modal>
       {images.length === 0 ? (
-        <EmptyStatePanel testID="puzzle-gallery-empty" emoji="🧩" title={t('emptyPictures')} />
+        <EmptyStatePanel
+          testID="puzzle-gallery-empty"
+          emoji="🧩"
+          title={t('emptyPicturesTitle')}
+          message={t('emptyPictures')}
+        />
       ) : (
         <FlatList
+          testID="puzzle-gallery-list"
           data={images}
           keyExtractor={(uri) => uri}
           numColumns={GRID_COLUMNS}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.gridRow}
           showsVerticalScrollIndicator={false}
+          // Every tile is a fixed 128x128 square in a fixed 4-column grid
+          // (see TILE_SIZE/GRID_COLUMNS above) — giving FlatList this ahead
+          // of time lets it jump straight to any scroll offset instead of
+          // measuring each row's real layout as it renders, which matters
+          // once a folder holds dozens-to-hundreds of pictures. With
+          // numColumns > 1, FlatList's internal item COUNT becomes the row
+          // count (data.length / numColumns) and it calls getItemLayout
+          // with that SAME row-scale index — not the flat index into
+          // `images` — so the offset is `ROW_HEIGHT * index` directly, with
+          // no further division by GRID_COLUMNS (that would double-divide
+          // and collapse every row to offset 0).
+          getItemLayout={(_, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
           renderItem={({ item }) => {
             const isSelected = selectedUris.has(item);
             return (
@@ -311,6 +365,11 @@ export function PuzzleGallery({
                 borderColor={isSelected ? PUZZLE_PALETTE.accent : PUZZLE_PALETTE.accentDark}
                 elevationLevel="level2"
                 style={styles.tile}
+                // Only meaningful once multi-select mode is actually
+                // active — outside it, this tile has no "selected" concept
+                // at all, so `selected` is omitted entirely (not `false`)
+                // to leave its accessibilityState untouched.
+                selected={selectionMode ? isSelected : undefined}
               >
                 <>
                   <Image source={{ uri: item }} style={styles.tileImage} />

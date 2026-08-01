@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { colors, radii, spacing, shadow } from '../theme/tokens';
 import { colors as dsColors, radii as dsRadii, elevation as dsElevation } from '../design-system/tokens';
+import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 
 const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -37,7 +39,9 @@ export function AgePicker({
   testIDPrefix: string;
   variant?: 'default' | 'playful';
 }) {
+  const { t, language } = useLanguage();
   const playful = variant === 'playful';
+  const fieldLabel = value === null ? placeholder : tFormat('ageOptionLabel', language, { age: value });
   return (
     <>
       <Pressable
@@ -45,6 +49,8 @@ export function AgePicker({
         onPress={onOpen}
         style={[styles.field, playful && (value === null ? playfulStyles.fieldEmpty : playfulStyles.fieldFilled)]}
         hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        accessibilityRole="button"
+        accessibilityLabel={fieldLabel}
       >
         <Text
           style={[
@@ -57,7 +63,13 @@ export function AgePicker({
       </Pressable>
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <Pressable style={[styles.modalOverlay, playful && playfulStyles.modalOverlay]} onPress={onClose}>
+        <Pressable
+          testID={`${testIDPrefix}-modal-overlay`}
+          style={[styles.modalOverlay, playful && playfulStyles.modalOverlay]}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={t('ageModalCloseLabel')}
+        >
           <View style={[styles.modalCard, playful && playfulStyles.modalCard]}>
             {AGE_OPTIONS.map((option) => (
               <Pressable
@@ -68,6 +80,9 @@ export function AgePicker({
                   onClose();
                 }}
                 style={[styles.optionRow, playful && value === option && playfulStyles.optionRowSelected]}
+                accessibilityRole="button"
+                accessibilityLabel={tFormat('ageOptionLabel', language, { age: option })}
+                accessibilityState={{ selected: value === option }}
               >
                 <Text style={[styles.optionText, playful && value === option && playfulStyles.optionTextSelected]}>
                   {option}

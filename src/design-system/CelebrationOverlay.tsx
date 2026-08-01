@@ -3,6 +3,7 @@ import { Animated, Modal, StyleSheet, Text, View, type GestureResponderEvent } f
 import { colors, elevation, motion, radii, spacing, typography } from './tokens';
 import { SurfaceWash } from './SurfaceWash';
 import { RaisedPrimaryButton, RaisedSecondaryButton } from './Buttons';
+import { useReducedMotion } from './useReducedMotion';
 
 export interface CelebrationAction {
   label: string;
@@ -40,6 +41,7 @@ export function CelebrationOverlay({
   actions?: CelebrationAction[];
   testID?: string;
 }) {
+  const reducedMotion = useReducedMotion();
   const scaleAnim = React.useRef(new Animated.Value(0.85)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
   const bubbleScaleAnim = React.useRef(new Animated.Value(0)).current;
@@ -54,19 +56,42 @@ export function CelebrationOverlay({
       return;
     }
 
-    const cardEntrance = Animated.parallel([
-      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
-      Animated.timing(opacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
-    ]);
+    // With reduce-motion enabled, skip the bouncy scale/spring entirely —
+    // that kind of overshooting transform is exactly what the OS setting
+    // exists to suppress (a real vestibular-safety need, not just a style
+    // preference). Jump the scale straight to its resting value and animate
+    // only opacity, so the moment still reads as "this appeared" via a
+    // plain fade without any scaling or bounce.
+    let cardEntrance: Animated.CompositeAnimation;
+    if (reducedMotion) {
+      scaleAnim.setValue(1);
+      cardEntrance = Animated.timing(opacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true });
+    } else {
+      cardEntrance = Animated.parallel([
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
+      ]);
+    }
     cardEntrance.start();
 
     let bubbleAnimation: Animated.CompositeAnimation | null = null;
     if (tone === 'success' && emoji) {
-      bubbleAnimation = Animated.sequence([
-        Animated.parallel([
+      let bubbleEntrance: Animated.CompositeAnimation;
+      if (reducedMotion) {
+        bubbleScaleAnim.setValue(1);
+        bubbleEntrance = Animated.timing(bubbleOpacityAnim, {
+          toValue: 1,
+          duration: motion.duration.fast,
+          useNativeDriver: true,
+        });
+      } else {
+        bubbleEntrance = Animated.parallel([
           Animated.spring(bubbleScaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.celebrate }),
           Animated.timing(bubbleOpacityAnim, { toValue: 1, duration: motion.duration.fast, useNativeDriver: true }),
-        ]),
+        ]);
+      }
+      bubbleAnimation = Animated.sequence([
+        bubbleEntrance,
         Animated.delay(motion.duration.celebration),
         Animated.timing(bubbleOpacityAnim, { toValue: 0, duration: motion.duration.slow, useNativeDriver: true }),
       ]);
@@ -77,7 +102,7 @@ export function CelebrationOverlay({
       cardEntrance.stop();
       bubbleAnimation?.stop();
     };
-  }, [visible, tone, emoji, scaleAnim, opacityAnim, bubbleScaleAnim, bubbleOpacityAnim]);
+  }, [visible, tone, emoji, reducedMotion, scaleAnim, opacityAnim, bubbleScaleAnim, bubbleOpacityAnim]);
 
   if (!visible) return null;
 

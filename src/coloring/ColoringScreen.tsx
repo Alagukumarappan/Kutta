@@ -22,12 +22,22 @@ import {
   elevation,
   typography,
   touchTarget,
+  motion,
   getActivityPalette,
   RaisedPrimaryButton,
+  useReducedMotion,
 } from '../design-system';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
 import Slider from '@react-native-community/slider';
+import {
+  screenPointToCanvasPoint,
+  applyPinchPan,
+  clampTransform,
+  IDENTITY_TRANSFORM,
+  type CanvasTransform,
+  type TouchPoint,
+} from './canvasTransform';
 
 // Coloring's recognizable accent (see getActivityPalette in
 // src/design-system/tokens.ts) — drives the active-tool highlight, the
@@ -41,25 +51,15 @@ const coloringAccent = getActivityPalette('coloring');
 // raised selection ring below.
 const SWATCH_SIZE = touchTarget.comfortable;
 
-// Reserves room for the toolbar + palette footer strip rendered below the
-// canvas, and outer margins, so the canvas gets as much of the screen as
-// possible while still leaving room to pick a tool/color. This screen is
-// landscape-only via RootNavigator's runtime orientation lock (app.json
-// itself now uses "default" rather than a manifest-level lock).
-//
-// Recomputed for this iteration's redesigned chrome (raised design-system
-// buttons + larger circular swatches, replacing the old bordered-rectangle
-// toolbar and flat 44px swatches): footer paddingTop (spacing.sm, 12dp) +
-// a worst-case TWO-LINE toolbar row (two 48dp-tall raised buttons — see
-// touchTarget.minimum — plus the row's own inter-line gap and marginBottom,
-// spacing.sm each, ~128dp total; see the "toolbar row screen-fit" note
-// below for why two lines must be budgeted for) + the palette strip
-// (56dp swatches, touchTarget.comfortable, plus spacing.xs margin on each
-// side, ~72dp) + footer paddingBottom (spacing.md, 16dp) comes out to
-// ~228dp; 240 leaves a small safety margin, same spirit as the old
-// constant's own buffer over its hand-computed chrome height.
-const CANVAS_RESERVED_HEIGHT = 240;
-const CANVAS_RESERVED_WIDTH = 32;
+// The toolbar (Fill/Pen/Undo/Clear + palette + pen-size slider) now floats
+// as a collapsible OVERLAY on top of the canvas's bottom edge instead of
+// sitting below it and shrinking the canvas — see the "toolbar overlay"
+// section further down. The canvas therefore only needs to reserve a small
+// outer breathing-margin plus the device's own safe-area insets, not a
+// hand-budgeted footer height. This screen is landscape-only via
+// RootNavigator's runtime orientation lock (app.json itself uses "default"
+// rather than a manifest-level lock).
+const CANVAS_RESERVED_MARGIN = 32;
 const CANVAS_MIN_SIZE = 200;
 const CANVAS_MAX_SIZE = 900;
 
@@ -71,16 +71,23 @@ const PEN_STROKE_WIDTH_MIN = 4;
 const PEN_STROKE_WIDTH_MAX = 40;
 const PEN_STROKE_WIDTH_STEP = 2;
 
-// The pen-size slider row only renders in pen mode, so it must only be
-// reserved then too — otherwise switching to pen mode would make the real
-// footer taller than CANVAS_RESERVED_HEIGHT budgeted for, pushing the
-// footer down past what the canvas's fixed height already assumed instead
-// of shrinking the canvas to make room. Recomputed for this iteration's
-// raised chrome panel around the slider (the Slider itself is untouched):
-// the panel's own vertical padding (spacing.xs, 8dp top + bottom) + the
-// ~40dp-tall Slider row + the row's marginBottom (spacing.sm, 12dp) comes
-// out to ~68dp.
-const PEN_SIZE_ROW_RESERVED_HEIGHT = 68;
+// How far the expanded toolbar panel slides down to fully hide itself when
+// collapsed — a generous fixed distance (comfortably more than the panel's
+// real height in any state, Fill/Pen/Undo/Clear all visible + the pen-size
+// row) rather than an exact measured height, so collapsing never leaves a
+// visible sliver and there's no flash-of-wrong-position before the first
+// onLayout measurement would otherwise land.
+const TOOLBAR_PANEL_SLIDE_DISTANCE = 320;
+
+// Zoom bounds for the pinch-to-zoom canvas: never below 1 (the canvas's own
+// fitted default — zooming "out" further would just show empty space
+// beyond the image, which clampTransform's own bounds already prevent, but
+// pinning minScale to 1 here means a pinch-in gesture simply stops rather
+// than fighting the clamp every frame), and a generous but bounded max so a
+// child can zoom in close enough to color fine detail without the image
+// eventually degrading into visibly blocky pixels.
+const MIN_ZOOM_SCALE = 1;
+const MAX_ZOOM_SCALE = 4;
 
 type ToolMode = 'fill' | 'pen';
 
@@ -118,17 +125,15 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [toolMode, setToolMode] = useState<ToolMode>('fill');
-  // CANVAS_RESERVED_HEIGHT/WIDTH above assume a "typical" phone's on-screen
-  // nav bar; they don't know about *this* device's actual notch/gesture-bar
-  // geometry, which varies (e.g. a Samsung S22's cutout and 3-button/gesture
-  // nav differ from the emulator's). Add the real, per-device bottom/left/
-  // right insets on top of those fixed margins so the canvas never shrinks
-  // *into* what it originally reserved (the fixed constants still cover the
-  // footer chrome; the insets cover the additional system-reserved area
-  // outside that). insets.top is deliberately NOT added here: this screen is
-  // shown with headerShown:true (see RootNavigator), so the native header
-  // already consumes the top inset before this component's flex:1 container
-  // gets its share of the window — adding it again would double-count it.
+  // CANVAS_RESERVED_MARGIN is just a small outer breathing-margin now (the
+  // toolbar floats as an overlay — see below — so it no longer shrinks the
+  // canvas the way a below-canvas footer used to). The real per-device
+  // notch/gesture-bar geometry still has to be added on top of that fixed
+  // margin so the canvas never shrinks *into* system-reserved space. This
+  // screen is shown with headerShown:false (see RootNavigator — every
+  // activity screen dropped the native header/back-button in favor of the
+  // device's own hardware/gesture back), so insets.top has to be reserved
+  // here explicitly; nothing else consumes it.
   // Rectangular, not square: a landscape phone is short-but-wide, so
   // constraining the canvas to a square would shrink its width down to
   // match the tighter height budget, wasting most of the screen's width as
@@ -138,8 +143,8 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const { width: canvasWidth, height: canvasHeight } = computeResponsiveRectSize(
     width,
     height,
-    CANVAS_RESERVED_HEIGHT + (toolMode === 'pen' ? PEN_SIZE_ROW_RESERVED_HEIGHT : 0) + insets.bottom,
-    CANVAS_RESERVED_WIDTH + insets.left + insets.right,
+    CANVAS_RESERVED_MARGIN + insets.top + insets.bottom,
+    CANVAS_RESERVED_MARGIN + insets.left + insets.right,
     CANVAS_MIN_SIZE,
     CANVAS_MAX_SIZE
   );
@@ -175,6 +180,54 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   filledImageRef.current = filledImage;
 
   const activePathRef = useRef<SkPath | null>(null);
+
+  // --- Zoom/pan (pinch-to-zoom the canvas, then draw/fill at that zoom) ---
+  // Animated.ValueXY drives translateX/translateY together (matches this
+  // file's existing pattern of one Animated node per compound visual
+  // property, e.g. the swatch/toolbar-button scales below); scale is a
+  // separate Animated.Value since it doesn't pair naturally into an XY.
+  // Both are native-driver-compatible (only ever feed
+  // `transform: [{translateX},{translateY},{scale}]`).
+  const panXY = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  // Plain-number mirror of the current transform, updated synchronously on
+  // every pinch/pan frame — Animated.ValueXY/Value are opaque to a plain
+  // read without an imperative extractValue trick, and the existing fill/
+  // pen math (plain synchronous functions) needs a plain number to invert
+  // against. Mirrored into the Animated nodes via .setValue() each frame
+  // instead of using Animated as the actual source of truth.
+  const transformRef = useRef<CanvasTransform>(IDENTITY_TRANSFORM);
+  // The 2-finger gesture's own in-progress bookkeeping: the transform as it
+  // was at the start of the CURRENT gesture FRAME (updated every
+  // onPanResponderMove so applyPinchPan always compares consecutive frames,
+  // not the whole gesture's start to now — avoiding compounding error), and
+  // the two touches' screen positions at that same frame.
+  const pinchStartTransformRef = useRef<CanvasTransform>(IDENTITY_TRANSFORM);
+  const lastTouchesRef = useRef<[TouchPoint, TouchPoint] | null>(null);
+
+  // --- Touch cursor indicator ------------------------------------------
+  // Raw SCREEN point (locationX/Y within coloring-canvas-touch-area, the
+  // same coordinate space the PanResponder callbacks already receive) —
+  // deliberately NOT inverted through the zoom/pan transform, so it renders
+  // exactly under the fingertip regardless of current zoom. `null` when no
+  // finger is down/drawing.
+  const [touchCursor, setTouchCursor] = useState<{ x: number; y: number } | null>(null);
+
+  // --- Toolbar expand/collapse overlay -----------------------------------
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const toolbarExpandedRef = useRef(toolbarExpanded);
+  toolbarExpandedRef.current = toolbarExpanded;
+  // Whether the panel has EVER been expanded — lazily mounts the (fairly
+  // large) panel subtree only once it's actually needed, rather than paying
+  // for it on every mount when a child may never open it.
+  const toolbarHasEverExpandedRef = useRef(false);
+  // Slides the panel's own translateY: 0 = fully on-screen (expanded), a
+  // fixed distance = fully off-screen below (collapsed). Starts collapsed
+  // (matching toolbarExpanded's own default of false) — NOT 0 — so the
+  // panel's very first mount is already positioned off-screen instead of
+  // animating in from 0.
+  const toolbarSlide = useRef(new Animated.Value(TOOLBAR_PANEL_SLIDE_DISTANCE)).current;
+  const activeToolbarSlideAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   // Single-level "undo last flood fill" (iteration 27). `floodFill` already
   // does `pixels.slice()` internally (see floodFill.ts) rather than
@@ -326,40 +379,143 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     setCurrentPath(null);
   }
 
+  // Reads the current gesture's touch points as plain {x,y} pairs, in PAGE
+  // space (pageX/pageY) rather than location space: pinch math only cares
+  // about RELATIVE distances/midpoint deltas between two consecutive
+  // frames, so either coordinate space works as long as it's used
+  // consistently — pageX/pageY is preferable here because
+  // nativeEvent.touches[].locationX/Y for the non-primary touch is less
+  // reliable cross-platform in RN's responder system, while pageX/pageY is
+  // always populated. Falls back to a single-touch reading (from
+  // locationX/Y) when `touches` is absent/empty — this is what every
+  // existing test's fake responder event shape already looks like (they
+  // only ever set locationX/Y, never a `touches` array), so this fallback
+  // is exactly what keeps all of them passing unmodified alongside the new
+  // pinch/pan behavior.
+  function touchesFromEvent(evt: GestureResponderEvent): TouchPoint[] {
+    const touches = evt.nativeEvent.touches;
+    if (!touches || touches.length === 0) {
+      return [{ x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY }];
+    }
+    return touches.map((touch) => ({ x: touch.pageX, y: touch.pageY }));
+  }
+
   const panResponder = useRef<PanResponderInstance>(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => toolModeRef.current === 'pen',
+      onMoveShouldSetPanResponder: (evt) => {
+        // RNTL's fireEvent dispatch checks whether an event handler is
+        // "enabled" (see isEventEnabled in its fire-event source) by
+        // invoking this exact callback speculatively, sometimes without a
+        // real event object — guard against that rather than assuming evt
+        // is always a genuine GestureResponderEvent.
+        const touchCount = evt?.nativeEvent?.touches?.length ?? 1;
+        return touchCount >= 2 || toolModeRef.current === 'pen';
+      },
       onPanResponderGrant: (evt: GestureResponderEvent) => {
-        if (toolModeRef.current !== 'pen') return;
+        // Auto-collapse: any new touch on the canvas — a 1-finger draw/fill
+        // or the start of a 2-finger pinch/pan alike — means the child's
+        // attention just returned to the picture, so an expanded toolbar
+        // collapses out of the way first.
+        if (toolbarExpandedRef.current) collapseToolbar();
+
+        const touches = touchesFromEvent(evt);
+        if (touches.length >= 2) {
+          // Entering (or re-entering, if a 3rd finger touched down
+          // mid-gesture) pinch/pan mode: snapshot the transform and the two
+          // touches' current positions as this gesture's/frame's baseline.
+          pinchStartTransformRef.current = transformRef.current;
+          lastTouchesRef.current = [touches[0], touches[1]];
+          setTouchCursor(null); // pinch/pan never shows the draw cursor
+          return;
+        }
+
+        lastTouchesRef.current = null;
         const { locationX, locationY } = evt.nativeEvent;
+        // The RAW screen point drives the touch-cursor indicator regardless
+        // of tool mode — a fill tap gets a brief cursor too, not just pen
+        // strokes.
+        setTouchCursor({ x: locationX, y: locationY });
+
+        if (toolModeRef.current !== 'pen') return;
         // Pen strokes are drawn as an overlay directly on the Canvas, which
-        // is already sized to canvasWidth/canvasHeight - the same
-        // coordinate space these locationX/locationY touch coordinates
-        // arrive in, so no further
-        // scaling is needed here (unlike the fill-mode pixel-buffer lookup,
-        // which maps this same raw coordinate into the image's native pixel
-        // space instead).
+        // is rendered inside the same zoom/pan-transformed wrapper the
+        // photo itself sits in (see the render below) — so a stroke drawn
+        // while zoomed in needs to be recorded in the CANVAS's own
+        // (untransformed) coordinate space, not the raw screen point, for
+        // it to land in the same place relative to the photo regardless of
+        // current zoom/pan.
+        const { x, y } = screenPointToCanvasPoint(locationX, locationY, transformRef.current);
         const path = Skia.Path.Make();
-        path.moveTo(locationX, locationY);
+        path.moveTo(x, y);
         activePathRef.current = path;
         setCurrentPath(path.copy());
       },
       onPanResponderMove: (evt: GestureResponderEvent) => {
-        if (toolModeRef.current !== 'pen' || !activePathRef.current) return;
+        const touches = touchesFromEvent(evt);
+
+        if (touches.length >= 2) {
+          if (!lastTouchesRef.current) {
+            // A 2nd finger just joined mid-gesture (e.g. while pen-drawing
+            // with 1 finger) — start a fresh pinch baseline rather than
+            // misapplying pinch math against a stale/absent one. The
+            // in-progress stroke is abandoned without committing it (the
+            // same "not drawn" outcome as lifting the finger without
+            // moving) — simplest correct behavior, avoids a half-drawn
+            // stray line.
+            pinchStartTransformRef.current = transformRef.current;
+            lastTouchesRef.current = [touches[0], touches[1]];
+            activePathRef.current = null;
+            setCurrentPath(null);
+            setTouchCursor(null);
+            return;
+          }
+          const next = clampTransform(
+            applyPinchPan(pinchStartTransformRef.current, lastTouchesRef.current, [touches[0], touches[1]]),
+            {
+              minScale: MIN_ZOOM_SCALE,
+              maxScale: MAX_ZOOM_SCALE,
+              canvasWidth: canvasWidthRef.current,
+              canvasHeight: canvasHeightRef.current,
+            }
+          );
+          transformRef.current = next;
+          scaleAnim.setValue(next.scale);
+          panXY.setValue({ x: next.translateX, y: next.translateY });
+          // This frame's touches become the baseline for the NEXT frame
+          // (per-frame, not per-gesture, so error never compounds across a
+          // long pinch).
+          pinchStartTransformRef.current = next;
+          lastTouchesRef.current = [touches[0], touches[1]];
+          return;
+        }
+
+        // Fell back to (or stayed at) 1 finger.
+        lastTouchesRef.current = null;
         const { locationX, locationY } = evt.nativeEvent;
-        activePathRef.current.lineTo(locationX, locationY);
+        setTouchCursor({ x: locationX, y: locationY });
+        if (toolModeRef.current !== 'pen' || !activePathRef.current) return;
+        const { x, y } = screenPointToCanvasPoint(locationX, locationY, transformRef.current);
+        activePathRef.current.lineTo(x, y);
         setCurrentPath(activePathRef.current.copy());
       },
       onPanResponderRelease: (evt: GestureResponderEvent) => {
+        setTouchCursor(null);
+        const wasTwoFinger = lastTouchesRef.current !== null;
+        lastTouchesRef.current = null;
+        if (wasTwoFinger) return; // ending a pinch/pan is not a draw/fill action
+
         if (toolModeRef.current === 'pen') {
           finishActiveStroke();
           return;
         }
         const { locationX, locationY } = evt.nativeEvent;
-        handleCanvasTap(locationX, locationY);
+        const { x, y } = screenPointToCanvasPoint(locationX, locationY, transformRef.current);
+        handleCanvasTap(x, y);
       },
       onPanResponderTerminate: () => {
+        setTouchCursor(null);
+        lastTouchesRef.current = null;
         if (toolModeRef.current === 'pen') {
           finishActiveStroke();
         }
@@ -394,6 +550,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // progress dots.
   const prevSelectedDisplayColorRef = useRef(selectedDisplayColor);
   const activeSwatchAnimationsRef = useRef<Map<number, Animated.CompositeAnimation>>(new Map());
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const prevColor = prevSelectedDisplayColorRef.current;
@@ -403,6 +560,16 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     function pop(index: number, toValue: number) {
       const scale = getSwatchScale(index, false);
       activeSwatchAnimationsRef.current.get(index)?.stop();
+      // Same reduce-motion treatment as the quiz progress-dots' identical
+      // pop pattern (iteration 25): land directly on the resting scale
+      // instead of springing, since this is the exact bouncy/overshooting
+      // motion category the OS setting exists to suppress. The isSelected
+      // border/shadow swap below still conveys the selection change on its
+      // own.
+      if (reducedMotion) {
+        scale.setValue(toValue);
+        return;
+      }
       // Quick, light spring — same speed/bounciness as the quiz progress
       // dots' pop — gentle enough for a 2-8 year old audience and brief
       // enough not to delay picking the next color.
@@ -420,7 +587,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     const prevIndex = PALETTE.findIndex((p) => p.display === prevColor);
     if (newIndex >= 0) pop(newIndex, 1.12);
     if (prevIndex >= 0) pop(prevIndex, 1);
-  }, [selectedDisplayColor]);
+  }, [selectedDisplayColor, reducedMotion]);
 
   useEffect(() => {
     return () => {
@@ -447,6 +614,17 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const activeToolbarAnimationsRef = useRef<Partial<Record<ToolbarButtonKey, Animated.CompositeAnimation>>>({});
 
   function animateToolbarButton(key: ToolbarButtonKey, toValue: number) {
+    activeToolbarAnimationsRef.current[key]?.stop();
+    // Same reduce-motion treatment as this screen's palette-swatch pop
+    // (iteration 29) and useTiltPress's app-wide press feedback (iteration
+    // 24): land directly on the target scale instead of animating. This
+    // spring has no overshoot (bounciness: 0) so it's gentler than the
+    // swatch pop, but it's still the scale-transform press feedback
+    // reduce-motion guidance targets.
+    if (reducedMotion) {
+      toolbarScales[key].setValue(toValue);
+      return;
+    }
     // Native-driven, no-overshoot spring — only ever touches `transform`,
     // so it can't affect this footer's layout/screen-fit (see the
     // "toolbar row screen-fit" note above).
@@ -466,6 +644,48 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     };
   }, []);
 
+  // --- Toolbar expand/collapse (this iteration) --------------------------
+  // The Fill/Pen/Undo/Clear + palette + pen-size-slider panel now floats as
+  // a collapsible overlay over the canvas's bottom edge instead of
+  // permanently occupying a footer strip below it — see the render below.
+  function expandToolbar() {
+    toolbarHasEverExpandedRef.current = true;
+    setToolbarExpanded(true);
+    animateToolbarSlide(0);
+  }
+
+  function collapseToolbar() {
+    setToolbarExpanded(false);
+    animateToolbarSlide(TOOLBAR_PANEL_SLIDE_DISTANCE);
+  }
+
+  function animateToolbarSlide(toValue: number) {
+    activeToolbarSlideAnimationRef.current?.stop();
+    if (reducedMotion) {
+      toolbarSlide.setValue(toValue);
+      return;
+    }
+    // Reuses the same gentle, no-overshoot spring preset as the toolbar
+    // buttons' own press feedback (motion.spring.pressGentle) — a
+    // slide-in/out panel should feel calm, not bouncy, matching this
+    // file's existing "gentle vs bouncy" split (pressGentle for buttons/
+    // panel motion, the swatch pop's own speed:20/bounciness:6 reserved for
+    // genuine celebratory pops).
+    const animation = Animated.spring(toolbarSlide, {
+      toValue,
+      useNativeDriver: true,
+      ...motion.spring.pressGentle,
+    });
+    activeToolbarSlideAnimationRef.current = animation;
+    animation.start();
+  }
+
+  useEffect(() => {
+    return () => {
+      activeToolbarSlideAnimationRef.current?.stop();
+    };
+  }, []);
+
   const displayImage = filledImage ?? image;
 
   return (
@@ -473,6 +693,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       style={{
         flex: 1,
         backgroundColor: colors.canvas,
+        paddingTop: insets.top,
         paddingLeft: insets.left,
         paddingRight: insets.right,
       }}
@@ -500,46 +721,132 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             />
           </View>
         ) : (
-        <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
-          <Canvas style={{ width: canvasWidth, height: canvasHeight }} testID="coloring-canvas">
-            {displayImage && (
-              <SkiaImage image={displayImage} x={0} y={0} width={canvasWidth} height={canvasHeight} />
-            )}
-            {strokes.map((stroke, i) => stroke.path && (
-              <SkiaPath
-                key={i}
-                path={stroke.path}
-                color={stroke.color}
-                style="stroke"
-                strokeWidth={stroke.width}
-                strokeCap="round"
-                strokeJoin="round"
-              />
-            ))}
-            {currentPath && (
-              <SkiaPath
-                path={currentPath}
-                color={selectedDisplayColor}
-                style="stroke"
-                strokeWidth={penWidth}
-                strokeCap="round"
-                strokeJoin="round"
-              />
-            )}
-          </Canvas>
-        </View>
-        )}
-      </View>
+          <>
+            <View testID="coloring-canvas-touch-area" {...panResponder.panHandlers}>
+              {/* Clips zoomed/panned content to the canvas's own footprint
+                  so panning never visually spills past its original bounds
+                  into the rest of the screen. */}
+              <View style={{ width: canvasWidth, height: canvasHeight, overflow: 'hidden' }}>
+                <Animated.View
+                  testID="coloring-canvas-transform"
+                  style={{
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    // Scale about the TOP-LEFT corner (0,0) rather than RN's
+                    // default center-origin transform, matching
+                    // canvasTransform.ts's own math exactly: a canvas point
+                    // (cx,cy) lands on screen at (cx*scale+translateX,
+                    // cy*scale+translateY), which only holds with a
+                    // top-left transform origin.
+                    transformOrigin: [0, 0],
+                    transform: [{ translateX: panXY.x }, { translateY: panXY.y }, { scale: scaleAnim }],
+                  }}
+                >
+                  <Canvas style={{ width: canvasWidth, height: canvasHeight }} testID="coloring-canvas">
+                    {displayImage && (
+                      <SkiaImage image={displayImage} x={0} y={0} width={canvasWidth} height={canvasHeight} />
+                    )}
+                    {strokes.map((stroke, i) => stroke.path && (
+                      <SkiaPath
+                        key={i}
+                        path={stroke.path}
+                        color={stroke.color}
+                        style="stroke"
+                        strokeWidth={stroke.width}
+                        strokeCap="round"
+                        strokeJoin="round"
+                      />
+                    ))}
+                    {currentPath && (
+                      <SkiaPath
+                        path={currentPath}
+                        color={selectedDisplayColor}
+                        style="stroke"
+                        strokeWidth={penWidth}
+                        strokeCap="round"
+                        strokeJoin="round"
+                      />
+                    )}
+                  </Canvas>
+                </Animated.View>
+              </View>
 
-      <View
-        testID="coloring-footer"
-        style={{
-          paddingHorizontal: spacing.md,
-          paddingBottom: spacing.md + insets.bottom,
-          paddingTop: spacing.sm,
-        }}
-      >
-        <View
+              {/* Touch cursor: a sibling of the transformed Animated.View
+                  above, NOT inside it — it must track the raw screen point
+                  under the fingertip regardless of current zoom/pan, per
+                  the "simply touching the screen doesn't look good" request
+                  this responds to. Pen mode previews the actual stroke
+                  thickness/color; fill mode shows a paint-bucket glyph. */}
+              {touchCursor && (
+                <View
+                  testID="touch-cursor"
+                  pointerEvents="none"
+                  style={[
+                    styles.touchCursorBase,
+                    toolMode === 'pen'
+                      ? {
+                          width: penWidth + 8,
+                          height: penWidth + 8,
+                          borderRadius: (penWidth + 8) / 2,
+                          borderColor: selectedDisplayColor,
+                          left: touchCursor.x - (penWidth + 8) / 2,
+                          top: touchCursor.y - (penWidth + 8) / 2,
+                        }
+                      : {
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          borderColor: coloringAccent.accentDark,
+                          left: touchCursor.x - 18,
+                          top: touchCursor.y - 18,
+                        },
+                  ]}
+                >
+                  {toolMode === 'fill' && <Text style={styles.touchCursorFillIcon}>{'\u{1FAA3}'}</Text>}
+                </View>
+              )}
+            </View>
+
+            {/* Toolbar overlay: floats on top of the canvas's bottom edge
+                instead of pushing it up, so the canvas always keeps its
+                full computed size. Collapsed = a small floating handle;
+                expanded = the full Fill/Pen/Undo/Clear/palette panel. */}
+            {!toolbarExpanded && (
+              <Pressable
+                testID="toolbar-handle"
+                onPress={expandToolbar}
+                accessibilityRole="button"
+                accessibilityLabel={t('toolbarExpand')}
+                style={[styles.toolbarHandle, { bottom: spacing.md + insets.bottom }]}
+              >
+                <Text style={styles.toolbarHandleIcon}>{toolMode === 'fill' ? '\u{1FAA3}' : '✏️'}</Text>
+              </Pressable>
+            )}
+
+            {(toolbarHasEverExpandedRef.current || toolbarExpanded) && (
+              <Animated.View
+                testID="coloring-toolbar-panel"
+                pointerEvents={toolbarExpanded ? 'auto' : 'none'}
+                style={[
+                  styles.toolbarPanel,
+                  elevation.level3,
+                  {
+                    paddingBottom: spacing.md + insets.bottom,
+                    transform: [{ translateY: toolbarSlide }],
+                  },
+                ]}
+              >
+                <Pressable
+                  testID="toolbar-collapse"
+                  onPress={collapseToolbar}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('toolbarCollapse')}
+                  style={styles.toolbarCollapseChevron}
+                >
+                  <Text style={styles.toolbarCollapseChevronText}>{'\u{2304}'}</Text>
+                </Pressable>
+
+                <View
           testID="coloring-toolbar-row"
           style={{
             flexDirection: 'row',
@@ -572,6 +879,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             onPressOut={() => animateToolbarButton('tool-fill', 1)}
             accessibilityRole="button"
             accessibilityLabel={t('toolFill')}
+            accessibilityState={{ selected: toolMode === 'fill' }}
           >
             {/* This inner Animated.View ("button face") is what presses down —
                 the outer Pressable's own layout box/hit area never changes,
@@ -601,6 +909,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             onPressOut={() => animateToolbarButton('tool-pen', 1)}
             accessibilityRole="button"
             accessibilityLabel={t('toolPen')}
+            accessibilityState={{ selected: toolMode === 'pen' }}
           >
             <Animated.View
               testID="tool-pen-face"
@@ -778,12 +1087,63 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
             );
           })}
         </ScrollView>
+              </Animated.View>
+            )}
+          </>
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  touchCursorBase: {
+    position: 'absolute',
+    borderWidth: 2,
+    // Translucent so it never fully hides the artwork under the fingertip.
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  touchCursorFillIcon: {
+    fontSize: 16,
+  },
+  toolbarHandle: {
+    position: 'absolute',
+    alignSelf: 'center',
+    width: touchTarget.primaryCTA,
+    height: touchTarget.primaryCTA,
+    borderRadius: touchTarget.primaryCTA / 2,
+    backgroundColor: coloringAccent.accent,
+    borderWidth: 2,
+    borderColor: coloringAccent.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...elevation.level3,
+  },
+  toolbarHandleIcon: {
+    fontSize: 28,
+  },
+  toolbarPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  toolbarCollapseChevron: {
+    alignSelf: 'center',
+    padding: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  toolbarCollapseChevronText: {
+    fontSize: 20,
+    color: colors.inkMuted,
+  },
   toolbarButtonFace: {
     flexDirection: 'row',
     alignItems: 'center',

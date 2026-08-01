@@ -2,6 +2,20 @@ import React from 'react';
 import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { TicTacToeScreen } from '../../src/tictactoe/TicTacToeScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import { getComputerMove } from '../../src/tictactoe/ticTacToeEngine';
+
+// Defaults to the REAL minimax (via jest.fn(actual.getComputerMove)) for
+// every test — only the one test below that needs a guaranteed computer
+// win overrides it with `.mockReturnValueOnce(...)` for a few calls, which
+// Jest automatically falls back off of afterward. Deliberately never
+// calling mockReset/mockClear on this particular mock anywhere in this
+// file, since that would also wipe the real-implementation passthrough for
+// every other test (the module mock is a single shared instance for the
+// whole file).
+jest.mock('../../src/tictactoe/ticTacToeEngine', () => {
+  const actual = jest.requireActual('../../src/tictactoe/ticTacToeEngine');
+  return { ...actual, getComputerMove: jest.fn(actual.getComputerMove) };
+});
 
 function renderGame(props: Partial<React.ComponentProps<typeof TicTacToeScreen>> = {}) {
   const onMenu = props.onMenu ?? jest.fn();
@@ -123,6 +137,74 @@ describe('TicTacToeScreen', () => {
     });
   });
 
+  // Regression tests for the premium-polish accessibility pass: cells
+  // previously had no accessibilityRole/Label at all (empty cells were a
+  // total screen-reader dead end; filled cells were only semi-usable via
+  // RN's implicit Text-child naming, with no row/column context).
+  describe('cell accessibility', () => {
+    it('gives every empty cell a role and a distinct row/column label', async () => {
+      const { getByTestId } = await renderGame({ mode: 'friend' });
+
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityRole).toBe('button');
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityLabel).toBe('Row 1, column 1, empty');
+      expect(getByTestId('tictactoe-cell-4').props.accessibilityLabel).toBe('Row 2, column 2, empty');
+      expect(getByTestId('tictactoe-cell-8').props.accessibilityLabel).toBe('Row 3, column 3, empty');
+    });
+
+    it('updates a cell\'s label to include its mark once filled, and marks it disabled', async () => {
+      const { getByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityLabel).toBe('Row 1, column 1, X');
+      expect(getByTestId('tictactoe-cell-0').props.accessibilityState).toEqual({ disabled: true });
+      // An untouched cell remains enabled and unlabeled-as-filled.
+      expect(getByTestId('tictactoe-cell-1').props.accessibilityState).toEqual({ disabled: false });
+    });
+
+    it('marks every cell disabled once the game is over, even ones that were never played', async () => {
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'friend' });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-3')); // O
+      await fireEvent.press(getByTestId('tictactoe-cell-1')); // X
+      await fireEvent.press(getByTestId('tictactoe-cell-4')); // O
+      await fireEvent.press(getByTestId('tictactoe-cell-2')); // X wins
+      await findByTestId('tictactoe-complete');
+
+      // Cells 5-8 were never tapped, but the game is over — none should
+      // read as tappable to a screen-reader user any more.
+      expect(getByTestId('tictactoe-cell-8').props.accessibilityState).toEqual({ disabled: true });
+    });
+  });
+
+  // Regression test for a real, screenshot-confirmed bug: the board used to
+  // be a single flexDirection:'row', flexWrap:'wrap' container over all 9
+  // cells, relying on Yoga to break a new line after exactly 3 cells. Since
+  // each cell's width is boardSize/3 (routinely fractional), the third
+  // column wrapped early on a real device, rendering as one solid strip of
+  // the board's own background color instead of three bordered cells (same
+  // failure class PuzzleScreen.tsx's own grid already fixed the same way).
+  // Explicit per-row containers make each row's cell count independent of
+  // any floating-point width comparison.
+  describe('board grid layout', () => {
+    it('lays out exactly 3 cells per row, in 3 explicit row containers, not relying on flexWrap', async () => {
+      const { getByTestId } = await renderGame({ mode: 'friend' });
+
+      for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
+        const row = getByTestId(`tictactoe-row-${rowIndex}`);
+        const cellsInRow = within(row).getAllByRole('button');
+        expect(cellsInRow).toHaveLength(3);
+        // Each row holds exactly the 3 cells it's meant to (0-2, 3-5, 6-8),
+        // never a cell that belongs to a different row.
+        for (let colIndex = 0; colIndex < 3; colIndex++) {
+          const expectedIndex = rowIndex * 3 + colIndex;
+          expect(within(row).getByTestId(`tictactoe-cell-${expectedIndex}`)).toBeTruthy();
+        }
+      }
+    });
+  });
+
   describe('computer mode', () => {
     it('lets the human (X) move first, then triggers a computer (O) move automatically', async () => {
       jest.useFakeTimers();
@@ -189,6 +271,43 @@ describe('TicTacToeScreen', () => {
 
       const status = getByTestId('tictactoe-status').props.children as string;
       expect(status).not.toBe('You win! 🎉');
+      jest.useRealTimers();
+    });
+
+    // Regression test for the premium-polish child-delight pass: the
+    // computer beating the child previously fired the exact same confetti/
+    // success styling as the child winning — a loss shouldn't be styled as
+    // a triumph. Forces a specific computer win by scripting its moves
+    // (via the mocked getComputerMove) rather than relying on the human
+    // player to lose against the real minimax, which the AI is specifically
+    // designed never to allow.
+    it('does NOT use success tone/confetti when the computer wins, and shows an encouraging message instead', async () => {
+      jest.useFakeTimers();
+      (getComputerMove as jest.Mock)
+        .mockReturnValueOnce(0) // O: top-left
+        .mockReturnValueOnce(1) // O: top-middle
+        .mockReturnValueOnce(2); // O: top-right -> completes the top row
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      // Human (X) plays cells that never block the top row the computer is
+      // building: 3, 6, 7.
+      for (const index of [3, 6, 7]) {
+        await act(async () => {
+          fireEvent.press(getByTestId(`tictactoe-cell-${index}`));
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(600);
+        });
+      }
+
+      const overlay = await findByTestId('tictactoe-complete');
+      expect(within(overlay).getByText('Computer wins')).toBeTruthy();
+      expect(within(overlay).getByText('Good try! Want to play again?')).toBeTruthy();
+      // No celebration bubble/emoji for a computer win — that's the
+      // success-only flourish CelebrationOverlay renders when `tone`
+      // is 'success' AND an `emoji` is provided.
+      expect(within(overlay).queryByTestId('celebration-bubble')).toBeNull();
+
       jest.useRealTimers();
     });
   });

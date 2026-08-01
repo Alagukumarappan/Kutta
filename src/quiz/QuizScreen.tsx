@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, View, Text, Pressable, StyleSheet } from 'react-native';
+import { Animated, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
@@ -7,28 +7,30 @@ import { loadQuestions } from './loadQuestions';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
 import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
-import { colors, radii, spacing, shadow } from '../theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 import {
   colors as dsColors,
   spacing as dsSpacing,
   typography,
   motion,
   getActivityPalette,
+  useReducedMotion,
   RaisedCard,
   RaisedPrimaryButton,
   RaisedSecondaryButton,
 } from '../design-system';
 
 // REDESIGN (matches QuestionRenderer.tsx's iteration 2 pass onto
-// src/design-system/): only the completion screen below (score card + Play
-// Again/Home) is rebuilt on the new design-system foundation — the
-// loading/error/empty states above still intentionally use the OLD
-// src/theme/tokens.ts palette, since redesigning those is out of this
-// iteration's scope (same "one screen/moment at a time" precedent
+// src/design-system/): the completion screen (score card + Play Again/Home)
+// and, as of the premium-polish pass's error-state consistency fix, the
+// error state too, are built on the new design-system foundation — the
+// loading/empty states above still intentionally use the OLD
+// src/theme/tokens.ts palette, since redesigning those is out of scope for
+// a single-purpose iteration (same "one screen/moment at a time" precedent
 // QuestionRenderer's own file-header comment set). Both `colors`/`spacing`
 // imports (old theme + new design-system) therefore coexist in this file on
 // purpose, aliased as `dsColors`/`dsSpacing` to keep every existing
-// loading/error-state usage of the old, unprefixed `colors`/`spacing`
+// loading/empty-state usage of the old, unprefixed `colors`/`spacing`
 // unambiguous and untouched.
 const quizPalette = getActivityPalette('quiz');
 
@@ -72,10 +74,23 @@ export function QuizScreen({
   // permanently leaves this screen instance.
   const playAgainFiredRef = useRef(false);
   const hasNavigatedHomeRef = useRef(false);
+  // Same guard idiom, but for the in-quiz "Next" button: without it, two
+  // taps landing before the first setState's re-render commits both fire
+  // handleNext with the SAME (stale) selectedOptionId closure, so React
+  // applies two answerCurrentQuestion() updates back-to-back — the second
+  // one scores the *next* question (which the child was never shown) using
+  // the *previous* question's answer, silently skipping a question and
+  // corrupting the score. Re-armed whenever the current question changes
+  // (a fresh question means a fresh Next press is legitimate).
+  const nextFiredRef = useRef(false);
 
   useEffect(() => {
     if (state?.isFinished) playAgainFiredRef.current = false;
   }, [state?.isFinished]);
+
+  useEffect(() => {
+    nextFiredRef.current = false;
+  }, [state?.currentIndex]);
 
   // Brief pop-in entrance for the completion screen's score card, mirroring
   // QuestionRenderer's own feedbackCard/cardScaleAnim+cardOpacityAnim recipe
@@ -86,6 +101,12 @@ export function QuizScreen({
   // the `state.isFinished` JSX branch further down.
   const scoreCardScaleAnim = useRef(new Animated.Value(0.85)).current;
   const scoreCardOpacityAnim = useRef(new Animated.Value(0)).current;
+  // Same OS "reduce motion" check CelebrationOverlay now respects (see
+  // src/design-system/useReducedMotion.ts) — this pop-in is a separate,
+  // hand-rolled animation (not routed through CelebrationOverlay, see the
+  // file-header comment on why the completion screen is built directly),
+  // so it needed its own opt-out rather than inheriting one.
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (!state?.isFinished) {
@@ -98,10 +119,23 @@ export function QuizScreen({
       return;
     }
 
-    const animation = Animated.parallel([
-      Animated.spring(scoreCardScaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
-      Animated.timing(scoreCardOpacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
-    ]);
+    // With reduce-motion enabled, skip the bouncy spring entirely — jump
+    // straight to the resting scale and fade opacity only (same recipe as
+    // CelebrationOverlay's own reduced-motion path).
+    let animation: Animated.CompositeAnimation;
+    if (reducedMotion) {
+      scoreCardScaleAnim.setValue(1);
+      animation = Animated.timing(scoreCardOpacityAnim, {
+        toValue: 1,
+        duration: motion.duration.base,
+        useNativeDriver: true,
+      });
+    } else {
+      animation = Animated.parallel([
+        Animated.spring(scoreCardScaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.popBouncy }),
+        Animated.timing(scoreCardOpacityAnim, { toValue: 1, duration: motion.duration.base, useNativeDriver: true }),
+      ]);
+    }
     animation.start();
 
     // Mirrors QuestionRenderer's own cleanup: stop (don't leave running) if
@@ -110,7 +144,7 @@ export function QuizScreen({
     return () => {
       animation.stop();
     };
-  }, [state?.isFinished, scoreCardScaleAnim, scoreCardOpacityAnim]);
+  }, [state?.isFinished, reducedMotion, scoreCardScaleAnim, scoreCardOpacityAnim]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,24 +172,42 @@ export function QuizScreen({
   }, [quizFolderUri, childAge, retryToken]);
 
   const insetStyle = {
+    // This screen is now shown with headerShown:false (see RootNavigator —
+    // the native header/back-button was dropped for every activity screen
+    // in favor of the device's own hardware/gesture back), so unlike
+    // before, nothing else consumes the top safe-area inset — it has to be
+    // added here explicitly, the same way HomeScreen (also headerShown:
+    // false) already accounts for its own insets.top.
+    paddingTop: spacing.lg + insets.top,
     paddingLeft: spacing.lg + insets.left,
     paddingRight: spacing.lg + insets.right,
     paddingBottom: spacing.lg + insets.bottom,
   };
 
   if (error) {
+    // Restyled onto the shared design-system's error-card shape — the same
+    // RaisedCard + RaisedPrimaryButton pattern every other gallery/player's
+    // error state already converged on (VideoPlayerScreen, ColoringGallery,
+    // PuzzleGallery, VideoGallery), which this screen had been left behind
+    // on (see this file's own header comment on why the completion screen
+    // moved onto the new foundation first but the loading/error/empty
+    // states didn't). Deliberately scoped to just the error state here —
+    // the loading/empty branches below are untouched.
     return (
       <View testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
-        <Text style={styles.messageText}>{t('loadError')}</Text>
-        <Pressable
-          testID="quiz-retry"
-          onPress={() => setRetryToken((n) => n + 1)}
-          style={styles.retryButton}
-          accessibilityRole="button"
-          accessibilityLabel={t('retry')}
-        >
-          <Text style={styles.retryButtonText}>{t('retry')}</Text>
-        </Pressable>
+        <RaisedCard color={dsColors.surface} borderColor={quizPalette.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
+          <View style={styles.errorCardInner}>
+            <Text style={styles.errorTitle}>{t('loadError')}</Text>
+            <RaisedPrimaryButton
+              testID="quiz-retry"
+              label={t('retry')}
+              onPress={() => setRetryToken((n) => n + 1)}
+              color={quizPalette.accent}
+              textColor={quizPalette.onAccentText}
+              accessibilityLabel={t('retry')}
+            />
+          </View>
+        </RaisedCard>
       </View>
     );
   }
@@ -264,7 +316,8 @@ export function QuizScreen({
   }
 
   function handleNext() {
-    if (selectedOptionId === null) return;
+    if (selectedOptionId === null || nextFiredRef.current) return;
+    nextFiredRef.current = true;
     setState((prev) => (prev ? answerCurrentQuestion(prev, selectedOptionId) : prev));
     setSelectedOptionId(null);
   }
@@ -310,20 +363,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.md,
   },
-  retryButton: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coralDark,
-    borderWidth: 2,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    ...shadow,
-    elevation: 4,
+  errorCardOuter: {
+    width: '100%',
+    maxWidth: 420,
   },
-  retryButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.white,
+  errorCardInner: {
+    alignItems: 'center',
+    paddingVertical: dsSpacing.lg,
+    paddingHorizontal: dsSpacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: dsColors.ink,
+    textAlign: 'center',
+    marginBottom: dsSpacing.md,
   },
   // Wraps RaisedCard purely to carry the entrance opacity/scale transform —
   // RaisedCard's own static-panel path renders a plain (non-Animated) View,

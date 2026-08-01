@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, AccessibilityInfo } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ColoringScreen } from '../../src/coloring/ColoringScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
@@ -82,8 +82,33 @@ describe('ColoringScreen', () => {
     indexOfSingleActiveTouch: -1,
     mostRecentTimeStamp: 0,
   };
+  // PanResponder's own internal onResponderMove has a move-dedup guard
+  // (`gestureState._accountsForMovesUpTo === touchHistory.mostRecentTimeStamp`)
+  // that SILENTLY SWALLOWS the move (never calling onPanResponderMove at
+  // all) whenever the touchHistory's timestamp matches the gesture state's
+  // own initial value — which itself defaults to 0 (see
+  // PanResponder.js's `_initializeGestureState`). Since `fakeTouchHistory`
+  // above also uses `mostRecentTimeStamp: 0`, firing a 'responderMove'
+  // event with that same object is silently a no-op. Any 'responderMove'
+  // event needs a distinct, non-zero timestamp instead.
+  const fakeTouchHistoryAfterMove = { ...fakeTouchHistory, mostRecentTimeStamp: 16 };
+
+  // The toolbar (Fill/Pen/Undo/Clear/palette/pen-size-slider) now starts
+  // collapsed and floats as an overlay — its controls only exist in the
+  // render tree once the collapsed handle has been pressed at least once
+  // (see ColoringScreen.tsx's `toolbarHasEverExpandedRef`). Every test
+  // below that reaches into the toolbar panel calls this first.
+  // Accepts either a sync `getByTestId` or an async `findByTestId` — `await`
+  // resolves both a plain element and a Promise<element> the same way, so
+  // this works as a drop-in helper regardless of which query style a given
+  // test destructured from `render()`.
+  async function expandToolbar(queryTestId: (id: string) => any) {
+    const handle = await queryTestId('toolbar-handle');
+    await fireEvent.press(handle);
+  }
 
   async function drawOnePenStroke(getByTestId: (id: string) => any) {
+    await expandToolbar(getByTestId);
     await fireEvent.press(getByTestId('tool-pen'));
     const touchArea = getByTestId('coloring-canvas-touch-area');
     // PanResponder's onResponderGrant/onResponderRelease handlers read
@@ -198,6 +223,7 @@ describe('ColoringScreen', () => {
     );
 
     await findByTestId('coloring-canvas-touch-area');
+    await expandToolbar(findByTestId);
 
     // Red is PALETTE[0], the initially-selected color.
     const redSwatch = await findByLabelText('Red');
@@ -224,6 +250,7 @@ describe('ColoringScreen', () => {
     );
 
     await findByTestId('coloring-canvas-touch-area');
+    await expandToolbar(findByTestId);
 
     const redSwatch = await findByLabelText('Red');
     const { top, bottom, left, right } = redSwatch.props.hitSlop ?? {};
@@ -245,6 +272,7 @@ describe('ColoringScreen', () => {
     );
 
     await findByTestId('coloring-canvas-touch-area');
+    await expandToolbar(findByTestId);
     await findByLabelText('Rot');
     await findByLabelText('Grün');
     await findByLabelText('Grau');
@@ -302,6 +330,11 @@ describe('ColoringScreen', () => {
       // Clear drawing only renders once there is something to clear.
       expect(queryByTestId('clear-drawing')).toBeNull();
       await drawOnePenStroke(getByTestId);
+      // The canvas touch inside drawOnePenStroke auto-collapsed the toolbar
+      // (the same "attention returned to the picture" rule that collapses
+      // it on any canvas touch) — re-expand before reaching for a
+      // toolbar-panel button again.
+      await expandToolbar(getByTestId);
       const clearButton = await findByTestId('clear-drawing');
 
       await fireEvent.press(clearButton);
@@ -327,6 +360,9 @@ describe('ColoringScreen', () => {
       );
       await findByTestId('coloring-canvas-touch-area');
       await drawOnePenStroke(getByTestId);
+      // Re-expand: the canvas touch inside drawOnePenStroke auto-collapsed
+      // the toolbar.
+      await expandToolbar(getByTestId);
       await fireEvent.press(await findByTestId('clear-drawing'));
 
       await pressAlertButton('Clear');
@@ -346,6 +382,9 @@ describe('ColoringScreen', () => {
       );
       await findByTestId('coloring-canvas-touch-area');
       await drawOnePenStroke(getByTestId);
+      // Re-expand: the canvas touch inside drawOnePenStroke auto-collapsed
+      // the toolbar.
+      await expandToolbar(getByTestId);
       await fireEvent.press(await findByTestId('clear-drawing'));
 
       await pressAlertButton('Cancel');
@@ -363,6 +402,9 @@ describe('ColoringScreen', () => {
       );
       await findByTestId('coloring-canvas-touch-area');
       await drawOnePenStroke(getByTestId);
+      // Re-expand: the canvas touch inside drawOnePenStroke auto-collapsed
+      // the toolbar.
+      await expandToolbar(getByTestId);
       await fireEvent.press(await findByTestId('clear-drawing'));
 
       expect(Alert.alert).toHaveBeenCalledWith(
@@ -420,6 +462,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
 
       expect(queryByTestId('undo-fill')).toBeNull();
       await fireFillTap(getByTestId);
@@ -441,6 +484,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
 
       await fireFillTap(getByTestId);
       expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
@@ -464,6 +508,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
 
       await fireFillTap(getByTestId);
       await fireEvent.press(await findByTestId('undo-fill'));
@@ -484,6 +529,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
 
       await fireFillTap(getByTestId);
 
@@ -533,6 +579,46 @@ describe('ColoringScreen', () => {
     });
   });
 
+  // Regression tests for the premium-polish accessibility pass: the Fill/Pen
+  // tool-mode buttons already had accessibilityRole/Label, but no
+  // accessibilityState — a screen-reader user had no way to tell which tool
+  // was currently active, the same "which one is selected" gap this app's
+  // palette swatches (see palette-swatch-selection tests below) already
+  // avoid.
+  describe('tool-mode accessibility state', () => {
+    it('marks only the active tool (fill, by default) as selected', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+
+      expect(getByTestId('tool-fill').props.accessibilityState).toEqual({ selected: true });
+      expect(getByTestId('tool-pen').props.accessibilityState).toEqual({ selected: false });
+    });
+
+    it('flips the selected tool once Pen is pressed', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      expect(getByTestId('tool-pen').props.accessibilityState).toEqual({ selected: true });
+      expect(getByTestId('tool-fill').props.accessibilityState).toEqual({ selected: false });
+    });
+  });
+
   describe('pen size slider', () => {
     it('is hidden in fill mode and appears once pen mode is selected', async () => {
       (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
@@ -543,6 +629,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
 
       expect(queryByTestId('pen-size-slider')).toBeNull();
 
@@ -562,6 +649,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
       await fireEvent.press(getByTestId('tool-pen'));
 
       const slider = await findByTestId('pen-size-slider');
@@ -580,6 +668,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
       await fireEvent.press(getByTestId('tool-pen'));
 
       // The community Slider component destructures `onValueChange` into
@@ -605,6 +694,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
       await fireEvent.press(getByTestId('tool-pen'));
 
       const slider = await findByTestId('pen-size-slider');
@@ -633,6 +723,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(findByTestId);
 
       // Red is PALETTE[0], the initially-selected color.
       const redFlattened = StyleSheet.flatten((await findByTestId('palette-color-0-swatch')).props.style);
@@ -668,6 +759,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(findByTestId);
 
       // A single awaited press — mirroring this file's/QuestionRenderer's
       // established safe pattern for driving Animated wiring — rather than
@@ -681,6 +773,51 @@ describe('ColoringScreen', () => {
       expect(toValues).toContain(1); // previously-selected Red settles back
 
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this pop
+    // always sprang the newly-picked swatch up (and the previously-picked
+    // one back down), ignoring the OS reduce-motion setting — the same
+    // bouncy-pop category already fixed for the quiz's progress dots. With
+    // the setting on, both swatches should land directly on their resting
+    // scale with no spring in between.
+    it('skips the swatch-pop spring when the OS reduce-motion setting is on, landing both swatches directly on their resting scale', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, findByLabelText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(findByTestId);
+
+      const blueSwatch = await findByLabelText('Blue'); // PALETTE[4]
+      await fireEvent.press(blueSwatch);
+
+      const blueFlattened = StyleSheet.flatten((await findByTestId('palette-color-4-swatch')).props.style);
+      const blueScale = blueFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      const redFlattened = StyleSheet.flatten((await findByTestId('palette-color-0-swatch')).props.style);
+      const redScale = redFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+
+      expect(blueScale).toBeCloseTo(1.12);
+      expect(redScale).toBeCloseTo(1);
+
+      // `jest.restoreAllMocks()` alone does NOT undo this specific mock:
+      // `AccessibilityInfo.isReduceMotionEnabled` is already an auto-mocked
+      // jest.fn() (a native module method), so `jest.spyOn` above just
+      // returns that same mock rather than wrapping a real implementation —
+      // there's no "original" for restore to revert to, and the
+      // `mockResolvedValue(true)` set above silently keeps leaking into
+      // every later test in this file (a real, verified bug: confirmed by
+      // reproducing it in isolation — see iteration 30's notes). Explicitly
+      // resetting the resolved value back to `false` here is what actually
+      // fixes it; `restoreAllMocks()` is kept alongside for the OTHER real
+      // (non-automocked) spies this file's tests use.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
+      jest.restoreAllMocks();
     });
   });
 
@@ -714,6 +851,7 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
       await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
 
       const fillButton = getByTestId('tool-fill');
       await fireEvent(fillButton, 'pressIn');
@@ -730,6 +868,345 @@ describe('ColoringScreen', () => {
       // toolbar tests elsewhere, which press these same buttons via
       // fireEvent.press and observe toolMode-driven UI change correctly.
       springSpy.mockRestore();
+    });
+
+    // Regression test for the premium-polish accessibility pass: this
+    // press-in/press-out scale always sprang, ignoring the OS reduce-motion
+    // setting — the same category as the palette-swatch pop just above and
+    // useTiltPress's app-wide press feedback (iteration 24). Unlike the
+    // spring case above, `setValue` takes effect synchronously under Jest,
+    // so this reads the settled flattened style directly rather than
+    // spying on `Animated.spring`.
+    it('skips the toolbar button press spring when the OS reduce-motion setting is on, landing directly on the pressed/rest scale', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+
+      const fillButton = getByTestId('tool-fill');
+      await fireEvent(fillButton, 'pressIn');
+
+      const pressedFlattened = StyleSheet.flatten(getByTestId('tool-fill-face').props.style);
+      const pressedScale = pressedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(pressedScale).toBeCloseTo(0.94);
+
+      await fireEvent(fillButton, 'pressOut');
+
+      const restedFlattened = StyleSheet.flatten(getByTestId('tool-fill-face').props.style);
+      const restedScale = restedFlattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(restedScale).toBeCloseTo(1);
+
+      // See the matching comment on the swatch-pop reduce-motion test above
+      // — `restoreAllMocks()` alone can't undo this specific mock.
+      (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
+      jest.restoreAllMocks();
+    });
+  });
+
+  // New behavior for this iteration: the Fill/Pen/Undo/Clear/palette panel
+  // no longer sits permanently below the canvas — it floats as a
+  // collapsible overlay, starting collapsed (just a small floating handle)
+  // so the picture gets the full screen by default.
+  describe('toolbar overlay expand/collapse', () => {
+    it('starts collapsed: the handle is present, the panel is not yet mounted', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const handle = await findByTestId('toolbar-handle');
+      expect(handle.props.accessibilityRole).toBe('button');
+      expect(handle.props.accessibilityLabel).toBe('Show tools');
+      // Lazily mounted: never expanded yet, so the panel subtree (and every
+      // control inside it) genuinely isn't in the tree at all, not just
+      // hidden.
+      expect(queryByTestId('coloring-toolbar-panel')).toBeNull();
+      expect(queryByTestId('tool-fill')).toBeNull();
+    });
+
+    it('pressing the handle reveals the panel with every control still reachable inside it', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+
+      expect(await findByTestId('coloring-toolbar-panel')).toBeTruthy();
+      expect(await findByTestId('tool-fill')).toBeTruthy();
+      expect(await findByTestId('tool-pen')).toBeTruthy();
+      expect(await findByTestId('coloring-palette')).toBeTruthy();
+      // The handle itself is gone while expanded (only one affordance
+      // visible at a time — either "show" or "hide", never both).
+      expect(queryByTestId('toolbar-handle')).toBeNull();
+    });
+
+    it('pressing the collapse chevron hides the panel again and brings the handle back', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+      expect(queryByTestId('toolbar-handle')).toBeNull();
+
+      const chevron = await findByTestId('toolbar-collapse');
+      expect(chevron.props.accessibilityLabel).toBe('Hide tools');
+      await fireEvent.press(chevron);
+
+      expect(await findByTestId('toolbar-handle')).toBeTruthy();
+    });
+  });
+
+  describe('auto-collapse on canvas touch', () => {
+    it('collapses an expanded toolbar the moment the canvas is touched', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+      expect(queryByTestId('toolbar-handle')).toBeNull();
+
+      // A canvas touch, without even completing a fill/stroke — the grant
+      // alone is enough to collapse (see the "would you like to draw?"
+      // framing this responds to: picking a tool THEN touching the canvas
+      // collapses the toolbar to give the picture the full screen back).
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: { locationX: 5, locationY: 5 },
+      });
+
+      expect(await findByTestId('toolbar-handle')).toBeTruthy();
+    });
+
+    it('does not auto-collapse just from picking a tool/color — only an actual canvas touch triggers it', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      expect(queryByTestId('toolbar-handle')).toBeNull();
+      expect(await findByTestId('coloring-toolbar-panel')).toBeTruthy();
+    });
+  });
+
+  describe('touch cursor indicator', () => {
+    it('appears at the touch point while drawing/filling, and disappears on release', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      expect(queryByTestId('touch-cursor')).toBeNull();
+
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: { locationX: 40, locationY: 60 },
+      });
+
+      const cursor = await findByTestId('touch-cursor');
+      const flattened = StyleSheet.flatten(cursor.props.style);
+      // Fill mode (the default): a fixed 36x36 ring centered on the touch
+      // point.
+      expect(flattened.left).toBeCloseTo(40 - 18);
+      expect(flattened.top).toBeCloseTo(60 - 18);
+
+      await fireEvent(touchArea, 'responderRelease', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: { locationX: 40, locationY: 60 },
+      });
+      expect(queryByTestId('touch-cursor')).toBeNull();
+    });
+
+    it('also disappears on a terminated gesture (not just a clean release)', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: { locationX: 10, locationY: 10 },
+      });
+      expect(await findByTestId('touch-cursor')).toBeTruthy();
+
+      await fireEvent(touchArea, 'responderTerminate', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: { locationX: 10, locationY: 10 },
+      });
+      expect(queryByTestId('touch-cursor')).toBeNull();
+    });
+
+    it('sizes the cursor to the current pen width in Pen mode, tinted with the selected color', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+      await fireEvent.press(getByTestId('tool-pen'));
+
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: { locationX: 50, locationY: 50 },
+      });
+
+      const cursor = await findByTestId('touch-cursor');
+      const flattened = StyleSheet.flatten(cursor.props.style);
+      // Default pen width is 14 (see PEN_STROKE_WIDTH_DEFAULT) -> ring size
+      // penWidth + 8 = 22.
+      expect(flattened.width).toBe(22);
+      expect(flattened.height).toBe(22);
+      expect(flattened.borderColor).toBe('#E63946'); // PALETTE[0] (Red), the default selection
+    });
+  });
+
+  describe('pinch-to-zoom (synthetic 2-touch)', () => {
+    // Extends this file's existing single-touch synthetic-event idiom with
+    // a 2-element `nativeEvent.touches` array (pageX/pageY, matching what
+    // ColoringScreen.tsx's `touchesFromEvent` reads for pinch/pan math —
+    // see that function's own comment for why page-space, not
+    // location-space).
+    it('scales the canvas transform up when two fingers move apart', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      const { StyleSheet } = require('react-native');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: {
+          locationX: 50,
+          locationY: 50,
+          touches: [
+            { pageX: 40, pageY: 100 },
+            { pageX: 60, pageY: 100 },
+          ],
+        },
+      });
+      // Distance doubles: 20 -> 40.
+      await fireEvent(touchArea, 'responderMove', {
+        touchHistory: fakeTouchHistoryAfterMove,
+        nativeEvent: {
+          locationX: 50,
+          locationY: 50,
+          touches: [
+            { pageX: 30, pageY: 100 },
+            { pageX: 70, pageY: 100 },
+          ],
+        },
+      });
+
+      const transform = await findByTestId('coloring-canvas-transform');
+      const flattened = StyleSheet.flatten(transform.props.style);
+      const scale = flattened.transform.find((entry: Record<string, unknown>) => 'scale' in entry).scale;
+      expect(scale).toBeCloseTo(2);
+    });
+
+    it('does not trigger a flood fill when a two-finger gesture ends', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+
+      await fireEvent(touchArea, 'responderGrant', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: {
+          locationX: 50,
+          locationY: 50,
+          touches: [
+            { pageX: 40, pageY: 100 },
+            { pageX: 60, pageY: 100 },
+          ],
+        },
+      });
+      await fireEvent(touchArea, 'responderRelease', {
+        touchHistory: fakeTouchHistory,
+        nativeEvent: {
+          locationX: 50,
+          locationY: 50,
+          touches: [
+            { pageX: 40, pageY: 100 },
+            { pageX: 60, pageY: 100 },
+          ],
+        },
+      });
+
+      expect(Skia.Image.MakeImage).not.toHaveBeenCalled();
+    });
+
+    it('still fills correctly with a single-finger tap, unaffected by the new multi-touch handling', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      await fireFillTap(getByTestId);
+
+      expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
     });
   });
 });
