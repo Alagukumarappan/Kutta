@@ -671,6 +671,48 @@ file's own established convention, confirmed the never-resolving test
 promise doesn't leak or cause act() warnings, confirmed no other blank
 state remains in this file).
 
+### Iteration 18 — Bug fix: TicTacToeSetupScreen's friend-name field had no length cap
+**Area:** Bug Hunting.
+
+**Problem:** `TicTacToeSetupScreen.tsx`'s friend-name `TextInput` had no
+`maxLength`. That name is later rendered centered and unbounded on
+`TicTacToeScreen.tsx`'s `statusText` and the shared `CelebrationOverlay`'s
+completion title — neither of which truncates or scrolls. An arbitrarily
+long name could wrap across many lines on a short, landscape-locked
+phone screen and push the board or completion actions out of view — the
+same class of layout break this screen's own compact-redesign fix
+(session-start iteration) was written to prevent.
+
+**Fix:** Added `maxLength={20}` to the input for the native-level UX cue.
+
+**Caught and fixed during review (6th genuine review-caught issue):**
+RN's `maxLength` prop only enforces truncation at the native widget level
+for direct typing — it doesn't clamp the JS-side `onChangeText` argument
+itself, and real Android IME paths (predictive-text/batch-insert) have
+historically been able to bypass native `maxLength` entirely. Without a
+JS-side clamp, `friendName` state itself had no actual guarantee of
+staying ≤20 characters. Fixed by adding `handleFriendNameChange`, which
+slices the string to `FRIEND_NAME_MAX_LENGTH` before calling
+`setFriendName` — the real guarantee, with `maxLength` as the matching
+native-level nicety on top.
+
+**Explicitly investigated, not fixed (correctly scoped out):** the SAME
+unbounded-render risk exists for the child's OWN name (`profile.name`,
+editable in Onboarding/Settings, also flows through `childName` into
+`TicTacToeScreen`'s `statusText`/`CelebrationOverlay` render paths) — this
+fix is the first (and still only) length cap anywhere in the codebase,
+so it establishes a pattern rather than following one, and only covers
+half of the two names that hit this render surface. Left for a future
+iteration rather than scope-creeping this one.
+
+**Tests:** 2 new tests in `__tests__/tictactoe/TicTacToeSetupScreen.test.tsx`
+— one confirming the `maxLength` prop, and one (added after review) that
+proves the ACTUAL clamp by firing a 50-character `changeText` (which RNTL
+delivers to `onChangeText` in full, bypassing any native-level
+truncation) and checking `onStart` receives exactly 20 characters. Both
+verified via manual revert-and-rerun to genuinely fail without their
+respective fixes. Full suite: 643/643 passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -692,6 +734,7 @@ state remains in this file).
 - Iteration 13: SettingsScreen had no name validation, letting a parent silently persist an empty name. See above.
 - Iteration 14: SettingsScreen's "Change content folder" had no double-tap guard, the third time this exact bug class has been found and fixed in this codebase. See above.
 - Iteration 16: SettingsScreen could silently discard a name/age/language/picture edit made during an in-flight migration. See above.
+- Iteration 18: TicTacToeSetupScreen's friend-name field had no length cap, risking layout overflow on the next screen. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -741,13 +784,14 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   win screen at once, since it's the shared component — higher leverage
   than a per-screen fix, worth its own careful iteration given it's a
   widely-shared component (unlike the smaller isolated fixes so far).
-- **Bug Hunting (S, from iteration 17's research pass, not yet done):**
-  `TicTacToeSetupScreen.tsx`'s friend-name `TextInput` has no `maxLength`.
-  This screen's own existing comments document a prior real bug where
-  oversized elements pushed content off a short/landscape screen — an
-  unbounded friend name could reintroduce that same class of overflow on
-  the next screen (`TicTacToeScreen`'s `statusText`/`CelebrationOverlay`
-  title, both of which render the name centered and unbounded).
+- **Bug Hunting (S, from iteration 18's research, not yet done):** the
+  SAME unbounded-render risk fixed for the friend name in iteration 18
+  still exists for the child's OWN name (`profile.name`, editable in
+  Onboarding/Settings) — it flows through `childName` into the exact same
+  `TicTacToeScreen` `statusText`/`CelebrationOverlay` render paths, with
+  no length cap anywhere it's set. Lower urgency than the friend name
+  (typically shorter, chosen once at onboarding rather than per-game), but
+  the same fix pattern would apply directly.
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by

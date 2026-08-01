@@ -19,6 +19,17 @@ export type TicTacToeMode = 'computer' | 'friend';
 
 const PALETTE = getActivityPalette('tictactoe');
 
+// See the friend-name TextInput's own comment below for why this is capped
+// at all. RN's `maxLength` prop only enforces truncation at the native
+// widget level for direct typing — it doesn't clamp `onChangeText`'s own
+// argument, which some Android IME paths (predictive-text/batch-insert)
+// have historically been able to bypass, and nothing stops a future
+// prefill (e.g. a contacts picker) from handing this a longer string
+// either. Clamping the state itself in handleFriendNameChange below is
+// the actual guarantee; `maxLength` is just the native-level UX nicety on
+// top of it.
+const FRIEND_NAME_MAX_LENGTH = 20;
+
 const DIFFICULTIES: { value: Difficulty; labelKey: 'tictactoeDifficultyEasy' | 'tictactoeDifficultyMedium' | 'tictactoeDifficultyHard' }[] = [
   { value: 'easy', labelKey: 'tictactoeDifficultyEasy' },
   { value: 'medium', labelKey: 'tictactoeDifficultyMedium' },
@@ -47,6 +58,10 @@ export function TicTacToeSetupScreen({
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [friendName, setFriendName] = useState('');
   const trimmedFriendName = friendName.trim();
+
+  function handleFriendNameChange(text: string) {
+    setFriendName(text.slice(0, FRIEND_NAME_MAX_LENGTH));
+  }
 
   const canStart =
     (mode === 'friend' && trimmedFriendName.length > 0) || (mode === 'computer' && difficulty !== null);
@@ -164,7 +179,21 @@ export function TicTacToeSetupScreen({
           <TextInput
             testID="tictactoe-friend-name-input"
             value={friendName}
-            onChangeText={setFriendName}
+            onChangeText={handleFriendNameChange}
+            // Unlike this screen's own name/age fields elsewhere in the app
+            // (which have no length cap), this specific name gets rendered
+            // centered and unbounded on the NEXT screen — TicTacToeScreen's
+            // statusText and the shared CelebrationOverlay's completion
+            // title — neither of which truncates or scrolls. An arbitrarily
+            // long name there could wrap across many lines on a short,
+            // landscape-locked phone screen and push the board or
+            // completion actions out of view, the same class of layout
+            // break this screen's own compact redesign was fixed for
+            // earlier. 20 characters comfortably fits any real name. The
+            // actual clamp lives in handleFriendNameChange (see its own
+            // comment on why maxLength alone isn't a strong enough
+            // guarantee) — this prop is just the matching native-level cue.
+            maxLength={FRIEND_NAME_MAX_LENGTH}
             style={[styles.friendNameInput, trimmedFriendName.length > 0 && styles.friendNameInputFilled]}
             placeholder={t('tictactoeFriendNamePlaceholder')}
             placeholderTextColor={colors.inkMuted}

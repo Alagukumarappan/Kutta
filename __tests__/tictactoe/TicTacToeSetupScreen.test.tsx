@@ -52,6 +52,38 @@ describe('TicTacToeSetupScreen', () => {
     expect(onStart).toHaveBeenCalledWith('friend', null, 'Alex');
   });
 
+  // Regression test for a real bug fix: this name is later rendered
+  // centered and unbounded on TicTacToeScreen's statusText and the shared
+  // CelebrationOverlay's completion title, neither of which truncates or
+  // scrolls — an arbitrarily long name could wrap across many lines on a
+  // short, landscape-locked screen and push the board/completion actions
+  // out of view.
+  it('caps the friend name at a sensible maximum length', async () => {
+    const { getByTestId } = await renderScreen();
+
+    await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+
+    expect(getByTestId('tictactoe-friend-name-input').props.maxLength).toBe(20);
+  });
+
+  // The `maxLength` prop above only enforces truncation at the native
+  // widget level for direct typing — RNTL's fireEvent.changeText calls
+  // onChangeText directly with the FULL string, bypassing that native
+  // behavior entirely (and some real Android IME paths have historically
+  // been able to bypass native maxLength too). This test proves the
+  // ACTUAL clamp: the friendName state itself is truncated in
+  // handleFriendNameChange, not just the input's own display.
+  it('clamps the underlying friend name state itself, not just the input prop', async () => {
+    const onStart = jest.fn();
+    const { getByTestId } = await renderScreen(onStart);
+
+    await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), 'x'.repeat(50));
+    await fireEvent.press(getByTestId('tictactoe-start-game'));
+
+    expect(onStart).toHaveBeenCalledWith('friend', null, 'x'.repeat(20));
+  });
+
   it('does not show a difficulty picker until Computer is chosen', async () => {
     const { getByTestId, queryByTestId } = await renderScreen();
 
