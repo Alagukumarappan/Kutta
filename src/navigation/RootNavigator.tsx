@@ -69,7 +69,7 @@ export type RootStackParamList = {
   video: undefined;
   'video-detail': { videoUri: string };
   tictactoe: undefined;
-  'tictactoe-game': { mode: TicTacToeMode; difficulty: TicTacToeDifficulty | null };
+  'tictactoe-game': { mode: TicTacToeMode; difficulty: TicTacToeDifficulty | null; friendName?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -271,7 +271,9 @@ function AppStack({
       <Stack.Screen name="tictactoe" options={{ headerShown: false, title: titleFor('tictactoeSetupTitle') }}>
         {({ navigation }) => (
           <TicTacToeSetupScreen
-            onStart={(mode, difficulty) => navigation.navigate('tictactoe-game', { mode, difficulty })}
+            onStart={(mode, difficulty, friendName) =>
+              navigation.navigate('tictactoe-game', { mode, difficulty, friendName })
+            }
           />
         )}
       </Stack.Screen>
@@ -280,6 +282,8 @@ function AppStack({
           <TicTacToeScreen
             mode={route.params.mode}
             difficulty={route.params.difficulty}
+            childName={profile.name}
+            friendName={route.params.friendName}
             onMenu={() => navigation.goBack()}
           />
         )}

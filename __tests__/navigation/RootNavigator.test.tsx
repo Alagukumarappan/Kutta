@@ -170,6 +170,7 @@ describe('Tic-Tac-Toe "Menu" navigation', () => {
 
     await fireEvent.press(await findByTestId('home-card-tictactoe'));
     await fireEvent.press(await findByTestId('tictactoe-opponent-friend'));
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), 'Alex');
     await fireEvent.press(getByTestId('tictactoe-start-game'));
 
     // Play out a quick X win (top row: cells 0, 1, 2), same move sequence

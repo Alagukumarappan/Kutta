@@ -140,12 +140,17 @@ export const UI_STRINGS = {
   tictactoeStartGame: { en: 'Start Game', de: 'Spiel starten' },
   tictactoeDetailTitle: { en: 'Tic-Tac-Toe', de: 'Tic-Tac-Toe' },
   tictactoeYourTurn: { en: 'Your turn', de: 'Du bist dran' },
-  tictactoeFriendTurn: { en: "Friend's turn", de: 'Der Freund ist dran' },
   tictactoeComputerTurn: { en: 'Computer is thinking...', de: 'Der Computer denkt nach...' },
   tictactoeYouWin: { en: 'You win! 🎉', de: 'Du hast gewonnen! 🎉' },
   tictactoeComputerWins: { en: 'Computer wins', de: 'Der Computer hat gewonnen' },
-  tictactoePlayerXWins: { en: 'Player X wins! 🎉', de: 'Spieler X hat gewonnen! 🎉' },
-  tictactoePlayerOWins: { en: 'Player O wins! 🎉', de: 'Spieler O hat gewonnen! 🎉' },
+  // Friend mode shows real names instead of generic "Player X"/"Friend"
+  // wording: the child's own name comes from their profile, and the
+  // friend's name is asked for on the setup screen (see
+  // TicTacToeSetupScreen's friendNameRow).
+  tictactoePlayerTurnNamed: { en: "{name}'s turn", de: '{name} ist dran' },
+  tictactoePlayerWinsNamed: { en: '{name} wins! 🎉', de: '{name} hat gewonnen! 🎉' },
+  tictactoeFriendNamePrompt: { en: "What's your friend's name?", de: 'Wie heißt dein Freund?' },
+  tictactoeFriendNamePlaceholder: { en: "Friend's name", de: 'Name des Freundes' },
   tictactoeDraw: { en: "It's a draw!", de: 'Unentschieden!' },
   tictactoeTryAgainEncouragement: { en: 'Good try! Want to play again?', de: 'Gut versucht! Nochmal spielen?' },
   tictactoePlayAgain: { en: 'Play Again', de: 'Nochmal spielen' },

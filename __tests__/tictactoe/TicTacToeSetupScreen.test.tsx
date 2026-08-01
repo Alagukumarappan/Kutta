@@ -18,15 +18,38 @@ describe('TicTacToeSetupScreen', () => {
     expect(getByTestId('tictactoe-start-game').props.accessibilityState?.disabled).toBe(true);
   });
 
-  it('lets the parent start immediately against a friend, with no difficulty required', async () => {
+  it('keeps Start Game disabled for Friend mode until a name is typed, no difficulty required', async () => {
     const onStart = jest.fn();
     const { getByTestId } = await renderScreen(onStart);
 
     await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+    expect(getByTestId('tictactoe-start-game').props.accessibilityState?.disabled).toBe(true);
+
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), 'Alex');
     expect(getByTestId('tictactoe-start-game').props.accessibilityState?.disabled).toBe(false);
 
     await fireEvent.press(getByTestId('tictactoe-start-game'));
-    expect(onStart).toHaveBeenCalledWith('friend', null);
+    expect(onStart).toHaveBeenCalledWith('friend', null, 'Alex');
+  });
+
+  it('does not enable Start for a name that is only whitespace', async () => {
+    const { getByTestId } = await renderScreen();
+
+    await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), '   ');
+
+    expect(getByTestId('tictactoe-start-game').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('trims the friend name before passing it to onStart', async () => {
+    const onStart = jest.fn();
+    const { getByTestId } = await renderScreen(onStart);
+
+    await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), '  Alex  ');
+    await fireEvent.press(getByTestId('tictactoe-start-game'));
+
+    expect(onStart).toHaveBeenCalledWith('friend', null, 'Alex');
   });
 
   it('does not show a difficulty picker until Computer is chosen', async () => {
@@ -51,7 +74,7 @@ describe('TicTacToeSetupScreen', () => {
     expect(getByTestId('tictactoe-start-game').props.accessibilityState?.disabled).toBe(false);
 
     await fireEvent.press(getByTestId('tictactoe-start-game'));
-    expect(onStart).toHaveBeenCalledWith('computer', 'hard');
+    expect(onStart).toHaveBeenCalledWith('computer', 'hard', undefined);
   });
 
   it('switching from Computer back to Friend drops the previously-picked difficulty from the start payload', async () => {
@@ -61,9 +84,10 @@ describe('TicTacToeSetupScreen', () => {
     await fireEvent.press(getByTestId('tictactoe-opponent-computer'));
     await fireEvent.press(getByTestId('tictactoe-difficulty-easy'));
     await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), 'Alex');
     await fireEvent.press(getByTestId('tictactoe-start-game'));
 
-    expect(onStart).toHaveBeenCalledWith('friend', null);
+    expect(onStart).toHaveBeenCalledWith('friend', null, 'Alex');
   });
 
   // Regression test for the premium-polish bug hunt: handleStart had no
@@ -78,6 +102,7 @@ describe('TicTacToeSetupScreen', () => {
     const { getByTestId } = await renderScreen(onStart);
 
     await fireEvent.press(getByTestId('tictactoe-opponent-friend'));
+    await fireEvent.changeText(getByTestId('tictactoe-friend-name-input'), 'Alex');
 
     // Same "stale double-tap" shape as HomeScreen's own card guard test:
     // press the SAME captured element twice without re-querying.

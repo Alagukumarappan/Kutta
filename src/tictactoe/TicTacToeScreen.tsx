@@ -36,11 +36,22 @@ const COMPUTER_MOVE_DELAY_MS = 500;
 export function TicTacToeScreen({
   mode,
   difficulty,
+  childName,
+  friendName,
   onMenu,
 }: {
   mode: TicTacToeMode;
   // Only meaningful when mode === 'computer'; ignored for 'friend'.
   difficulty: Difficulty | null;
+  // The app's own profile name (set during onboarding) — always X's real
+  // name in 'friend' mode, since X always moves first and X is always the
+  // device's own child. Ignored in 'computer' mode, which keeps its
+  // existing generic "You"/"Computer" wording.
+  childName: string;
+  // Only meaningful (and only ever provided) for 'friend' mode — asked for
+  // on the setup screen right before starting. Falls back to the generic
+  // "Friend" wording if somehow missing, rather than showing a blank name.
+  friendName?: string;
   onMenu: () => void;
 }) {
   const { t, language } = useLanguage();
@@ -111,18 +122,25 @@ export function TicTacToeScreen({
     onMenu();
   }
 
+  // X always moves first and is always the device's own child in 'friend'
+  // mode (see the childName prop's own comment) — O is whoever's name was
+  // given for the friend on the setup screen.
+  function friendModeName(player: Player): string {
+    return player === 'X' ? childName : friendName ?? t('tictactoeOpponentFriend');
+  }
+
   function statusText(): string {
     if (status.status === 'won') {
       if (mode === 'computer') {
         return status.winner === HUMAN_PLAYER ? t('tictactoeYouWin') : t('tictactoeComputerWins');
       }
-      return status.winner === 'X' ? t('tictactoePlayerXWins') : t('tictactoePlayerOWins');
+      return tFormat('tictactoePlayerWinsNamed', language, { name: friendModeName(status.winner) });
     }
     if (status.status === 'draw') return t('tictactoeDraw');
     if (mode === 'computer') {
       return currentPlayer === HUMAN_PLAYER ? t('tictactoeYourTurn') : t('tictactoeComputerTurn');
     }
-    return currentPlayer === 'X' ? t('tictactoeYourTurn') : t('tictactoeFriendTurn');
+    return tFormat('tictactoePlayerTurnNamed', language, { name: friendModeName(currentPlayer) });
   }
 
   // A square board sized to comfortably fit the shorter of the available

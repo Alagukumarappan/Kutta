@@ -21,7 +21,13 @@ function renderGame(props: Partial<React.ComponentProps<typeof TicTacToeScreen>>
   const onMenu = props.onMenu ?? jest.fn();
   return render(
     <LanguageProvider initialLanguage="en">
-      <TicTacToeScreen mode={props.mode ?? 'friend'} difficulty={props.difficulty ?? null} onMenu={onMenu} />
+      <TicTacToeScreen
+        mode={props.mode ?? 'friend'}
+        difficulty={props.difficulty ?? null}
+        childName={props.childName ?? 'Sam'}
+        friendName={props.friendName ?? 'Alex'}
+        onMenu={onMenu}
+      />
     </LanguageProvider>
   );
 }
@@ -45,7 +51,9 @@ describe('TicTacToeScreen', () => {
       for (let i = 0; i < 9; i++) {
         expect(cellValue(queryByTestId, i)).toBeNull();
       }
-      expect(getByTestId('tictactoe-status').props.children).toBe('Your turn');
+      // X always moves first and is always the app's own child (Sam, per
+      // renderGame's default childName) in friend mode.
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
     });
 
     it('alternates X and O as cells are tapped', async () => {
@@ -53,11 +61,11 @@ describe('TicTacToeScreen', () => {
 
       await fireEvent.press(getByTestId('tictactoe-cell-0'));
       expect(cellValue(queryByTestId, 0)).toBe('X');
-      expect(getByTestId('tictactoe-status').props.children).toBe("Friend's turn");
+      expect(getByTestId('tictactoe-status').props.children).toBe("Alex's turn");
 
       await fireEvent.press(getByTestId('tictactoe-cell-1'));
       expect(cellValue(queryByTestId, 1)).toBe('O');
-      expect(getByTestId('tictactoe-status').props.children).toBe('Your turn');
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
     });
 
     it('does not let a player overwrite an already-filled cell', async () => {
@@ -67,7 +75,7 @@ describe('TicTacToeScreen', () => {
       await fireEvent.press(getByTestId('tictactoe-cell-0')); // still X's cell, O tries and fails
 
       expect(cellValue(queryByTestId, 0)).toBe('X');
-      expect(getByTestId('tictactoe-status').props.children).toBe("Friend's turn");
+      expect(getByTestId('tictactoe-status').props.children).toBe("Alex's turn");
     });
 
     it('declares the winner and shows Play Again / Menu once a line is completed', async () => {
@@ -81,7 +89,7 @@ describe('TicTacToeScreen', () => {
       await fireEvent.press(getByTestId('tictactoe-cell-2')); // X wins
 
       const overlay = await findByTestId('tictactoe-complete');
-      expect(within(overlay).getByText('Player X wins! 🎉')).toBeTruthy();
+      expect(within(overlay).getByText('Sam wins! 🎉')).toBeTruthy();
       expect(await findByTestId('tictactoe-retry')).toBeTruthy();
       expect(await findByTestId('tictactoe-menu')).toBeTruthy();
     });

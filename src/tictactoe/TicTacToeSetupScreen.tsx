@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { Difficulty } from './ticTacToeEngine';
@@ -36,14 +36,20 @@ const DIFFICULTIES: { value: Difficulty; labelKey: 'tictactoeDifficultyEasy' | '
 export function TicTacToeSetupScreen({
   onStart,
 }: {
-  onStart: (mode: TicTacToeMode, difficulty: Difficulty | null) => void;
+  // friendName is only passed (and only meaningful) for 'friend' mode — a
+  // real name to show instead of a generic "Player X"/"Friend" label once
+  // the game starts (see TicTacToeScreen's own statusText).
+  onStart: (mode: TicTacToeMode, difficulty: Difficulty | null, friendName?: string) => void;
 }) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<TicTacToeMode | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+  const [friendName, setFriendName] = useState('');
+  const trimmedFriendName = friendName.trim();
 
-  const canStart = mode === 'friend' || (mode === 'computer' && difficulty !== null);
+  const canStart =
+    (mode === 'friend' && trimmedFriendName.length > 0) || (mode === 'computer' && difficulty !== null);
   // Same time-based re-arm guard as HomeScreen's own navLockRef: this
   // screen stays mounted (not unmounted) underneath 'tictactoe-game' when
   // navigation.navigate pushes it, so a rapid double-tap on Start — before
@@ -65,7 +71,7 @@ export function TicTacToeSetupScreen({
   function handleStart() {
     if (!canStart || !mode || navLockRef.current) return;
     navLockRef.current = true;
-    onStart(mode, mode === 'computer' ? difficulty : null);
+    onStart(mode, mode === 'computer' ? difficulty : null, mode === 'friend' ? trimmedFriendName : undefined);
     rearmTimeoutRef.current = setTimeout(() => {
       navLockRef.current = false;
     }, 800);
@@ -145,6 +151,26 @@ export function TicTacToeSetupScreen({
             ))}
           </View>
         </>
+      )}
+
+      {mode === 'friend' && (
+        // Lets the game greet both players by name once it starts (see
+        // TicTacToeScreen's statusText) instead of the generic "Player X"/
+        // "Friend" wording — the child's own name already comes from their
+        // profile (set during onboarding), so only the friend's name needs
+        // asking for here.
+        <View style={styles.friendNameRow}>
+          <Text style={styles.stepLabel}>{t('tictactoeFriendNamePrompt')}</Text>
+          <TextInput
+            testID="tictactoe-friend-name-input"
+            value={friendName}
+            onChangeText={setFriendName}
+            style={[styles.friendNameInput, trimmedFriendName.length > 0 && styles.friendNameInputFilled]}
+            placeholder={t('tictactoeFriendNamePlaceholder')}
+            placeholderTextColor={colors.inkMuted}
+            accessibilityLabel={t('tictactoeFriendNamePrompt')}
+          />
+        </View>
       )}
 
       <View style={styles.startWrapper}>
@@ -257,6 +283,25 @@ const styles = StyleSheet.create({
   },
   difficultyTextSelected: {
     color: colors.white,
+  },
+  friendNameRow: {
+    alignItems: 'center',
+  },
+  friendNameInput: {
+    width: 200,
+    minHeight: touchTarget.minimum,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  friendNameInputFilled: {
+    borderColor: PALETTE.accentDark,
   },
   startWrapper: {
     marginTop: spacing.md,
