@@ -133,6 +133,60 @@ describe('SettingsScreen', () => {
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 
+  // Regression test for a real bug fix: unlike OnboardingScreen (which
+  // disables Save entirely until the name is non-blank), SettingsScreen had
+  // no name validation at all — a parent clearing the name field and
+  // hitting Save would silently persist an empty name, which would break
+  // HomeScreen's "Hi, {name}" greeting and the profile-picture
+  // initial-letter fallback (both assume a non-empty name).
+  it('blocks Save and shows an error when the name is cleared to blank', async () => {
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.changeText(getByTestId('settings-name-input'), '');
+    await fireEvent.press(getByText('Save changes'));
+
+    expect(Alert.alert).toHaveBeenCalledWith('Please enter a name');
+    expect(profileStore.saveProfile).not.toHaveBeenCalled();
+  });
+
+  it('blocks Save when the name is whitespace-only, not just empty', async () => {
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.changeText(getByTestId('settings-name-input'), '   ');
+    await fireEvent.press(getByText('Save changes'));
+
+    expect(Alert.alert).toHaveBeenCalledWith('Please enter a name');
+    expect(profileStore.saveProfile).not.toHaveBeenCalled();
+  });
+
+  it('trims leading/trailing whitespace from the name before saving', async () => {
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.changeText(getByTestId('settings-name-input'), '  Samuel  ');
+    await fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ name: 'Samuel' }))
+    );
+  });
+
   it('shows a failure message and keeps the old folder if migration fails', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
     (folderMigration.migrateContent as jest.Mock).mockResolvedValue({ success: false, error: 'disk full' });

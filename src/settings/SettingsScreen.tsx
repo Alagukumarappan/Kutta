@@ -228,12 +228,26 @@ export function SettingsScreen({
 
   async function handleSave() {
     if (!profile || migrating || saveInFlightRef.current) return;
+    // Unlike OnboardingScreen (which disables Save entirely until the name
+    // is non-blank), this screen has no existing convention for disabling
+    // Save based on field validity — every other failure here (folder pick,
+    // migration) already surfaces via Alert.alert, so a blank/whitespace-only
+    // name is blocked the same way rather than introducing a new inline
+    // field-error style just for this one case. Without this, a parent
+    // clearing the name field and hitting Save would silently persist an
+    // empty name, breaking HomeScreen's "Hi, {name}" greeting and the
+    // profile-picture initial-letter fallback (both assume a non-empty name).
+    if (profile.name.trim().length === 0) {
+      Alert.alert(t('onboardingNameMissing'));
+      return;
+    }
     saveInFlightRef.current = true;
     try {
       setMigrationError(null);
 
       let nextProfile: Profile = {
         ...profile,
+        name: profile.name.trim(),
         age: age !== null ? age : profile.age,
       };
 

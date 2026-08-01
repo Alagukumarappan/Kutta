@@ -501,6 +501,39 @@ respectively, both stuck showing the spinner instead, when the
 `player.status` seed line is removed). Full suite: 631/631 passing. `npx
 tsc --noEmit` clean.
 
+### Iteration 13 — Bug fix: SettingsScreen had no name validation, unlike OnboardingScreen
+**Area:** Bug Hunting.
+
+**Problem:** `SettingsScreen.tsx`'s `handleSave` had no name validation at
+all — unlike `OnboardingScreen.tsx`, which disables its Save button
+entirely until the name is non-blank. A parent clearing the name field to
+blank (or whitespace-only) and hitting Save would silently persist an
+empty name, which would break `HomeScreen`'s "Hi, {name}" greeting and the
+profile-picture initial-letter fallback (both assume a non-empty name).
+Found via a fresh research pass over `SettingsScreen.tsx`'s remaining
+flows, comparing its validation against `OnboardingScreen`'s equivalent
+(already-tested) behavior.
+
+**Fix:** Added a check at the top of `handleSave` — a blank/whitespace-only
+name shows an `Alert.alert(t('onboardingNameMissing'))` (reusing the
+existing i18n string rather than adding a new one) and blocks the save,
+matching this screen's own established convention of surfacing failures
+via `Alert.alert` (there was no pre-existing inline-field-error style here
+to extend, unlike Onboarding's). Also now trims the name before persisting.
+
+**Tests:** 3 new tests in `__tests__/settings/SettingsScreen.test.tsx`
+(blocks on blank, blocks on whitespace-only — not just empty, trims
+leading/trailing whitespace before saving), verified via `git stash` to
+genuinely fail without the fix. Full suite: 634/634 passing. `npx tsc
+--noEmit` clean. Reviewed by an independent agent — no issues found
+(confirmed the guard is placed before `saveInFlightRef` is set so a
+blocked save can't permanently lock out future valid saves, confirmed no
+stale-closure risk, confirmed the single-argument `Alert.alert(message)`
+call shape matches this codebase's existing convention elsewhere; flagged
+one minor, accepted UX note — a name saved with trailing whitespace will
+visibly "snap" to its trimmed form in the text field after Save, matching
+Onboarding's equivalent behavior).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -519,6 +552,7 @@ tsc --noEmit` clean.
 - Iteration 10: HomeScreen's settings icon had no double-tap guard, unlike every activity card. See above.
 - Iteration 11: QuestionRenderer could silently overwrite a child's answer on a rapid double-tap between two different options. See above.
 - Iteration 12: VideoPlayerScreen showed no feedback while a video was still loading, and could get stuck loading forever if the player settled before the screen subscribed. See above.
+- Iteration 13: SettingsScreen had no name validation, letting a parent silently persist an empty name. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -557,6 +591,31 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
   version). Worth a small `useNavLock()` hook if a third copy ever appears;
   marginal value for just 2.
+- **Bug Hunting (S, from iteration 13's research pass, not yet done):**
+  `SettingsScreen.tsx`'s `handlePickFolder` has no double-tap guard — the
+  same bug class already fixed twice elsewhere in this exact codebase
+  (`OnboardingScreen`'s equivalent in iteration 8, `FolderErrorScreen`'s in
+  iteration 5), both reusing the same `requestFolderAccess()` primitive. A
+  rapid double-tap on "Change content folder" could fire two concurrent
+  calls whose resolutions land out of order via `setPendingFolderUri`.
+- **Bug Hunting (M, from iteration 13's research pass, not yet done, more
+  investigation needed before implementing):** `SettingsScreen.tsx`'s
+  `handleSave` reads `profile` into a local `nextProfile` before `await`ing
+  a potentially slow `migrateContent(...)`, and nothing disables the name
+  input/AgePicker/LanguageSelector/picture buttons during `migrating` — only
+  Save itself is disabled. An edit made to name/age/picture WHILE a
+  migration is in flight could be silently overwritten the moment the
+  in-flight `handleSave`'s `setProfile(nextProfile)` finally runs. Needs
+  more thought on the right fix (disable the other fields too during
+  migration? re-read the latest edits before the final setProfile? both?)
+  before implementing, not a quick mechanical fix like the guard above.
+- **Visual Consistency / Accessibility (S, from iteration 13's research
+  pass, not yet done):** `SettingsScreen.tsx`'s own Pressables (Save,
+  Reset, Change-folder, Choose-picture, Remove-picture) have only
+  `testID`+style, no `accessibilityRole="button"`/explicit
+  `accessibilityLabel`, unlike the rest of the app's convention (every
+  button in `VideoGallery.tsx`, `AgePicker.tsx`, `LanguageSelector.tsx`
+  explicitly sets both).
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by
