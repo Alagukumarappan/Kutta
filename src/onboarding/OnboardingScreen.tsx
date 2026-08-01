@@ -69,13 +69,25 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   // content copies and onComplete() firing twice. A ref closes that gap
   // immediately, synchronously, unlike state.
   const savingRef = useRef(false);
+  // Same re-entrancy guard idiom as savingRef above (and FolderErrorScreen's
+  // pickingRef in RootNavigator.tsx, which reuses this exact
+  // requestFolderAccess() primitive) — without it, a rapid double-tap on
+  // "Choose content folder" could fire two concurrent SAF picker
+  // invocations, whose two resolved uris could resolve out of order and
+  // leave folderUri set to whichever one happened to finish first rather
+  // than the one the parent actually meant to end up with.
+  const pickingFolderRef = useRef(false);
 
   async function handlePickFolder() {
+    if (pickingFolderRef.current) return;
+    pickingFolderRef.current = true;
     try {
       const uri = await requestFolderAccess();
       setFolderUri(uri);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : String(err));
+    } finally {
+      pickingFolderRef.current = false;
     }
   }
 

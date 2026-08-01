@@ -281,6 +281,36 @@ AsyncStorage writes; re-confirmed no other globally-keyed store was
 missed; confirmed the sequential `await`s in `performReset` can't race
 with `onReset?.()`).
 
+### Iteration 8 — Bug fix: OnboardingScreen's "Choose content folder" had no double-tap guard
+**Area:** Bug Hunting.
+
+**Problem:** `handlePickFolder` — the "Choose content folder" button
+handler on this app's very first onboarding screen — had NO re-entrancy
+guard at all, unlike the neighboring `handleSave` (already guarded with a
+`savingRef`, added in an earlier polish pass) and `FolderErrorScreen`'s own
+folder-repicker (guarded with `pickingRef` in iteration 5, reusing this
+exact same `requestFolderAccess()` primitive). A rapid double-tap — trivial
+for a child, and this is the very first screen anyone interacts with —
+could fire two concurrent `requestFolderAccess()` calls whose resolved
+URIs could land out of order via `setFolderUri`, leaving the wrong folder
+selected.
+
+**Fix:** Added a synchronous `pickingFolderRef` check-and-set guard,
+mirroring `savingRef`'s exact shape in the same file. Named distinctly
+from `RootNavigator.tsx`'s bare `pickingRef` since this file also has a
+profile-*picture* picker, where a bare `pickingRef` would be ambiguous.
+
+**Tests:** 1 new test in `__tests__/onboarding/OnboardingScreen.test.tsx`
+("guards 'Choose content folder' against a rapid double-tap, only picking
+once"), mirroring the existing Save double-tap test's structure. Verified
+to genuinely fail without the fix via `git stash` ("Expected number of
+calls: 1, Received number of calls: 2"). Full suite: 623/623 passing.
+`npx tsc --noEmit` clean. Reviewed by an independent agent — no issues
+found (walked every exit path of `handlePickFolder` to confirm the guard
+can never get stuck permanently `true`, confirmed no other unguarded async
+handler remains in this file, confirmed the new test's cleanup doesn't
+leak a pending promise into a later test).
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -295,6 +325,7 @@ with `onReset?.()`).
 - Iteration 1: corrupted `questions.json` silently indistinguishable from an empty quiz folder. See above.
 - Iteration 5: `FolderErrorScreen`'s Retry was a dead end for a permanently-revoked SAF grant — no way back to Settings' folder picker. See above.
 - Iteration 7: "Reset everything" left individually-added file references and puzzle difficulty behind for the next profile. See above.
+- Iteration 8: OnboardingScreen's "Choose content folder" had no double-tap guard, unlike its neighboring Save button. See above.
 
 ## Consistency improvements
 (none yet this pass)
@@ -326,6 +357,19 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `sun`) and verifying the result on a real device/screenshot — genuine
   visual redesign work, not a mechanical import swap, and out of scope for
   an autonomous "no redesign" iteration.
+- **Visual Consistency (S, from iteration 7's research pass, not yet
+  done):** `ColoringScreen.tsx`'s `imageLoadFailed` error state renders a
+  bare `View`+`Text` (no `RaisedCard` wrapper) — the one visibly
+  inconsistent error screen left, now that `FolderErrorScreen`, `QuizScreen`,
+  the 3 galleries, and `VideoPlayerScreen` have all converged on the
+  RaisedCard+RaisedPrimaryButton pattern.
+- **Architecture (S, from iteration 7's research pass, lower priority —
+  only 2 copies exist):** `HomeScreen.tsx` and `TicTacToeSetupScreen.tsx`
+  each hand-roll a near-identical "debounce rapid navigation taps"
+  ref+`setTimeout` pattern (`navLockRef`/`rearmTimeoutRef` —
+  `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
+  version). Worth a small `useNavLock()` hook if a third copy ever appears;
+  marginal value for just 2.
 
 ## Technical debt removed
 - Iteration 6: `src/components/EmptyState.tsx` (superseded by
