@@ -216,6 +216,34 @@ describe('QuizScreen', () => {
     await findByText('2 + 2?');
   });
 
+  // Regression test for a quality-evolution bug fix: a corrupted
+  // questions.json (bad JSON, or missing its questions array) previously
+  // resolved to [] just like a genuinely empty/no-quiz-yet folder, showing
+  // the exact same "No quiz questions for this age yet." text either way —
+  // a parent had no way to tell "nothing here yet" apart from "this file is
+  // broken". loadQuestions now throws QuestionsFileCorruptError for that
+  // case specifically, and QuizScreen must show the distinct, more helpful
+  // message instead of silently falling back to the plain empty state.
+  it('shows a distinct "file corrupt" message instead of the generic empty state when questions.json is unreadable', async () => {
+    // Must construct via the same (automocked) module instance QuizScreen
+    // itself imports — jest.requireActual would return a different class
+    // reference, making QuizScreen's `instanceof` check silently fail and
+    // fall through to the generic error message instead of this one.
+    (loadQuestionsModule.loadQuestions as jest.Mock).mockRejectedValueOnce(
+      new loadQuestionsModule.QuestionsFileCorruptError()
+    );
+
+    const { findByText, queryByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <QuizScreen quizFolderUri="content://tree/quiz" childAge={5} />
+      </LanguageProvider>
+    );
+
+    await findByText("This quiz file couldn't be read. Check questions.json in the quiz folder.");
+    expect(queryByText('No quiz questions for this age yet.')).toBeNull();
+    expect(queryByText('Something went wrong loading this content.')).toBeNull();
+  });
+
   // Regression test for the premium-polish visual-consistency pass:
   // QuizScreen's error state had been left behind on the old theme/tokens
   // look (a plain Pressable+text button) after every other gallery/player's

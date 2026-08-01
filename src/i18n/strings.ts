@@ -208,6 +208,14 @@ export const UI_STRINGS = {
     en: 'Something went wrong loading this content.',
     de: 'Beim Laden dieser Inhalte ist ein Fehler aufgetreten.',
   },
+  // Shown instead of the generic loadError/emptyQuiz text specifically when
+  // questions.json exists but couldn't be read as valid quiz data (bad JSON,
+  // or missing its questions list) — a parent-facing hint that the FILE is
+  // the problem, not "there's simply no quiz content yet".
+  quizFileCorrupt: {
+    en: "This quiz file couldn't be read. Check questions.json in the quiz folder.",
+    de: 'Diese Quizdatei konnte nicht gelesen werden. Bitte questions.json im Quiz-Ordner prüfen.',
+  },
   galleryLoading: { en: 'Getting things ready...', de: 'Wird vorbereitet...' },
   // Generic Cancel label, deliberately separate from
   // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped

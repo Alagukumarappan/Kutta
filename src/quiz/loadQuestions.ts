@@ -50,6 +50,42 @@ function isValidQuestion(v: unknown): v is Question {
   return true;
 }
 
+// Thrown by loadQuestions (never by parseQuestionsFile itself) when
+// questions.json exists but is unreadable as data — invalid JSON, or valid
+// JSON missing its `questions` array entirely. This is deliberately a
+// distinct signal from "zero valid questions after per-question validation"
+// (e.g. every question filtered out by a bad correctOptionId, or none
+// matching the child's age range) — those are ambiguous and may be entirely
+// legitimate content, whereas a syntax error or missing `questions` field
+// can only mean the file itself is corrupt (hand-edited, half-written by a
+// crashed export, etc.). QuizScreen uses this to show a distinct,
+// parent-facing hint instead of the same generic "no quiz yet" empty state.
+export class QuestionsFileCorruptError extends Error {
+  constructor() {
+    super('questions.json exists but is not valid quiz data');
+    this.name = 'QuestionsFileCorruptError';
+  }
+}
+
+// Deliberately re-parses/re-checks the same two conditions parseQuestionsFile
+// already checks internally (see its own early returns below), rather than
+// changing parseQuestionsFile's return shape — that function's contract
+// (raw string in, Question[] out, never throws) is directly covered by its
+// own unit tests and used as a pure validator elsewhere; overloading it to
+// also signal "corrupt" vs. "legitimately empty" would complicate that
+// simple contract for every existing caller.
+function assertQuestionsFileWellFormed(raw: string): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new QuestionsFileCorruptError();
+  }
+  if (typeof parsed !== 'object' || parsed === null || !Array.isArray((parsed as Record<string, unknown>).questions)) {
+    throw new QuestionsFileCorruptError();
+  }
+}
+
 export function parseQuestionsFile(raw: string): Question[] {
   let parsed: unknown;
   try {
@@ -105,6 +141,7 @@ export async function loadQuestions(quizFolderUri: string): Promise<Question[]> 
   if (!questionsFileUri) return [];
 
   const raw = await FileSystem.StorageAccessFramework.readAsStringAsync(questionsFileUri);
+  assertQuestionsFileWellFormed(raw);
   const questions = parseQuestionsFile(raw);
   return resolveQuestionImages(questions, quizFolderUri);
 }
