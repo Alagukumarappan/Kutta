@@ -139,6 +139,29 @@ export function QuestionRenderer({
   childAge?: number;
 }) {
   const hasAnswered = selectedOptionId !== null;
+  // Guards against a rapid double-tap on two DIFFERENT options: each
+  // option's `disabled={hasAnswered}` prop (further down) only takes
+  // effect once React re-renders with the parent's updated
+  // `selectedOptionId`, so two taps landing before that commit both call
+  // `onSelect` with the SAME stale (pre-answer) closure — the second call
+  // silently overwrites the first's `setSelectedOptionId`, changing the
+  // child's actual answer to whichever option happened to process second,
+  // with no correction UI. A ref closes that gap synchronously.
+  //
+  // The reset back to "unlocked" must happen SYNCHRONOUSLY during render
+  // (not in a useEffect) — an effect only runs after commit, which would
+  // leave a window right after `hasAnswered` flips back to false (a new
+  // question, or "Try Again" clearing `selectedOptionId` on the SAME
+  // question) where `disabled={false}` has already committed and the
+  // Pressable is tappable again, but the ref is still `true` from the
+  // previous answer — silently swallowing a genuinely new, legitimate tap
+  // until a second one arrives. Mutating the ref directly in the render
+  // body (the standard "adjust state/ref during rendering" pattern) keeps
+  // it in lockstep with `disabled` in the exact same synchronous pass.
+  const answerLockRef = React.useRef(false);
+  if (!hasAnswered && answerLockRef.current) {
+    answerLockRef.current = false;
+  }
   const isCorrect = hasAnswered && selectedOptionId === question.correctOptionId;
   // Ages 2-4 get the gentlest, simplest phrasing; 5-8 gets a slightly more
   // capable-sounding nudge. See quizIncorrectYoung/quizIncorrectOlder in
@@ -446,7 +469,11 @@ export function QuestionRenderer({
       <AnimatedPressable
         key={option.id}
         testID={`option-${option.id}`}
-        onPress={() => onSelect(option.id)}
+        onPress={() => {
+          if (answerLockRef.current) return;
+          answerLockRef.current = true;
+          onSelect(option.id);
+        }}
         // Disabling the pressable (rather than a manual `!hasAnswered &&`
         // guard) both stops onPress/onPressIn/onPressOut from firing AND —
         // via AnimatedPressable's own disabled-transition effect — snaps

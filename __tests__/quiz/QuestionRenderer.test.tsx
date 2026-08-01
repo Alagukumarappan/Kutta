@@ -123,6 +123,38 @@ describe('QuestionRenderer', () => {
     expect(onSelect).toHaveBeenCalledWith('b');
   });
 
+  // Regression test for a real bug fix: each option's own `disabled=
+  // {hasAnswered}` only takes effect once the parent re-renders with an
+  // updated `selectedOptionId` prop, so a rapid double-tap on two DIFFERENT
+  // options landing before that commit previously called onSelect twice —
+  // silently changing the child's actual answer to whichever option was
+  // processed second, with no correction UI. Mirrors this codebase's other
+  // double-fire guard tests (same "press before selectedOptionId prop
+  // updates" shape as QuizScreen's own rapid-tap guards).
+  it('guards against a rapid tap on two different options, only calling onSelect once', async () => {
+    const onSelect = jest.fn();
+
+    const { getByTestId } = await render(
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={onSelect}
+        onNext={jest.fn()}
+      />
+    );
+
+    // Both presses happen while selectedOptionId is still null (as it
+    // would be from the parent's perspective, since it hasn't re-rendered
+    // with the first answer yet) — the real-world shape of two taps
+    // landing before React commits the parent's state update.
+    await fireEvent.press(getByTestId('option-a'));
+    await fireEvent.press(getByTestId('option-b'));
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('a');
+  });
+
   it('shows "Correct!" feedback once selectedOptionId matches the correct option, and Next advances', async () => {
     const onNext = jest.fn();
 

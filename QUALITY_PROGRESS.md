@@ -396,6 +396,58 @@ documentation bug: the new code comment claimed the reused lock key was
 `'settings'` when the code actually used `'settings-icon'` — fixed before
 committing.
 
+### Iteration 11 — Bug fix: QuestionRenderer could silently overwrite a child's answer on a rapid double-tap
+**Area:** Bug Hunting.
+
+**Problem:** `QuestionRenderer.tsx`'s answer grid disables each option via
+`disabled={hasAnswered}`, where `hasAnswered` is derived from the
+`selectedOptionId` PROP (owned by the parent, `QuizScreen`). That
+`disabled` only takes effect once the parent re-renders after
+`onSelect`'s `setSelectedOptionId` — so two taps landing on two DIFFERENT
+options before that commit both called `onSelect`, and since
+`setSelectedOptionId` has no dedup logic, the LAST call silently won,
+changing the child's actual answer to whichever option happened to
+process second, with zero correction UI. Not a scoring bug (scoring only
+happens in `handleNext`), but a real, untested UX edge case exactly
+matching the kind of "child mashes the screen" scenario this loop's Bug
+Hunting mandate targets.
+
+**Fix:** Added an `answerLockRef`, checked-and-set synchronously inside
+the option's `onPress` before calling `onSelect` — same idiom as this
+codebase's other double-fire guards.
+
+**Caught and fixed during review (second genuine finding this iteration,
+third across the loop):** the ref's reset-back-to-unlocked logic was
+initially placed in a `useEffect` keyed on `hasAnswered`. Effects run
+AFTER commit, which reopened the exact same class of bug in the other
+direction: right after a new question loads or "Try Again" clears the
+answer, `disabled={false}` commits and the Pressable becomes tappable
+again, but the ref hadn't been reset yet in that same render — a
+genuinely new, legitimate tap landing in that narrow window would be
+silently swallowed (visually the button would still tilt on press-in, but
+`onSelect` would never fire), requiring a confusing second tap. Fixed by
+mutating the ref directly in the render body instead (`if (!hasAnswered &&
+answerLockRef.current) answerLockRef.current = false;`) — the standard
+React "adjust a ref during rendering" pattern — so the ref and `disabled`
+update in the exact same synchronous pass and can never disagree.
+
+**Tests:** 1 new test in `__tests__/quiz/QuestionRenderer.test.tsx`
+("guards against a rapid tap on two different options, only calling
+onSelect once"), verified via `git stash` to genuinely fail without the
+fix ("Expected: 1, Received: 2"). Confirmed distinct (not redundant) from
+the pre-existing "does not call onSelect again once an option has already
+been answered" test, which exercises `disabled` via a real prop update,
+never reaching the new ref path at all. The `useEffect`-timing bug itself
+wasn't given its own dedicated test — reproducing it deterministically
+would require racing a real React effect-flush boundary, which this
+project's synchronous jsdom/test-renderer test environment can't
+meaningfully simulate (the same category of gap `git stash`-based
+verification exists to catch for logic bugs, but doesn't apply cleanly to
+a render-vs-effect timing bug); the fix itself follows React's own
+documented pattern and the full suite (traced through both the "new
+question" and "Try Again" reset paths) stayed green throughout. Full
+suite: 627/627 passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -412,6 +464,7 @@ committing.
 - Iteration 7: "Reset everything" left individually-added file references and puzzle difficulty behind for the next profile. See above.
 - Iteration 8: OnboardingScreen's "Choose content folder" had no double-tap guard, unlike its neighboring Save button. See above.
 - Iteration 10: HomeScreen's settings icon had no double-tap guard, unlike every activity card. See above.
+- Iteration 11: QuestionRenderer could silently overwrite a child's answer on a rapid double-tap between two different options. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
