@@ -59,6 +59,12 @@ export function TicTacToeScreen({
   const insets = useSafeAreaInsets();
 
   const [board, setBoard] = useState<Board>(createEmptyBoard);
+  // X always moves first (an ticTacToeEngine.ts convention — X is never
+  // NOT the starting mark), but WHICH physical player is X is randomized
+  // fresh each game (initial mount and every Retry) rather than always
+  // being the app's own child — a real coin flip, not a hardcoded "the
+  // child always starts."
+  const [childIsX, setChildIsX] = useState(() => Math.random() < 0.5);
   const [currentPlayer, setCurrentPlayer] = useState<Player>(HUMAN_PLAYER);
 
   const status = getGameStatus(board);
@@ -75,24 +81,33 @@ export function TicTacToeScreen({
     }
   }, [isGameOver]);
 
-  // The computer only ever plays as O, and only in 'computer' mode — see
-  // ticTacToeEngine.ts's HUMAN_PLAYER/COMPUTER_PLAYER assignment (ported
-  // from the source algorithm, which hardcodes the same sides).
-  const isComputersTurn = mode === 'computer' && currentPlayer === COMPUTER_PLAYER && !isGameOver;
+  // Which mark ('X' or 'O') belongs to the child vs. the computer/friend
+  // this game — derived from the random childIsX coin flip above, not a
+  // fixed HUMAN_PLAYER/COMPUTER_PLAYER assumption.
+  const childMark: Player = childIsX ? HUMAN_PLAYER : COMPUTER_PLAYER;
+  const opponentMark: Player = childIsX ? COMPUTER_PLAYER : HUMAN_PLAYER;
+
+  const isComputersTurn = mode === 'computer' && currentPlayer === opponentMark && !isGameOver;
 
   useEffect(() => {
     if (!isComputersTurn || difficulty === null) return;
     let cancelled = false;
     const timeoutId = setTimeout(() => {
       if (cancelled) return;
-      const move = getComputerMove(board, difficulty);
+      // Tells the search which mark it actually has THIS game — the coin
+      // flip above means the computer isn't always guaranteed to be 'O'
+      // any more (see ticTacToeEngine.ts's own minimax comment for why this
+      // matters: without it, the search would keep optimizing for 'O' even
+      // while the computer is actually playing 'X', making it play for the
+      // wrong side).
+      const move = getComputerMove(board, difficulty, Math.random, opponentMark);
       if (move === null) return;
       setBoard((prev) => {
         const next = prev.slice();
-        next[move] = COMPUTER_PLAYER;
+        next[move] = opponentMark;
         return next;
       });
-      setCurrentPlayer(HUMAN_PLAYER);
+      setCurrentPlayer(childMark);
     }, COMPUTER_MOVE_DELAY_MS);
     return () => {
       cancelled = true;
@@ -114,6 +129,10 @@ export function TicTacToeScreen({
     retryFiredRef.current = true;
     setBoard(createEmptyBoard());
     setCurrentPlayer(HUMAN_PLAYER);
+    // Fresh coin flip for the new game — the same child winning/starting
+    // repeatedly on every Retry would defeat the point of randomizing this
+    // at all.
+    setChildIsX(Math.random() < 0.5);
   }
 
   function handleMenu() {
@@ -122,23 +141,24 @@ export function TicTacToeScreen({
     onMenu();
   }
 
-  // X always moves first and is always the device's own child in 'friend'
-  // mode (see the childName prop's own comment) — O is whoever's name was
-  // given for the friend on the setup screen.
+  // O is whoever's name was given for the friend on the setup screen; X is
+  // whichever mark this game's coin flip assigned to the child.
   function friendModeName(player: Player): string {
-    return player === 'X' ? childName : friendName ?? t('tictactoeOpponentFriend');
+    return player === childMark ? childName : friendName ?? t('tictactoeOpponentFriend');
   }
 
   function statusText(): string {
     if (status.status === 'won') {
+      const childWon = status.winner === childMark;
       if (mode === 'computer') {
-        return status.winner === HUMAN_PLAYER ? t('tictactoeYouWin') : t('tictactoeComputerWins');
+        return childWon ? t('tictactoeYouWin') : t('tictactoeComputerWins');
       }
       return tFormat('tictactoePlayerWinsNamed', language, { name: friendModeName(status.winner) });
     }
     if (status.status === 'draw') return t('tictactoeDraw');
+    const isChildTurn = currentPlayer === childMark;
     if (mode === 'computer') {
-      return currentPlayer === HUMAN_PLAYER ? t('tictactoeYourTurn') : t('tictactoeComputerTurn');
+      return isChildTurn ? tFormat('tictactoePlayerTurnNamed', language, { name: childName }) : t('tictactoeComputerTurn');
     }
     return tFormat('tictactoePlayerTurnNamed', language, { name: friendModeName(currentPlayer) });
   }
@@ -159,7 +179,7 @@ export function TicTacToeScreen({
   // computer both deserve that; the computer beating the child is a loss
   // for the human player and shouldn't be styled as a triumph. Only that
   // one specific case gets a calmer, encouraging message instead.
-  const isHumanLoss = mode === 'computer' && status.status === 'won' && status.winner === COMPUTER_PLAYER;
+  const isHumanLoss = mode === 'computer' && status.status === 'won' && status.winner === opponentMark;
   const isCelebratoryWin = status.status === 'won' && !isHumanLoss;
 
   return (

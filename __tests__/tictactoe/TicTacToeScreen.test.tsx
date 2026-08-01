@@ -44,6 +44,20 @@ function cellValue(queryByTestId: (id: string) => any, index: number): string | 
 }
 
 describe('TicTacToeScreen', () => {
+  // Every existing test in this file was written assuming "the child always
+  // starts as X" — pin Math.random below 0.5 so the random coin flip (see
+  // TicTacToeScreen.tsx's childIsX state) reliably lands there, preserving
+  // these tests' original, deterministic intent. The randomization itself
+  // (both outcomes actually reachable, and that Retry re-rolls) is covered
+  // by its own dedicated tests further down, which mock this explicitly.
+  beforeEach(() => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('friend mode (no computer involved)', () => {
     it('starts with an empty board and X to move first', async () => {
       const { queryByTestId, getByTestId } = await renderGame({ mode: 'friend' });
@@ -230,7 +244,9 @@ describe('TicTacToeScreen', () => {
 
       const filledCount = Array.from({ length: 9 }, (_, i) => cellValue(queryByTestId, i)).filter(Boolean).length;
       expect(filledCount).toBe(2);
-      expect(getByTestId('tictactoe-status').props.children).toBe('Your turn');
+      // "Your turn" was replaced with the child's real name for consistency
+      // with friend mode's own naming (per renderGame's default childName).
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
 
       jest.useRealTimers();
     });
@@ -317,6 +333,114 @@ describe('TicTacToeScreen', () => {
       expect(within(overlay).queryByTestId('celebration-bubble')).toBeNull();
 
       jest.useRealTimers();
+    });
+  });
+
+  // Regression tests for a real, reported issue: the app's own child always
+  // started (as X) every single game — computer mode and friend mode alike
+  // — which the child hunting this loop was explicitly asked to make a real
+  // 50/50 coin flip instead, re-rolled fresh on every game/Retry.
+  describe('random starting player', () => {
+    it('lets the opponent (computer) start as X when the coin flip lands the other way', async () => {
+      jest.restoreAllMocks(); // undo this file's own beforeEach pin for this one test
+      jest.spyOn(Math, 'random').mockReturnValue(0.99); // childIsX = false
+      jest.useFakeTimers();
+      (getComputerMove as jest.Mock).mockReturnValueOnce(0);
+
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      // The computer (X this game) moves automatically without any tap at
+      // all, since it's not waiting on the child.
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
+
+      jest.useRealTimers();
+    });
+
+    // Integration coverage for the wiring behind the real engine bug this
+    // feature surfaced (see ticTacToeEngine.ts's own computerMark parameter
+    // and its dedicated tests, which DO independently fail without the fix
+    // — confirmed via git stash): plays out a full, REAL (non-mocked)
+    // unbeatable-difficulty game where the computer starts first as X,
+    // mirroring the existing all-'O' version of this same test above.
+    // Note: this particular human move sequence does not, by itself,
+    // discriminate a forgotten computerMark argument here (a manual check
+    // confirmed it still passes even without passing computerMark through)
+    // — the engine-level tests are what actually prove the fix; this test
+    // exists to confirm the full screen-level flow (auto-first-move,
+    // continued play, no crash) behaves sensibly when the computer starts.
+    it('an unbeatable ("hard") computer never loses a full game when it starts first as X', async () => {
+      jest.restoreAllMocks();
+      jest.spyOn(Math, 'random').mockReturnValue(0.99); // childIsX = false: computer is X, starts first
+      jest.useFakeTimers();
+
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      // Computer (X) moves automatically first, before any human tap.
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      // Human (now O this game) plays a fixed, deliberately non-optimal
+      // sequence — same shape as the all-'O' version of this test.
+      const humanMoves = [4, 0, 2, 6, 8];
+      for (const index of humanMoves) {
+        if (queryByTestId('tictactoe-complete')) break;
+        if (cellValue(queryByTestId, index) !== null) continue;
+        await act(async () => {
+          fireEvent.press(getByTestId(`tictactoe-cell-${index}`));
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(600);
+        });
+      }
+
+      const status = getByTestId('tictactoe-status').props.children as string;
+      expect(status).not.toBe('You win! 🎉');
+      jest.useRealTimers();
+    });
+
+    it('lets the friend start as X when the coin flip lands the other way', async () => {
+      jest.restoreAllMocks();
+      jest.spyOn(Math, 'random').mockReturnValue(0.99); // childIsX = false
+
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'friend' });
+
+      // Sam (the child) is O this game, so the FIRST tap (always marked X
+      // by the engine) is really Alex's (the friend's) move.
+      expect(getByTestId('tictactoe-status').props.children).toBe("Alex's turn");
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
+    });
+
+    it('re-rolls a fresh coin flip on Retry, not the same starting player every game', async () => {
+      const randomSpy = jest.spyOn(Math, 'random');
+      randomSpy.mockReturnValueOnce(0); // game 1: childIsX = true
+      randomSpy.mockReturnValueOnce(0.99); // Retry's re-roll: childIsX = false
+
+      const { getByTestId, findByTestId, queryByTestId } = await renderGame({ mode: 'friend' });
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
+
+      // Sam (X) wins the top row; Alex (O) plays elsewhere.
+      await fireEvent.press(getByTestId('tictactoe-cell-0')); // X (Sam)
+      await fireEvent.press(getByTestId('tictactoe-cell-3')); // O (Alex)
+      await fireEvent.press(getByTestId('tictactoe-cell-1')); // X (Sam)
+      await fireEvent.press(getByTestId('tictactoe-cell-4')); // O (Alex)
+      await fireEvent.press(getByTestId('tictactoe-cell-2')); // X (Sam) wins
+      await findByTestId('tictactoe-complete');
+
+      await fireEvent.press(getByTestId('tictactoe-retry'));
+      await waitFor(() => expect(queryByTestId('tictactoe-complete')).toBeNull());
+
+      // Second game's coin flip landed childIsX = false — the first tap
+      // (always X) is now Alex's move, not Sam's.
+      expect(getByTestId('tictactoe-status').props.children).toBe("Alex's turn");
     });
   });
 });

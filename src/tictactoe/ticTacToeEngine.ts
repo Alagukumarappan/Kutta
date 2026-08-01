@@ -75,20 +75,30 @@ export function getGameStatus(board: Board): GameStatus {
 }
 
 // Direct port of the source's `miniMax(board, depth, isMaximizing)`: the
-// computer ('O') maximizes, the human ('X') is assumed to play optimally and
-// minimizes. Mutates `board` in place and backtracks, exactly like the
-// source — safe here since every caller only ever passes a private working
-// copy (see findBestMove below).
-function minimax(board: Board, depth: number, isMaximizing: boolean): number {
-  if (checkWinner(board, COMPUTER_PLAYER)) return 10 - depth;
-  if (checkWinner(board, HUMAN_PLAYER)) return depth - 10;
+// computer maximizes, the human is assumed to play optimally and minimizes.
+// Mutates `board` in place and backtracks, exactly like the source — safe
+// here since every caller only ever passes a private working copy (see
+// findBestMove below).
+//
+// `computerMark` defaults to COMPUTER_PLAYER ('O'), matching the source
+// algorithm's own fixed assumption exactly — every existing caller that
+// doesn't pass it behaves byte-identically to before. It exists so
+// TicTacToeScreen.tsx can tell the search which mark IT actually has this
+// game: the app added a random coin flip for who starts (see that screen's
+// own childIsX state), so the computer isn't always guaranteed to be 'O'
+// any more — the search must optimize for whichever mark it really is, not
+// silently keep maximizing for 'O' while actually playing 'X'.
+function minimax(board: Board, depth: number, isMaximizing: boolean, computerMark: Player = COMPUTER_PLAYER): number {
+  const humanMark: Player = computerMark === 'X' ? 'O' : 'X';
+  if (checkWinner(board, computerMark)) return 10 - depth;
+  if (checkWinner(board, humanMark)) return depth - 10;
   if (isBoardFull(board)) return 0;
 
   if (isMaximizing) {
     let bestScore = -Infinity;
     for (const index of getEmptyIndices(board)) {
-      board[index] = COMPUTER_PLAYER;
-      bestScore = Math.max(bestScore, minimax(board, depth + 1, false));
+      board[index] = computerMark;
+      bestScore = Math.max(bestScore, minimax(board, depth + 1, false, computerMark));
       board[index] = null;
     }
     return bestScore;
@@ -96,8 +106,8 @@ function minimax(board: Board, depth: number, isMaximizing: boolean): number {
 
   let bestScore = Infinity;
   for (const index of getEmptyIndices(board)) {
-    board[index] = HUMAN_PLAYER;
-    bestScore = Math.min(bestScore, minimax(board, depth + 1, true));
+    board[index] = humanMark;
+    bestScore = Math.min(bestScore, minimax(board, depth + 1, true, computerMark));
     board[index] = null;
   }
   return bestScore;
@@ -107,14 +117,17 @@ function minimax(board: Board, depth: number, isMaximizing: boolean): number {
 // single optimal (unbeatable) move for the computer, or null if the board is
 // already full. This is the ENTIRE computer opponent in the source
 // algorithm; it becomes this app's "hard" difficulty below.
-export function findBestMove(board: Board): number | null {
+//
+// `computerMark` — see minimax's own comment above for why this exists and
+// why its default preserves every existing caller's exact behavior.
+export function findBestMove(board: Board, computerMark: Player = COMPUTER_PLAYER): number | null {
   const working = board.slice();
   let bestScore = -Infinity;
   let bestMove: number | null = null;
 
   for (const index of getEmptyIndices(working)) {
-    working[index] = COMPUTER_PLAYER;
-    const score = minimax(working, 0, false);
+    working[index] = computerMark;
+    const score = minimax(working, 0, false, computerMark);
     working[index] = null;
 
     if (score > bestScore) {
@@ -143,12 +156,16 @@ function randomMove(board: Board, random: () => number): number | null {
 //   - "easy"   -> always a random legal move (loses on purpose).
 //   - "medium" -> a coin flip between the optimal move and a random one, so
 //                 it plays well but not flawlessly.
+// `computerMark` — see minimax's own comment above; defaults to
+// COMPUTER_PLAYER ('O') so every existing caller's behavior is unchanged.
 export function getComputerMove(
   board: Board,
   difficulty: Difficulty,
-  random: () => number = Math.random
+  random: () => number = Math.random,
+  computerMark: Player = COMPUTER_PLAYER
 ): number | null {
   if (difficulty === 'easy') return randomMove(board, random);
-  if (difficulty === 'medium') return random() < 0.5 ? findBestMove(board) : randomMove(board, random);
-  return findBestMove(board);
+  if (difficulty === 'medium')
+    return random() < 0.5 ? findBestMove(board, computerMark) : randomMove(board, random);
+  return findBestMove(board, computerMark);
 }

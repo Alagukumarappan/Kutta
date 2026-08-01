@@ -130,6 +130,54 @@ describe('findBestMove (unbeatable minimax, ported from the Angular source)', ()
     findBestMove(board);
     expect(board).toEqual(copy);
   });
+
+  // Regression tests for a real bug caught before it shipped: TicTacToeScreen
+  // added a random coin flip for which mark the computer/friend plays this
+  // game (previously the computer was always 'O'). Without an explicit
+  // `computerMark` parameter here, the search would have kept maximizing
+  // for 'O' even on a game where the computer is actually playing 'X' —
+  // i.e. it would have computed the best move FOR THE CHILD instead of for
+  // itself, playing backwards half the time. These mirror the exact
+  // 'O'-mark tests above, with roles swapped.
+  describe('computerMark parameter (the computer is not always O)', () => {
+    it('takes the immediate winning move when one is available, when the computer plays X', () => {
+      // X has two in a row (0,1) and can win at 2 — this time X is the computer.
+      const board = boardFrom(['X', 'X', null, 'O', 'O', null, null, null, null]);
+      expect(findBestMove(board, 'X')).toBe(2);
+    });
+
+    it("blocks the opponent's immediate winning move when it cannot win itself, when the computer plays X", () => {
+      // O has two in a row (0,1) threatening to win at 2 — X (the computer
+      // this game) must block there.
+      const board = boardFrom(['O', 'O', null, null, 'X', null, null, null, null]);
+      expect(findBestMove(board, 'X')).toBe(2);
+    });
+
+    it('never loses a full game against itself played out move by move, with the computer playing X', () => {
+      // Same "perfect play from both sides always draws" invariant as the
+      // 'O'-mark test above, but with the computer (findBestMove(_, 'X'))
+      // moving first as X and an equally-optimal opponent playing O.
+      let board = createEmptyBoard();
+      let turn: 'X' | 'O' = 'X';
+      while (getGameStatus(board).status === 'in-progress') {
+        const working = board.slice();
+        const move = turn === 'X' ? findBestMove(working, 'X') : findBestMove(working, 'O');
+        if (move === null) break;
+        board[move] = turn;
+        turn = turn === 'X' ? 'O' : 'X';
+      }
+      expect(getGameStatus(board).status).not.toEqual('won');
+    });
+
+    it('getComputerMove threads computerMark through to findBestMove for "hard"', () => {
+      const board = boardFrom(['X', 'X', null, 'O', 'O', null, null, null, null]);
+      expect(getComputerMove(board, 'hard', Math.random, 'X')).toBe(findBestMove(board, 'X'));
+      // Sanity: this is NOT the same move the default ('O') mark would give
+      // for this same board — confirms the parameter genuinely changes the
+      // search's outcome rather than being silently ignored.
+      expect(getComputerMove(board, 'hard', Math.random, 'X')).not.toBe(getComputerMove(board, 'hard'));
+    });
+  });
 });
 
 describe('getComputerMove', () => {
