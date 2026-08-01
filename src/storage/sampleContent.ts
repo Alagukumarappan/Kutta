@@ -1,3 +1,4 @@
+import { Image } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
 
@@ -85,22 +86,43 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
 
   for (const sample of samples) {
     try {
-      // `Image.resolveAssetSource(module).uri` + `FileSystem.downloadAsync`
-      // (the previous approach here) only actually works while Metro's dev
-      // server is running, where the resolved URI is a real http:// URL —
-      // `downloadAsync` fetches over the network. In a genuine standalone
-      // release build (installed via APK, no Metro server), a bundled
-      // require()'d image instead resolves to an Android `asset:///` URI,
-      // which `downloadAsync` cannot fetch (it's not a network request),
-      // so every single seed silently failed this way on a real installed
-      // device despite working in Jest (mocked) and in a Metro-connected
-      // dev build (real HTTP URL) — the two ways this was ever tested
-      // before a real release APK existed. `expo-asset`'s `Asset` is the
-      // correct, SDK-official way to resolve a bundled module to a real
-      // local `file://` path regardless of dev vs. release: it copies the
-      // asset into the app's own storage if needed and exposes that via
-      // `localUri`.
-      const asset = Asset.fromModule(sample.module);
+      // Two previous attempts at this got progressively closer but still
+      // failed on a genuine standalone release APK:
+      //
+      // 1. `Image.resolveAssetSource(module).uri` + `FileSystem.downloadAsync`
+      //    only worked while Metro's dev server was running (a real http://
+      //    URL) — in a release build (no Metro server), the resolved URI is
+      //    an Android `asset:///` reference, which `downloadAsync` can't
+      //    fetch (it's not a network request).
+      //
+      // 2. Switching to `expo-asset`'s `Asset.fromModule(module).downloadAsync()`
+      //    seemed like the SDK-official fix, and DOES work in Jest (mocked)
+      //    and in a Metro-connected dev build — but still silently failed on
+      //    a real release APK. Root cause, found by extracting a real built
+      //    APK and tracing expo-asset's own source: `expo-asset`'s internal
+      //    `AssetSourceResolver.defaultAsset()` (a separate reimplementation
+      //    of React Native core's own resolver, NOT a re-export of it)
+      //    unconditionally builds a fake `https://expo.dev/...` "asset
+      //    server" URL for ANY app not using expo-updates — even for a
+      //    purely local, bundled, offline asset. `downloadAsync` then
+      //    genuinely tries to fetch that URL over the network, which always
+      //    fails (there is no such server for this app's assets) - the same
+      //    root problem as attempt 1, just further disguised.
+      //
+      // React Native CORE's own `Image.resolveAssetSource` (a DIFFERENT,
+      // correct implementation - see `AssetSourceResolver.js` in
+      // react-native itself) correctly returns a bare Android resource
+      // identifier (no scheme, e.g. "z6") for a release build with no dev
+      // server, which is exactly what expo-asset's NATIVE downloadAsync
+      // module already knows how to read directly via
+      // `Resources.getIdentifier(...)` + `openRawResource(...)` - no network
+      // involved. Resolving through RN core first, then handing that
+      // correct URI to `Asset.fromURI` (a public expo-asset entry point that
+      // trusts the URI it's given instead of re-deriving one), sidesteps
+      // expo-asset's own broken resolution entirely while still reusing its
+      // native "read this asset's real bytes" implementation.
+      const resolved = Image.resolveAssetSource(sample.module);
+      const asset = Asset.fromURI(resolved.uri);
       await asset.downloadAsync();
       const localUri = asset.localUri;
       if (!localUri) continue;

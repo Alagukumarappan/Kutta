@@ -911,6 +911,76 @@ itself is showing, not just once the app stack is ready — the old
 portrait-during-onboarding test was updated to reflect the new intended
 behavior). Full suite: 655/655 passing. `npx tsc --noEmit` clean.
 
+### Iteration 23 — 2 more real bugs from device testing: sample content never seeds on a release APK, and the puzzle layout
+**Area:** Bug Hunting + Visual Consistency. Also real, developer-directed
+work outside the autonomous loop's own research, following the same
+device-testing session as iteration 22.
+
+**Bug 1 — sample coloring/picture/quiz images never appear on a genuine
+installed release APK (only `questions.json` did):** this exact symptom
+had already been "fixed" once before switching to `expo-asset`'s
+`Asset.fromModule(...).downloadAsync()`, but the developer reported it
+persisting even on a freshly rebuilt release APK. Root-caused by
+extracting the actual built APK
+(`android/app/build/outputs/apk/release/app-release.apk`) and tracing
+`expo-asset`'s real source: the sample images ARE correctly bundled as
+real Android resources (verified via MD5 checksum match between the
+repo's source PNGs and files inside the APK's `res/` folder — not a
+bundling problem at all). The actual bug is inside `expo-asset` itself:
+its own `AssetSourceResolver.defaultAsset()` (a separate reimplementation,
+not a re-export of React Native core's resolver) unconditionally builds a
+fake `https://expo.dev/...` "asset server" URL for any app not using
+`expo-updates` — even for a purely local, bundled, fully offline asset —
+so `downloadAsync()` genuinely tried to fetch that fake URL over the
+network and failed, every single time, on a real release build.
+
+**Fix:** `sampleContent.ts` now resolves each bundled image through React
+Native CORE's own `Image.resolveAssetSource(module)` first (which
+correctly returns a bare Android resource identifier — no scheme, no
+network — for a release build with no dev server), then hands that
+correct URI to `Asset.fromURI(...)` (a public expo-asset entry point that
+trusts the URI it's given, instead of `Asset.fromModule`, which
+re-derives its own broken one internally). Everything downstream
+(`.downloadAsync()`, `.localUri`, the base64 read + SAF write) is
+unchanged.
+
+**Bug 2 — puzzle screen layout ("many whitespaces," preview only showing
+part of the image):** the preview thumbnail was a `RaisedCard`-wrapped,
+hard-cropped 80x80 square (`resizeMode` defaulting to `'cover'`), which on
+a real device also visually stretched into an unexpectedly tall empty box
+next to the board (confirmed via pixel-level analysis of the actual
+screenshot). The developer supplied a reference mockup: a plain label +
+the FULL uncropped photo (any orientation) in a column taking exactly 20%
+of the screen width, board taking the other 80% and dominating the
+screen.
+
+**Fix:** removed the `RaisedCard` wrapper for the preview entirely —
+replaced with a plain label + an `Image` using `resizeMode="contain"` and
+a dynamic `aspectRatio` computed from the real photo dimensions, so the
+full photo always shows regardless of portrait/landscape source.
+`computePuzzleBoardSize` now reserves an explicit 20% width fraction for
+the preview (`PUZZLE_PREVIEW_WIDTH_FRACTION`, exported and shared with
+`PuzzleScreen.tsx` so both stay in sync) instead of a fixed 220px guess,
+and a shared `PUZZLE_CHROME_MARGIN` (70, applied to both axes) replaces
+the old asymmetric reserved-height-only constant.
+
+**Caught during review:** the first version of the width formula
+correctly reserved the preview's 20% share but forgot to also subtract
+the screen's own ScrollView padding and the board frame's own
+border/padding chrome (~64px) the way the height formula already did —
+on a real device this would have made the board overflow past the
+visible edge by that amount, since there's deliberately no size ceiling
+any more. Fixed by applying the same `PUZZLE_CHROME_MARGIN` to both axes.
+
+**Tests:** `sampleContent.test.ts`'s `expo-asset` mock now mocks at the
+`Image.resolveAssetSource`/`Asset.fromURI` boundary (previously it mocked
+`Asset.fromModule` directly, which could never have caught this exact
+bug), plus a new test pinning down the resolve→fromURI hand-off; verified
+via `git stash` that 4 of these tests genuinely fail against the old
+`Asset.fromModule`-based code. `puzzleGrid.test.ts`'s hand-computed
+expectations were fully re-derived for the new formula. Full suite:
+656/656 passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -937,6 +1007,7 @@ behavior). Full suite: 655/655 passing. `npx tsc --noEmit` clean.
 - Iteration 20: the child's own name (Onboarding/Settings) had no length cap, same overflow risk as the friend name. See above.
 - Iteration 21: ColoringScreen showed a blank, fully-interactive canvas with no feedback while the photo was still decoding. See above.
 - Iteration 22 (found on a real device): the coloring gallery's 4th tile stretched to fill its own row; a "+"-added picture failed to load for coloring; video playback showed no frames (only a line); onboarding stayed portrait instead of the intended landscape. See above.
+- Iteration 23 (found on a real device): sample coloring/picture/quiz images never seeded on a genuine release APK (an `expo-asset` bug, not a bundling problem); the puzzle screen's preview/board layout wasted most of the screen. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.

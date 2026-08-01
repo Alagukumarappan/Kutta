@@ -1,11 +1,24 @@
 import { shuffle } from '../quiz/shuffle';
 import { EdgeInsets, ZERO_INSETS } from '../theme/tokens';
 
-// Reserves room for the preview thumbnail, labels and margins above/around the
-// board so the puzzle board itself sizes to fit a short-but-wide landscape
-// window instead of overflowing it.
-const PUZZLE_RESERVED_HEIGHT = 160;
-const PUZZLE_RESERVED_WIDTH = 220;
+// The preview (a plain label + the full, uncropped source photo, sized to
+// its own real aspect ratio - see PuzzleScreen.tsx) sits in a column to the
+// LEFT of the board, sized as a fixed FRACTION of the window's width so it
+// scales with the device instead of a fixed pixel guess. The board then
+// gets the remaining width - this is an explicit 20/80 split, not a
+// leftover-space calculation, so the board's width share stays predictable
+// across screen sizes. Exported so PuzzleScreen renders the preview column
+// at the exact same width this function reserves for it.
+export const PUZZLE_PREVIEW_WIDTH_FRACTION = 0.2;
+// The screen's own outer ScrollView padding (spacing.md on every side) and
+// the board's own recessed-tray chrome (boardFrame's border + padding) each
+// eat into the space actually available for the board's PIXELS, in BOTH
+// dimensions equally (that padding/border is symmetric on every side) - one
+// shared margin, applied on top of the preview column's own width share and
+// the vertical axis's lack of any other reservation (the preview column
+// sits BESIDE the board, not above it, so it doesn't separately consume any
+// vertical budget the way it does horizontal budget).
+const PUZZLE_CHROME_MARGIN = 70;
 // Floor only - there's deliberately no fixed ceiling here. The board's real
 // upper bound is however much space is actually available on the device
 // (windowWidth/windowHeight minus the reserved chrome), so a wide landscape
@@ -18,11 +31,12 @@ export interface BoardSize {
 }
 
 // Fits a board that preserves the source photo's real aspect ratio into
-// whatever space is left after reserving room for the header, safe-area
-// insets, and the preview card, using as much of that space as possible in
-// BOTH dimensions (not just clamping to a small square) so a wide landscape
-// screen isn't left with wasted blank space, and a portrait photo isn't
-// squashed/stretched into a square.
+// whatever space is left after reserving the preview column's 20% width
+// share, safe-area insets, and a small margin budget for the screen's own
+// padding + the board's own border/padding chrome, using as much of that
+// space as possible in BOTH dimensions (not just clamping to a small
+// square) so a wide landscape screen isn't left with wasted blank space,
+// and a portrait photo isn't squashed/stretched into a square.
 export function computePuzzleBoardSize(
   windowWidth: number,
   windowHeight: number,
@@ -31,11 +45,11 @@ export function computePuzzleBoardSize(
   insets: EdgeInsets = ZERO_INSETS
 ): BoardSize {
   const availableWidth = Math.max(
-    windowWidth - PUZZLE_RESERVED_WIDTH - insets.left - insets.right,
+    windowWidth * (1 - PUZZLE_PREVIEW_WIDTH_FRACTION) - PUZZLE_CHROME_MARGIN - insets.left - insets.right,
     PUZZLE_MIN_SIZE
   );
   const availableHeight = Math.max(
-    windowHeight - PUZZLE_RESERVED_HEIGHT - insets.top - insets.bottom,
+    windowHeight - PUZZLE_CHROME_MARGIN - insets.top - insets.bottom,
     PUZZLE_MIN_SIZE
   );
 
