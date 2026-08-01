@@ -26,6 +26,53 @@ describe('CelebrationOverlay', () => {
     expect(queryByTestId('celebration-bubble')).toBeNull();
   });
 
+  // Regression test: this overlay is the completion dialog for every
+  // activity (Quiz, Puzzle, Tic-Tac-Toe, Video) and pops in over content a
+  // screen-reader user may already be exploring. Without
+  // accessibilityViewIsModal, VoiceOver/TalkBack can keep navigating the
+  // now-hidden content behind it; without accessibilityRole="alert" +
+  // accessibilityLiveRegion, the screen reader never announces that the
+  // dialog appeared at all.
+  it('marks the card as a modal and gives the title an announcing role', async () => {
+    const { getByText, getByTestId } = await render(
+      <CelebrationOverlay visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+    );
+
+    const titleNode = getByText('Great job!');
+    expect(titleNode.props.accessibilityRole).toBe('alert');
+    expect(titleNode.props.accessibilityLiveRegion).toBe('polite');
+
+    // The card's Animated.View is the direct parent of cardClip, which is
+    // the direct parent of the title Text - walk up two levels from the
+    // celebration bubble's sibling to reach it via a stable testID instead.
+    expect(getByTestId('celebration-overlay-card').props.accessibilityViewIsModal).toBe(true);
+  });
+
+  // VoiceOver on iOS does not auto-announce an element just because it has
+  // accessibilityRole="alert" - it needs an explicit announcement, unlike
+  // Android's TalkBack which does honor accessibilityLiveRegion on its own.
+  it('explicitly announces the title and message to screen readers when it becomes visible', async () => {
+    const announceSpy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+
+    const { rerender } = await render(
+      <CelebrationOverlay visible={false} title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+    );
+    // Other tests in this file mount visible celebration overlays whose
+    // effects can still be flushing async work when this test starts, so
+    // clear the spy right after this test's own (invisible) mount rather
+    // than asserting a global "never called" before that point.
+    announceSpy.mockClear();
+
+    await act(async () => {
+      rerender(
+        <CelebrationOverlay visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      );
+    });
+
+    expect(announceSpy).toHaveBeenCalledWith('Great job!. You finished the puzzle');
+    announceSpy.mockRestore();
+  });
+
   it('renders and fires each action button', async () => {
     const onPrimary = jest.fn();
     const onSecondary = jest.fn();

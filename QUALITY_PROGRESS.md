@@ -713,6 +713,44 @@ truncation) and checking `onStart` receives exactly 20 characters. Both
 verified via manual revert-and-rerun to genuinely fail without their
 respective fixes. Full suite: 643/643 passing. `npx tsc --noEmit` clean.
 
+### Iteration 19 — Bug fix: CelebrationOverlay never notified screen readers it appeared
+**Area:** Bug Hunting (accessibility).
+
+**Problem:** `CelebrationOverlay.tsx` is the shared completion-dialog
+component behind every activity's finish moment (Quiz, Puzzle,
+Tic-Tac-Toe, Video). It rendered inside a `Modal` with zero accessibility
+affordances: no `accessibilityViewIsModal` to scope VoiceOver focus to the
+dialog's own content, and no way for a screen-reader user to learn the
+dialog had appeared at all — they'd have to happen to swipe into it.
+
+**Fix:** Added `accessibilityViewIsModal` to the card's `Animated.View`,
+and `accessibilityRole="alert"` + `accessibilityLiveRegion="polite"` to
+the title `Text` (the latter is what Android's TalkBack actually honors
+for an unprompted announcement).
+
+**Caught and fixed during review (7th genuine review-caught issue):**
+unlike web ARIA, React Native on iOS does not auto-announce an element to
+VoiceOver just because it mounts with `accessibilityRole="alert"` —
+TalkBack honors `accessibilityLiveRegion` on its own, but VoiceOver needs
+an explicit call. Added a `useEffect` that fires
+`AccessibilityInfo.announceForAccessibility(...)` with the title and
+message combined whenever the dialog becomes visible, so a VoiceOver user
+isn't left to discover it by chance. The review also flagged that the
+first version of the regression test asserted on `accessibilityRole`/
+`accessibilityLiveRegion` but never actually checked
+`accessibilityViewIsModal` despite the test's own name claiming it did —
+fixed by adding a `celebration-overlay-card` testID and asserting on it
+directly.
+
+**Tests:** 2 new tests in `__tests__/design-system/CelebrationOverlay.test.tsx`
+— one confirming `accessibilityViewIsModal`/`accessibilityRole`/
+`accessibilityLiveRegion` are actually set, one confirming
+`announceForAccessibility` fires with the combined title+message exactly
+when `visible` flips true (and not before, guarding against cross-test
+async leakage via `mockClear()` after the initial invisible mount). Both
+verified via manual revert-and-rerun to genuinely fail without their
+respective fixes. Full suite: 645/645 passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -735,6 +773,7 @@ respective fixes. Full suite: 643/643 passing. `npx tsc --noEmit` clean.
 - Iteration 14: SettingsScreen's "Change content folder" had no double-tap guard, the third time this exact bug class has been found and fixed in this codebase. See above.
 - Iteration 16: SettingsScreen could silently discard a name/age/language/picture edit made during an in-flight migration. See above.
 - Iteration 18: TicTacToeSetupScreen's friend-name field had no length cap, risking layout overflow on the next screen. See above.
+- Iteration 19: CelebrationOverlay (shared completion dialog) never notified screen readers it had appeared. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -775,15 +814,6 @@ the gallery-hook Architecture candidate was completed in iteration 4)
   `TicTacToeSetupScreen`'s own comment cross-references `HomeScreen`'s
   version). Worth a small `useNavLock()` hook if a third copy ever appears;
   marginal value for just 2.
-- **Bug Hunting (M, from iteration 17's research pass, not yet done):**
-  `src/design-system/CelebrationOverlay.tsx` — shared by Puzzle, Quiz, and
-  TicTacToe's completion moment — has no `accessibilityViewIsModal` on its
-  `Modal`, and its title `Text` has no `accessibilityRole="alert"`/
-  `accessibilityLiveRegion`. A screen-reader user isn't notified the
-  completion dialog appeared at all. Fixing here helps every activity's
-  win screen at once, since it's the shared component — higher leverage
-  than a per-screen fix, worth its own careful iteration given it's a
-  widely-shared component (unlike the smaller isolated fixes so far).
 - **Bug Hunting (S, from iteration 18's research, not yet done):** the
   SAME unbounded-render risk fixed for the friend name in iteration 18
   still exists for the child's OWN name (`profile.name`, editable in
