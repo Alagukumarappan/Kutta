@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, type NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getProfile } from '../storage/profileStore';
 import { findChildUri, ensureContentStructure } from '../storage/folderAccess';
@@ -58,7 +58,7 @@ function delay(ms: number): Promise<void> {
 // unchecked against this list — a library type limitation, not something a
 // local fix can close without wrapping every render prop in a manually-typed
 // helper, which is out of scope here.
-type RootStackParamList = {
+export type RootStackParamList = {
   Home: undefined;
   settings: undefined;
   quiz: undefined;
@@ -275,7 +275,7 @@ function AppStack({
           <TicTacToeScreen
             mode={route.params.mode}
             difficulty={route.params.difficulty}
-            onMenu={() => navigation.navigate('tictactoe')}
+            onMenu={() => navigation.goBack()}
           />
         )}
       </Stack.Screen>
@@ -283,7 +283,17 @@ function AppStack({
   );
 }
 
-export function RootNavigator() {
+export function RootNavigator({
+  navigationRef,
+}: {
+  // Optional escape hatch so a test can drive real navigation actions
+  // (goBack, getRootState) from outside the component tree — RootNavigator
+  // otherwise hardcodes its own NavigationContainer with no way to reach
+  // it. Never used by the real app (App.tsx renders <RootNavigator />
+  // with no props); purely additive, so this changes nothing for real
+  // usage.
+  navigationRef?: React.Ref<NavigationContainerRef<RootStackParamList>>;
+} = {}) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [folderUris, setFolderUris] = useState<SubfolderUris | null>(null);
   const [folderError, setFolderError] = useState(false);
@@ -387,7 +397,7 @@ export function RootNavigator() {
 
   return (
     <LanguageProvider initialLanguage={profile?.language ?? 'en'}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         {profile ? (
           folderError ? (
             <FolderErrorScreen onRetry={retryFolderResolution} />
