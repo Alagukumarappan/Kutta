@@ -67,7 +67,8 @@ maintainers to keep both in sync if the schema ever changes).
 (none yet this pass)
 
 ## Remaining opportunities
-(from the initial research pass, not yet started)
+(from the initial research pass; two candidates below were investigated in
+iteration 2's planning and found NOT to be real issues — see "Review notes")
 - **Architecture (L):** `PuzzleGallery.tsx`, `ColoringGallery.tsx`, and
   `VideoGallery.tsx` each independently implement an almost-identical
   selection/removal/reload state machine (`images`/`videos`, `error`,
@@ -77,11 +78,6 @@ maintainers to keep both in sync if the schema ever changes).
   ~150-200 duplicated lines and centralize future selection-bug fixes.
   Large — worth splitting into its own iteration(s), extracted only if it
   genuinely simplifies all three call sites without behavior change.
-- **Bug Hunting (S-M):** `folderMigration.ts`'s `migrateContent` copy loop
-  has no in-flight/idempotency guard — double-triggering migration (e.g. a
-  child mashing the folder-change button) or a same-named-file collision in
-  the destination folder is unverified/untested. Worth a race-condition
-  regression test plus a guard if a real gap is confirmed.
 - **Gamification (M):** No achievement/reward/progress-persistence
   mechanism exists anywhere in the app (grepped — nothing beyond
   QuizScreen's own non-persisted per-session star emoji). A small, local
@@ -107,3 +103,23 @@ maintainers to keep both in sync if the schema ever changes).
   retry/reload, and the automocked-class `instanceof` test pattern used in
   `QuizScreen.test.tsx` is sound (both the test and the screen import the
   same automocked module reference, so `instanceof` holds by construction).
+- **Investigated, no code change (iteration 2 planning):** the research
+  pass's "hardcoded radius" candidate (`OnboardingScreen.tsx`'s
+  `borderRadius: 22`, plus similar literals in `EmptyState.tsx`,
+  `PieceCountPicker.tsx`, `SettingsScreen.tsx`, `ColoringScreen.tsx`,
+  `HomeScreen.tsx`, `QuestionRenderer.tsx`, and the 3 gallery components)
+  was checked value-by-value against its paired `width`/`height`. Every
+  single one is exactly half its element's diameter (22=44/2, 13=26/2,
+  7=14/2, 100=200/2, etc.) — i.e. genuine circle radii, not card-corner
+  values that drifted from the `radii` token scale. Using a `radii.*` token
+  here would be actively wrong (it would desync from the element's own
+  size the moment either changed), so this is not a real inconsistency.
+- **Investigated, no code change (iteration 2 planning):** the research
+  pass's "`folderMigration.ts` has no in-flight/re-entrancy guard against a
+  double-tap-triggered migration" candidate. The guard already exists one
+  layer up — `SettingsScreen.tsx` disables its Save button for the whole
+  duration of an in-flight migration, and
+  `__tests__/settings/SettingsScreen.test.tsx`'s "disables the Save button
+  while a migration is in progress, preventing a double submit" test
+  already exercises exactly this: a second press while migrating does not
+  call `migrateContent` again. No genuine gap found.
