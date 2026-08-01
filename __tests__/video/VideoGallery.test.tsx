@@ -15,6 +15,24 @@ jest.mock('expo-file-system/legacy', () => ({
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-document-picker');
 
+// expo-video touches real native prototypes at import time and isn't
+// mockable/transformable under this project's jest config (see
+// VideoPlayerScreen.test.tsx's own identical comment) — each grid tile now
+// renders a real VideoThumbnail (a paused-frame preview via useVideoPlayer +
+// VideoView), so this gallery needs the exact same boundary-level mock.
+jest.mock('expo-video', () => {
+  const ReactLib = require('react');
+  const RN = require('react-native');
+  return {
+    useVideoPlayer: jest.fn((_source: string, setup?: (player: unknown) => void) => {
+      const player = { muted: false, play: jest.fn(), pause: jest.fn(), replace: jest.fn(), addListener: jest.fn(() => ({ remove: jest.fn() })) };
+      setup?.(player);
+      return player;
+    }),
+    VideoView: (props: Record<string, unknown>) => ReactLib.createElement(RN.View, props),
+  };
+});
+
 // Simulates tapping the destructive button of the remove-confirmation
 // Alert — same pattern established by SettingsScreen.test.tsx's own
 // confirmAlertWith helper for its migration-confirmation Alert.
@@ -149,29 +167,46 @@ describe('VideoGallery', () => {
     expect(minHeights.some((h) => h >= 44)).toBe(true);
   });
 
-  it('gives each video row a real minHeight so its tap target meets the ~44px guideline', async () => {
-    // Unlike the retry button above, each row is a FlatList item with NO
-    // gap/separator between consecutive rows — a naive hitSlop fix here
-    // would make adjacent rows' hit zones overlap, risking a mis-tap on
-    // the wrong video. A real minHeight (which grows the row itself,
-    // pushing later rows down rather than creating an invisible overlap)
-    // is the safe way to close this gap instead.
+  // Regression test for a real bug seen on-device: this gallery used to be
+  // its own single-column list of filename rows (a fixed touchTarget.minimum
+  // height). Unified onto ColoringGallery/PuzzleGallery's exact responsive
+  // 3-per-row shape instead, which carries the same incomplete-last-row
+  // risk they both already hit: a lone tile in the final row would stretch
+  // to fill the whole row width (FlatList's `flex: 1` + incomplete-last-row
+  // interaction). The fix pads the data with invisible filler tiles up to a
+  // multiple of 3.
+  it('pads an incomplete last row with invisible filler tiles instead of leaving the last video alone in its row', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
-      'content://tree/videos/party.mp4',
-      'content://tree/videos/beach.mp4',
+      'content://tree/videos/1.mp4',
+      'content://tree/videos/2.mp4',
+      'content://tree/videos/3.mp4',
+      'content://tree/videos/4.mp4',
     ]);
 
-    const { findByTestId } = await render(
+    const { findByTestId, queryAllByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
       </LanguageProvider>
     );
 
-    const item = await findByTestId('video-item-content://tree/videos/party.mp4');
-    const flattenStyle = (style: any): Record<string, unknown> =>
-      Array.isArray(style) ? Object.assign({}, ...style.map(flattenStyle)) : style || {};
-    const style = flattenStyle(item.props.style);
-    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    await findByTestId('video-item-content://tree/videos/4.mp4');
+    const fillers = queryAllByTestId(/video-item-filler-/);
+    expect(fillers).toHaveLength(2);
+  });
+
+  it('shows a real video thumbnail preview and play-icon badge on each tile', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/videos/party.mp4',
+    ]);
+
+    const { findByTestId, findByText } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoGallery videosFolderUri="content://tree/videos" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-item-thumbnail-content://tree/videos/party.mp4');
+    await findByText('▶');
   });
 
   describe('individually-added videos', () => {

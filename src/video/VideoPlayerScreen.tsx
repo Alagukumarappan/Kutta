@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -47,6 +47,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   // insets.top itself too, the same way HomeScreen (also headerShown:
   // false) already does.
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const player = useVideoPlayer(videoUri, (p) => {
     p.play();
   });
@@ -147,33 +148,26 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   }
 
   return (
-    <View style={[styles.container, insetStyle(insets)]}>
-      <RaisedCard
-        testID="video-player-frame"
-        color={colors.surfaceRaised}
-        borderColor={palette.accentDark}
-        elevationLevel="level3"
-        style={styles.playerFrame}
-      >
-        <View style={styles.playerInner}>
-          <VideoView
-            player={player}
-            style={styles.videoView}
-            nativeControls
-            // The player frame above (RaisedCard) clips its content with
-            // overflow:'hidden' for rounded corners and carries an Android
-            // elevation shadow. The default 'surfaceView' renderer draws
-            // via a separate hardware compositor layer that doesn't always
-            // composite correctly nested under a clipped/elevated parent —
-            // on some devices this shows native controls (which ARE normal
-            // Views) but no actual video frames underneath. 'textureView'
-            // renders through the normal view hierarchy instead, at a
-            // small performance cost, and is exactly what expo-video's own
-            // docs recommend for "overlapping/clipped video views".
-            surfaceType="textureView"
-          />
-        </View>
-      </RaisedCard>
+    <View style={styles.fullScreen}>
+      <VideoView
+        player={player}
+        // Genuinely edge-to-edge (no inset padding) — the whole point of
+        // this redesign is filling the actual physical screen the way a
+        // real video app's fullscreen player does, notch/gesture-bar area
+        // included, not shrinking the video away from it.
+        style={[styles.videoView, { width, height }]}
+        nativeControls
+        contentFit="contain"
+        // A small RaisedCard frame (this screen's previous look) only ever
+        // made sense at a modest fixed size — a genuinely full-screen video
+        // is the point here, so there's no card/border chrome left to clip
+        // or collapse it (the earlier "thin line" bug was actually that
+        // card's own ambiguous flex sizing, not a surface-rendering issue -
+        // switching surfaceType away from the default 'surfaceView' never
+        // fixed anything and has been reverted, since 'textureView' has
+        // been observed to NOT correctly apply some videos' embedded
+        // rotation metadata, showing them sideways/upside-down instead).
+      />
 
       <CelebrationOverlay
         visible={finished}
@@ -211,39 +205,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.canvas,
     padding: spacing.md,
   },
-  playerFrame: {
-    width: '100%',
-    maxWidth: 700,
-    // RaisedCard's internal cardFace/cardClip layers both use flex:1 (so a
-    // RaisedCard normally sizes itself to whatever explicit dimensions its
-    // OWN parent gives it) — but this frame's parent (`container`, below)
-    // is a centered flex column with no explicit height of its own. Asking
-    // a flex:1 chain to size itself inside an unbounded, centered parent
-    // has been observed to resolve to an unpredictable height instead of
-    // the wrapped content's real size (the same root cause behind a
-    // stretched PuzzleScreen preview card fixed elsewhere) — here it
-    // collapsed the whole card toward ~0px tall, and since cardClip clips
-    // with overflow:'hidden', the real 300px-tall VideoView got clipped
-    // down to a sliver: audio kept playing (unaffected by visual clipping)
-    // while only a thin line of video showed. Giving this frame an
-    // EXPLICIT height removes the ambiguity — this is a best-effort
-    // diagnosis reasoned by analogy to a confirmed bug elsewhere in this
-    // same RaisedCard component, not yet verified on a real device.
-    //
-    // RN uses border-box sizing, so this height must cover the full box:
-    // videoView's own height (300) + playerInner's padding on both sides
-    // (spacing.sm x2) + cardFace's own borderWidth on both sides (4 x2) —
-    // omitting the border here would leave cardClip ~8px short of what
-    // playerInner actually needs, clipping the bottom sliver of the video
-    // right back off again.
-    height: 300 + spacing.sm * 2 + 4 * 2,
-  },
-  playerInner: {
-    padding: spacing.sm,
+  // No card/border chrome here at all, unlike the loading/error states —
+  // a genuinely full-screen video is the whole point of this redesign, so
+  // there's nothing left to clip or ambiguously size it (see VideoView's
+  // own inline comment for what used to sit here and why it was removed).
+  fullScreen: {
+    flex: 1,
+    backgroundColor: colors.ink,
   },
   videoView: {
-    width: '100%',
-    height: 300,
+    // width/height are set inline from useWindowDimensions() — the actual
+    // device screen size, not a fixed guess — so the player genuinely
+    // fills the physical screen, edge-to-edge (see the inline style array
+    // above for why insets are deliberately NOT applied here).
   },
   errorCardOuter: {
     width: '100%',

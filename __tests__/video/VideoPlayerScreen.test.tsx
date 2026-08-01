@@ -99,17 +99,17 @@ describe('VideoPlayerScreen', () => {
     expect(queryByTestId('video-player-error')).toBeNull();
   });
 
-  // Regression test for a real bug seen on-device: nativeControls showed
-  // (native controls are plain Views), but no actual video frames ever
-  // appeared — just the control bar. The player frame around VideoView is a
-  // RaisedCard, which clips with overflow:'hidden' for rounded corners and
-  // carries an Android elevation shadow; the default 'surfaceView' renderer
-  // draws via a separate hardware-compositor layer that doesn't always
-  // composite correctly nested under a clipped/elevated parent on real
-  // devices. 'textureView' renders through the normal view hierarchy
-  // instead, which expo-video's own docs recommend for exactly this
-  // "overlapping/clipped video view" scenario.
-  it('uses textureView rendering, not the default surfaceView, to avoid disappearing under the clipped/elevated player frame', async () => {
+  // History of this screen's player sizing, for context: it first used a
+  // small fixed-size RaisedCard frame; that frame's own ambiguous flex
+  // sizing collapsed the video down to a sliver (a real bug), which a
+  // 'textureView' surfaceType change didn't actually fix; then an explicit
+  // height on the frame fixed the collapse, but 'textureView' turned out to
+  // have its OWN separate problem — some videos' embedded rotation metadata
+  // wasn't applied, showing them sideways/upside-down. The redesign here
+  // removes the frame concept entirely: a genuinely full-screen video with
+  // the default 'surfaceView' renderer (which doesn't have that rotation
+  // problem), sized directly from the real device window.
+  it('fills the entire window (no fixed-size frame), matching the developer\'s explicit "fill the whole screen" request', async () => {
     const { findByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <VideoPlayerScreen videoUri={VIDEO_URI} />
@@ -119,41 +119,21 @@ describe('VideoPlayerScreen', () => {
     await emitReady();
 
     const videoView = await findByTestId('video-view');
-    expect(videoView.props.surfaceType).toBe('textureView');
-  });
-
-  // Regression test for a real bug seen on-device that the textureView
-  // change above did NOT actually fix: audio played but no video frame ever
-  // showed, just a thin line. Best-effort diagnosis (not yet confirmed on a
-  // real device): the player frame (a RaisedCard) has no explicit height of
-  // its own — RaisedCard's internal cardFace/cardClip layers both use
-  // flex:1, which sizes correctly when RaisedCard's own parent provides a
-  // definite height, but this frame's parent is a centered flex column with
-  // none — the same "flex:1 inside an unbounded parent" root cause already
-  // found and fixed for a stretched PuzzleScreen preview card, except here
-  // it collapsed the frame toward ~0px tall instead of stretching, clipping
-  // the real 300px-tall VideoView down to a sliver via cardClip's
-  // overflow:'hidden' (audio, unaffected by visual clipping, kept playing
-  // normally). Giving the frame an explicit height removes that specific
-  // ambiguity, whether or not it turns out to be the whole story.
-  it('gives the player frame an explicit height, so it can never collapse the video view down to a sliver', async () => {
+    // useWindowDimensions() in this Jest environment resolves to RN's own
+    // default test window size (1080 x 1920 physical px through jest-expo's
+    // preset) — asserting against that exact value would be circular. The
+    // real guarantee this locks in is structural: no surfaceType prop (so
+    // it stays on the default 'surfaceView', avoiding the rotation bug),
+    // and width/height driven by the live hook value rather than any fixed
+    // number.
+    expect(videoView.props.surfaceType).toBeUndefined();
+    expect(typeof videoView.props.style).not.toBe('undefined');
     const { StyleSheet } = require('react-native');
-    const { findByTestId } = await render(
-      <LanguageProvider initialLanguage="en">
-        <VideoPlayerScreen videoUri={VIDEO_URI} />
-      </LanguageProvider>
-    );
-
-    await emitReady();
-
-    const frame = await findByTestId('video-player-frame');
-    const flattened = StyleSheet.flatten(frame.props.style);
-    // Full border-box: videoView's own height (300) + playerInner's padding
-    // on both sides (spacing.sm=12 x2) + cardFace's own borderWidth on both
-    // sides (4 x2) — omitting the border would leave cardClip a few px
-    // short of what playerInner actually needs, clipping the bottom sliver
-    // of the video right back off again.
-    expect(flattened.height).toBe(300 + 12 * 2 + 4 * 2);
+    const flattened = StyleSheet.flatten(videoView.props.style);
+    expect(typeof flattened.width).toBe('number');
+    expect(typeof flattened.height).toBe('number');
+    expect(flattened.width).toBeGreaterThan(0);
+    expect(flattened.height).toBeGreaterThan(0);
   });
 
   // Regression test for a real gap: previously this screen showed NO

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
@@ -10,7 +11,6 @@ import {
   spacing,
   radii,
   typography,
-  touchTarget,
   getActivityPalette,
   RaisedCard,
   RaisedPrimaryButton,
@@ -19,6 +19,11 @@ import {
 } from '../design-system';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
+
+// Same responsive, 3-per-row grid as ColoringGallery/PuzzleGallery — every
+// gallery in the app now shares this exact shape instead of Video being its
+// own single-column list of filename rows.
+const GRID_COLUMNS = 3;
 
 // Video's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
 // getActivityPalette) — used across the row cards, the error card's border,
@@ -30,9 +35,59 @@ function isVideoFile(uri: string): boolean {
   return VIDEO_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
+// Still used for each tile's accessibilityLabel — the redesigned grid no
+// longer shows the filename as visible text (matching Coloring/Puzzle's
+// image-only tiles), but a screen-reader user still needs SOME real name
+// for the tile beyond "video", not just a generic label repeated for every
+// tile in the folder.
 function fileNameFromUri(uri: string): string {
   const decoded = decodeURIComponent(uri);
   return decoded.substring(decoded.lastIndexOf('/') + 1);
+}
+
+// FlatList's `numColumns` combined with a `flex: 1` tile (needed so each
+// tile fills an even 1/3 share of the row's width) has a well-known side
+// effect on an INCOMPLETE last row — see the identical fix already applied
+// to ColoringGallery.tsx/PuzzleGallery.tsx. Padding the data with invisible,
+// non-tappable filler entries up to a multiple of GRID_COLUMNS keeps every
+// real tile locked to its normal 1/3-width slot.
+const GALLERY_FILLER_PREFIX = '__video-gallery-filler__';
+
+function isGalleryFiller(uri: string): boolean {
+  return uri.startsWith(GALLERY_FILLER_PREFIX);
+}
+
+function withRowFillers(videos: string[]): string[] {
+  const remainder = videos.length % GRID_COLUMNS;
+  if (remainder === 0) return videos;
+  const fillerCount = GRID_COLUMNS - remainder;
+  const fillers = Array.from({ length: fillerCount }, (_, i) => `${GALLERY_FILLER_PREFIX}${i}`);
+  return [...videos, ...fillers];
+}
+
+// A real, live preview frame — not a generic icon — using expo-video (an
+// existing dependency, so this needs no new native module/rebuild the way
+// a dedicated thumbnail-extraction library would). Plays for one tick and
+// immediately pauses: expo-video only actually decodes/paints a frame once
+// playback has started at least once, so a player left permanently paused
+// from creation shows nothing at all. Muted throughout so this never
+// produces a flash of audio from a tile the child hasn't tapped into yet.
+function VideoThumbnail({ uri, testID }: { uri: string; testID?: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.muted = true;
+    p.play();
+    p.pause();
+  });
+  return (
+    <VideoView
+      testID={testID}
+      player={player}
+      style={styles.tileVideo}
+      nativeControls={false}
+      contentFit="cover"
+      surfaceType="textureView"
+    />
+  );
 }
 
 export function VideoGallery({
@@ -156,21 +211,36 @@ export function VideoGallery({
         />
       ) : (
         <FlatList
-          data={videos}
+          testID="video-gallery-list"
+          data={withRowFillers(videos)}
           keyExtractor={(uri) => uri}
+          numColumns={GRID_COLUMNS}
+          columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listContent}
+          // Unlike a plain <Image> tile, each thumbnail here is a REAL
+          // native video player (see VideoThumbnail) — FlatList's default
+          // virtualization window (~21 items) would keep that many
+          // decoders alive at once while scrolling a large folder. A
+          // tighter window keeps only what's actually near the viewport
+          // mounted, without giving up virtualization altogether.
+          initialNumToRender={9}
+          maxToRenderPerBatch={6}
+          windowSize={3}
           renderItem={({ item }) => {
+            if (isGalleryFiller(item)) {
+              return <View testID={`video-item-filler-${item}`} style={styles.tile} />;
+            }
             const isSelected = selectedUris.has(item);
             return (
               <RaisedCard
                 testID={`video-item-${item}`}
                 onPress={() => handleRowPress(item)}
                 onLongPress={() => handleLongPress(item)}
-                color={palette.accentSoft}
+                color={colors.surface}
                 borderColor={isSelected ? palette.accent : palette.accentDark}
                 tilt="compact"
                 elevationLevel="level2"
-                style={styles.videoRow}
+                style={styles.tile}
                 accessibilityLabel={fileNameFromUri(item)}
                 // Only meaningful once multi-select mode is actually
                 // active — outside it, this tile has no "selected" concept
@@ -180,7 +250,16 @@ export function VideoGallery({
                 // difficulty options already draw.
                 selected={selectionMode ? isSelected : undefined}
               >
-                <View style={styles.videoRowContent}>
+                <>
+                  <VideoThumbnail testID={`video-item-thumbnail-${item}`} uri={item} />
+                  {/* A real preview frame alone doesn't read as "this is a
+                      video" the way a static photo tile does — this small
+                      play-glyph badge is the same universal affordance
+                      every video-picker UI uses to disambiguate the two at
+                      a glance. */}
+                  <View style={styles.playBadge} pointerEvents="none">
+                    <Text style={styles.playBadgeText}>▶</Text>
+                  </View>
                   {selectionMode && (
                     <View
                       testID={`video-item-check-${item}`}
@@ -189,11 +268,7 @@ export function VideoGallery({
                       {isSelected && <Text style={styles.selectionBadgeMark}>✓</Text>}
                     </View>
                   )}
-                  <Text style={styles.videoEmoji}>🎬</Text>
-                  <Text style={styles.videoLabel} numberOfLines={1}>
-                    {fileNameFromUri(item)}
-                  </Text>
-                </View>
+                </>
               </RaisedCard>
             );
           }}
@@ -274,33 +349,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingBottom: spacing.md,
   },
-  // Cards are rendered with real vertical spacing between them (marginBottom)
-  // rather than a hitSlop/negative-margin trick, so growing the tap target
-  // can never make adjacent rows' hit zones overlap — same reasoning the
-  // previous plain-row implementation used for its `minHeight`, just carried
-  // over onto the new card shape.
-  videoRow: {
-    minHeight: touchTarget.minimum,
+  row: {
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  videoRowContent: {
+  // Same responsive, 3-per-row shape as ColoringGallery/PuzzleGallery: each
+  // tile fills an even 1/3 share of the row's width (flex: 1) and stays
+  // square (aspectRatio: 1).
+  tile: {
     flex: 1,
-    flexDirection: 'row',
+    aspectRatio: 1,
+  },
+  tileVideo: {
+    flex: 1,
+    borderRadius: radii.md,
+  },
+  playBadge: {
+    position: 'absolute',
+    bottom: spacing.xs,
+    left: spacing.xs,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.overlayScrim,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
   },
-  videoEmoji: {
-    fontSize: 22,
-    marginRight: spacing.sm,
-  },
-  videoLabel: {
-    flex: 1,
-    fontSize: typography.body.fontSize,
-    fontWeight: typography.body.fontWeight,
-    color: colors.ink,
+  playBadgeText: {
+    color: colors.white,
+    fontSize: 13,
+    // Optically centers the ▶ glyph, which otherwise reads slightly
+    // left-of-center inside a circular badge.
+    marginLeft: 2,
   },
   selectionBadge: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
     width: 26,
     height: 26,
     borderRadius: 13,
@@ -309,7 +394,6 @@ const styles = StyleSheet.create({
     borderColor: colors.inkMuted,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.sm,
   },
   selectionBadgeChecked: {
     backgroundColor: palette.accent,

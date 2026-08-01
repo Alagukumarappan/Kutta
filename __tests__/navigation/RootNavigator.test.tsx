@@ -19,8 +19,11 @@ jest.mock('expo-screen-orientation', () => ({
 jest.mock('../../src/coloring/ColoringScreen', () => ({ ColoringScreen: () => null }));
 // expo-video isn't mockable/transformable under this project's jest config
 // either (it touches real native prototypes at import time) — stub it out
-// for the same reason as ColoringScreen above.
+// for the same reason as ColoringScreen above. VideoGallery now also
+// renders a real per-tile video thumbnail (useVideoPlayer + VideoView), so
+// it pulls in expo-video too and needs the same treatment.
 jest.mock('../../src/video/VideoPlayerScreen', () => ({ VideoPlayerScreen: () => null }));
+jest.mock('../../src/video/VideoGallery', () => ({ VideoGallery: () => null }));
 
 const profile = {
   name: 'Sam',
