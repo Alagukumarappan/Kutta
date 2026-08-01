@@ -164,6 +164,26 @@ describe('ColoringScreen', () => {
     expect(queryByTestId('coloring-image-load-error')).toBeNull();
   });
 
+  // Regression test: while the photo is still being read/decoded, `image`
+  // is `null` and `imageLoadFailed` is `false` — the exact same gap already
+  // fixed for VideoPlayerScreen (iteration 12) and ProfilePicturePicker
+  // (iteration 17), both converged on the shared LoadingPanel. Without a
+  // loading branch, a child would see a blank, fully-interactive canvas +
+  // toolbar with zero feedback that anything was happening at all.
+  it('shows a real loading spinner (not a blank interactive canvas) while the photo is still decoding', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-image-loading');
+    expect(queryByTestId('coloring-canvas-touch-area')).toBeNull();
+    expect(queryByTestId('coloring-image-load-error')).toBeNull();
+  });
+
   it('shows a friendly localized message (never the raw technical error) when the photo fails to load', async () => {
     (FileSystem.readAsStringAsync as jest.Mock).mockRejectedValue(
       new Error('ENOENT: no such file or directory, open \'/data/user/0/com.example/cache/x.jpg\'')

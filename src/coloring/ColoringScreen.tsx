@@ -26,6 +26,7 @@ import {
   getActivityPalette,
   RaisedCard,
   RaisedPrimaryButton,
+  LoadingPanel,
   useReducedMotion,
 } from '../design-system';
 import { PALETTE, RGBA } from './palette';
@@ -700,7 +701,11 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       }}
     >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        {imageLoadFailed ? (
+        {!imageLoadFailed && image === null ? (
+          <View testID="coloring-image-loading" style={{ width: canvasWidth, height: canvasHeight }}>
+            <LoadingPanel color={coloringAccent.accent} message={t('galleryLoading')} />
+          </View>
+        ) : imageLoadFailed ? (
           <View testID="coloring-image-load-error">
             <RaisedCard
               testID="coloring-image-load-error-card"

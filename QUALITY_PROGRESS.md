@@ -792,6 +792,46 @@ that would actually catch a `maxLength`-only regression). All 4 verified
 via `git stash` to genuinely fail without their respective fixes. Full
 suite: 649/649 passing. `npx tsc --noEmit` clean.
 
+### Iteration 21 — Bug fix: ColoringScreen showed a blank interactive canvas while the photo decoded
+**Area:** Bug Hunting.
+
+**Problem:** `ColoringScreen.tsx` decodes a photo asynchronously
+(`FileSystem.readAsStringAsync` → base64 decode → Skia image decode) into
+an `image` state, with the render logic simply
+`imageLoadFailed ? <error card> : <full interactive canvas + toolbar>`.
+While `image` was still `null` mid-decode and `imageLoadFailed` was still
+`false`, a child would see a blank canvas with an already-tappable
+toolbar handle and zero feedback that anything was loading — the same
+gap already fixed for `VideoPlayerScreen` (iteration 12) and
+`ProfilePicturePicker` (iteration 17), both of which converged on the
+shared `LoadingPanel` component; this screen was the one instance missed.
+
+**Fix:** Added a `!imageLoadFailed && image === null` branch ahead of the
+existing error/canvas ternary, rendering `LoadingPanel` (tinted with
+Coloring's own accent color) sized to the same `canvasWidth`/
+`canvasHeight` the real canvas would occupy.
+
+**Review:** independent review confirmed the loading condition is
+exhaustive against every state transition (initial load, `imageUri`
+change, and Retry's `retryToken` bump all reset `image`/`imageLoadFailed`
+at the top of the same effect), that nothing else in the component
+assumes the canvas/toolbar subtree is unconditionally mounted, and that
+`canvasWidth`/`canvasHeight` are computed independently of `image` (from
+`useWindowDimensions` + insets) so they're safe to use before decode
+completes. One purely stylistic nit was raised (wrapping `LoadingPanel`
+in a sized `View` instead of passing `testID` straight through, unlike
+the other two convergent fixes) and left as-is — `LoadingPanel` is
+`flex:1` and needs an explicitly-sized parent here, so the wrapper is
+necessary, not just a style inconsistency.
+
+**Tests:** 1 new test in `__tests__/coloring/ColoringScreen.test.tsx` —
+mocks `FileSystem.readAsStringAsync` to return a never-resolving
+`Promise` (same technique as iteration 17's ProfilePicturePicker test),
+then asserts the loading panel is shown and neither the canvas nor the
+error state is. Verified via `git stash` to genuinely fail without the
+fix (rendering the bare canvas/toolbar instead). Full suite: 650/650
+passing. `npx tsc --noEmit` clean.
+
 ## Architecture improvements
 - Iteration 4: `useSelectableGallery` hook, deduping Coloring/Puzzle/Video
   galleries' load+selection logic. See above.
@@ -816,6 +856,7 @@ suite: 649/649 passing. `npx tsc --noEmit` clean.
 - Iteration 18: TicTacToeSetupScreen's friend-name field had no length cap, risking layout overflow on the next screen. See above.
 - Iteration 19: CelebrationOverlay (shared completion dialog) never notified screen readers it had appeared. See above.
 - Iteration 20: the child's own name (Onboarding/Settings) had no length cap, same overflow risk as the friend name. See above.
+- Iteration 21: ColoringScreen showed a blank, fully-interactive canvas with no feedback while the photo was still decoding. See above.
 
 ## Consistency improvements
 - Iteration 9: ColoringScreen's error state now uses the same RaisedCard+RaisedPrimaryButton pattern every other error state in the app converged on. See above.
@@ -826,6 +867,18 @@ suite: 649/649 passing. `npx tsc --noEmit` clean.
 (from the initial research pass; two candidates below were investigated in
 iteration 2's planning and found NOT to be real issues — see "Review notes";
 the gallery-hook Architecture candidate was completed in iteration 4)
+- **Bug Hunting (S, from iteration 21's research, not yet done):**
+  `RootNavigator.tsx` renders a literal blank screen (`folderUris ? <AppStack/> : null`)
+  during the window between the splash dismissing and
+  `resolveSubfolderUris` (an `ensureContentStructure` + 4 parallel
+  `findChildUri` SAF calls) finishing, on every single launch. No test
+  covers this window.
+- **Bug Hunting (S, from iteration 21's research, not yet done):**
+  `QuizScreen.tsx`'s loading state is a bare empty `View`, unlike every
+  gallery, `PuzzleScreen`, and now `ColoringScreen`, all of which use the
+  shared `LoadingPanel`. Lower severity since the JSON parse it's waiting
+  on is typically fast, but still a real, unaddressed instance of the
+  same pattern just fixed in iteration 21.
 - **Gamification (S, follow-up to iteration 3 — DONE, see above):** the
   activity-log counter now exists (quiz+puzzle only). A natural next step,
   once there's a sense the current summary is useful, would be a manual
