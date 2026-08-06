@@ -18,6 +18,7 @@ import {
   RaisedPrimaryButton,
   RaisedSecondaryButton,
   useReducedMotion,
+  GradientScreenBackground,
 } from '../design-system';
 
 // This screen rebuilds the quiz UI as a single-question, STACKED layout
@@ -528,17 +529,18 @@ export function QuestionRenderer({
   }
 
   return (
-    <ScrollView
-      style={styles.scrollView}
-      // The flex column below is sized to fit a real landscape screen without
-      // scrolling in the normal case. This ScrollView is the safety net for
-      // when it can't: questionCard/grid carry a minHeight (70/140), so on an
-      // unusually short screen they stop shrinking and the content container
-      // genuinely grows past the viewport instead of merely compressing
-      // toward zero — at which point this actually scrolls, rather than
-      // clipping content off-screen unreachably.
-      contentContainerStyle={styles.scrollContent}
-    >
+    <GradientScreenBackground>
+      <ScrollView
+        style={styles.scrollView}
+        // The flex column below is sized to fit a real landscape screen without
+        // scrolling in the normal case. This ScrollView is the safety net for
+        // when it can't: questionCard/grid carry a minHeight (70/140), so on an
+        // unusually short screen they stop shrinking and the content container
+        // genuinely grows past the viewport instead of merely compressing
+        // toward zero — at which point this actually scrolls, rather than
+        // clipping content off-screen unreachably.
+        contentContainerStyle={styles.scrollContent}
+      >
       <View style={styles.column}>
         {showProgress && (
           <View
@@ -754,14 +756,14 @@ export function QuestionRenderer({
           </Modal>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: colors.canvas,
   },
   scrollContent: {
     flexGrow: 1,

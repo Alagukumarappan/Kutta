@@ -8,7 +8,7 @@ import { recordQuizCompleted } from '../storage/activityLog';
 import { buildSession, initialSessionState, answerCurrentQuestion, QuizSessionState } from './quizSession';
 import type { Question } from '../types/quiz';
 import { QuestionRenderer } from './QuestionRenderer';
-import { colors, spacing } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import {
   colors as dsColors,
   spacing as dsSpacing,
@@ -19,6 +19,7 @@ import {
   RaisedCard,
   RaisedPrimaryButton,
   RaisedSecondaryButton,
+  GradientScreenBackground,
 } from '../design-system';
 
 // REDESIGN (matches QuestionRenderer.tsx's iteration 2 pass onto
@@ -222,7 +223,7 @@ export function QuizScreen({
     // states didn't). Deliberately scoped to just the error state here —
     // the loading/empty branches below are untouched.
     return (
-      <View testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
+      <GradientScreenBackground testID="quiz-error" style={[styles.centeredScreen, insetStyle]}>
         <RaisedCard color={dsColors.surface} borderColor={quizPalette.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
           <View style={styles.errorCardInner}>
             <Text style={styles.errorTitle}>{t(errorKind === 'corrupt' ? 'quizFileCorrupt' : 'loadError')}</Text>
@@ -236,17 +237,17 @@ export function QuizScreen({
             />
           </View>
         </RaisedCard>
-      </View>
+      </GradientScreenBackground>
     );
   }
 
-  if (!state) return <View testID="quiz-loading" style={[styles.centeredScreen, insetStyle]} />;
+  if (!state) return <GradientScreenBackground testID="quiz-loading" style={[styles.centeredScreen, insetStyle]} />;
 
   if (state.session.length === 0) {
     return (
-      <View style={[styles.centeredScreen, insetStyle]}>
+      <GradientScreenBackground style={[styles.centeredScreen, insetStyle]}>
         <Text style={styles.messageText}>{t('emptyQuiz')}</Text>
-      </View>
+      </GradientScreenBackground>
     );
   }
 
@@ -281,7 +282,7 @@ export function QuizScreen({
     }
 
     return (
-      <View style={[styles.centeredScreen, insetStyle]}>
+      <GradientScreenBackground style={[styles.centeredScreen, insetStyle]}>
         <Animated.View
           style={[
             styles.scoreCardEntrance,
@@ -333,7 +334,7 @@ export function QuizScreen({
             accessibilityLabel={t('quizGoHome')}
           />
         </View>
-      </View>
+      </GradientScreenBackground>
     );
   }
 
@@ -379,15 +380,18 @@ export function QuizScreen({
 const styles = StyleSheet.create({
   centeredScreen: {
     flex: 1,
-    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
   },
+  // Sits directly on the purple gradient background (not a card), so it
+  // needs a light color rather than the old dark `colors.ink` (which read
+  // fine on the previous cream background but is nearly invisible against
+  // violet/violetDark).
   messageText: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: colors.ink,
+    color: dsColors.white,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
