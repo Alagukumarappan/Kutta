@@ -21,11 +21,14 @@ describe('HomeScreen', () => {
     const onNavigate = jest.fn();
     const { getByText } = await render(
       <LanguageProvider initialLanguage="en">
-        <HomeScreen childName="Sam" onNavigate={onNavigate} />
+        <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
       </LanguageProvider>
     );
 
     expect(getByText('Sam')).toBeTruthy();
+    // Header pill's age subtitle (see HomeScreen.tsx's redesigned header) —
+    // Profile.age is a single integer, not a range, so this is "Age 7".
+    expect(getByText('Age 7')).toBeTruthy();
 
     await fireEvent.press(getByText('Coloring'));
     expect(onNavigate).toHaveBeenCalledWith('coloring');
@@ -47,7 +50,7 @@ describe('HomeScreen', () => {
     const onNavigate = jest.fn();
     const { findByLabelText } = await render(
       <LanguageProvider initialLanguage="en">
-        <HomeScreen childName="Sam" onNavigate={onNavigate} />
+        <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
       </LanguageProvider>
     );
 
@@ -61,7 +64,7 @@ describe('HomeScreen', () => {
       const onNavigate = jest.fn();
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
         </LanguageProvider>
       );
 
@@ -91,7 +94,7 @@ describe('HomeScreen', () => {
       const onNavigate = jest.fn();
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
         </LanguageProvider>
       );
 
@@ -117,7 +120,7 @@ describe('HomeScreen', () => {
       const onNavigate = jest.fn();
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
         </LanguageProvider>
       );
 
@@ -137,7 +140,7 @@ describe('HomeScreen', () => {
       const onNavigate = jest.fn();
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
         </LanguageProvider>
       );
 
@@ -153,7 +156,7 @@ describe('HomeScreen', () => {
       const onNavigate = jest.fn();
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={onNavigate} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
         </LanguageProvider>
       );
 
@@ -170,7 +173,7 @@ describe('HomeScreen', () => {
     it('lays out all five cards at the same fixed width, inside a horizontally-scrolling row', async () => {
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -200,7 +203,7 @@ describe('HomeScreen', () => {
     it('shows each card with its own tagline copy', async () => {
       const { getByText } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -214,7 +217,7 @@ describe('HomeScreen', () => {
     it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video/TicTacToe each distinct)', async () => {
       const { toJSON } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -236,7 +239,7 @@ describe('HomeScreen', () => {
     it('gives the settings icon button a touch target that meets the design system\'s 48dp minimum', async () => {
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -250,7 +253,7 @@ describe('HomeScreen', () => {
     it('shows a fallback placeholder avatar (not a broken image) when no picture is set', async () => {
       const { findByTestId, queryByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -263,7 +266,7 @@ describe('HomeScreen', () => {
 
       const { findByTestId, queryByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/me.jpg" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} pictureUri="content://tree/pictures/me.jpg" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -277,7 +280,7 @@ describe('HomeScreen', () => {
 
       const { findByTestId, queryByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/deleted.jpg" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} pictureUri="content://tree/pictures/deleted.jpg" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -290,7 +293,7 @@ describe('HomeScreen', () => {
 
       const { findByTestId, queryByTestId } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/me.jpg" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} pictureUri="content://tree/pictures/me.jpg" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -306,7 +309,7 @@ describe('HomeScreen', () => {
     it('gives the avatar (image or placeholder) an accessible label for screen readers, and it is not tappable', async () => {
       const { findByLabelText } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -322,7 +325,7 @@ describe('HomeScreen', () => {
 
       const { findByTestId, rerender } = await render(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/first.jpg" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} pictureUri="content://tree/pictures/first.jpg" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 
@@ -332,7 +335,7 @@ describe('HomeScreen', () => {
       (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue('content://tree/pictures/second.jpg');
       rerender(
         <LanguageProvider initialLanguage="en">
-          <HomeScreen childName="Sam" pictureUri="content://tree/pictures/second.jpg" onNavigate={jest.fn()} />
+          <HomeScreen childName="Sam" childAge={7} pictureUri="content://tree/pictures/second.jpg" onNavigate={jest.fn()} />
         </LanguageProvider>
       );
 

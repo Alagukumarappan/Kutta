@@ -35,6 +35,10 @@ export const UI_STRINGS = {
   homeVideoTagline: { en: 'Watch & learn', de: 'Schauen & lernen' },
   homeTicTacToeTagline: { en: 'Outsmart the computer!', de: 'Überlist den Computer!' },
   homeGreetingHi: { en: 'Hi,', de: 'Hallo,' },
+  // Subtitle under the child's name in Home's redesigned header pill (see
+  // HomeScreen.tsx) — e.g. "Age 7". Profile.age is always a single integer
+  // (2-8 inclusive), not a range, so this is a single-number label.
+  homeAgeLabel: { en: 'Age {age}', de: 'Alter {age}' },
   coloringDetailTitle: { en: 'Coloring Page', de: 'Malvorlage' },
   puzzleDetailTitle: { en: 'Puzzle', de: 'Puzzle' },
   videoDetailTitle: { en: 'Video', de: 'Video' },

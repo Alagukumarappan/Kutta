@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, Animated, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { resolveProfilePictureUri } from '../storage/profilePicture';
@@ -44,12 +45,19 @@ type CardSpec = {
   activity: ActivityId;
 };
 
-// Matches settingsButton's width/height below — pulled out as a constant so
-// the headerReserve math in HomeScreen can derive from it instead of
-// duplicating (or drifting from) the literal in the stylesheet. Uses the new
-// design system's `touchTarget.iconButton` (48dp, Material's minimum) rather
-// than the old theme's 44px.
+// Matches settingsButton's HEIGHT below (the settings control is now a wider
+// pill, not a square icon button, so only its height stays tied to this
+// constant) — pulled out so the headerReserve math in HomeScreen can derive
+// from it instead of duplicating (or drifting from) the literal in the
+// stylesheet. Uses the new design system's `touchTarget.iconButton` (48dp,
+// Material's minimum) rather than the old theme's 44px.
 const SETTINGS_BUTTON_SIZE = touchTarget.iconButton;
+
+// Fixed width for the settings pill (icon + "Settings" label). A generous
+// fixed value rather than shrink-to-fit content, so the German label
+// ("Einstellungen", noticeably longer than "Settings") never forces a
+// last-minute layout jump between languages.
+const SETTINGS_PILL_WIDTH = 148;
 
 // A horizontally-scrolling row (not a fixed 4-up grid) so more activity
 // cards can be added later without ever needing to shrink existing ones to
@@ -74,10 +82,15 @@ const CARDS: CardSpec[] = [
 
 export function HomeScreen({
   childName,
+  childAge,
   pictureUri,
   onNavigate,
 }: {
   childName: string;
+  // Profile.age (2-8 inclusive) — always present on a saved Profile (see
+  // src/types/profile.ts), shown as a small subtitle under the child's name
+  // in the header pill below, matching this redesign's reference.
+  childAge: number;
   // Raw Profile.pictureUri, resolved (existence-checked) below via
   // resolveProfilePictureUri — optional since most profiles won't have set
   // one (see SettingsScreen's picker, iteration 29).
@@ -201,7 +214,10 @@ export function HomeScreen({
   const step = CARD_WIDTH + CARD_GAP;
 
   return (
-    <View
+    <LinearGradient
+      colors={[colors.violet, colors.violetDark]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
       style={[
         styles.screen,
         {
@@ -213,9 +229,14 @@ export function HomeScreen({
       ]}
     >
       {/* Purely decorative depth shapes behind everything — soft, static,
-          low-opacity tinted circles bleeding off the edges of the screen, so
-          the background reads as layered rather than a single flat color.
-          pointerEvents="none" so they can never intercept a child's tap. */}
+          low-opacity WHITE-translucent circles bleeding off the edges of the
+          screen, so the rich purple gradient background reads as layered
+          rather than a single flat fill. Re-tuned for this dark background:
+          the old violet/marigold/jade soft tints (chosen for the previous
+          cream `colors.canvas` background) would either disappear into the
+          new purple or clash with it, so these are all one neutral white at
+          a low, varying opacity instead. pointerEvents="none" so they can
+          never intercept a child's tap. */}
       <View style={styles.decorTopRight} pointerEvents="none" />
       <View style={styles.decorBottomLeft} pointerEvents="none" />
       <View style={styles.decorMid} pointerEvents="none" />
@@ -249,10 +270,8 @@ export function HomeScreen({
             </View>
           )}
           <View>
-            <Text style={styles.greetingHi}>{t('homeGreetingHi')}</Text>
-            <Text style={styles.greetingText}>
-              <Text testID="home-child-name" style={styles.greetingName}>{childName}</Text>! 👋
-            </Text>
+            <Text testID="home-child-name" style={styles.greetingName}>{childName}</Text>
+            <Text style={styles.greetingAge}>{tFormat('homeAgeLabel', language, { age: childAge })}</Text>
           </View>
         </View>
 
@@ -266,6 +285,7 @@ export function HomeScreen({
           accessibilityLabel={t('settingsTitle')}
         >
           <Text style={styles.settingsIcon}>⚙️</Text>
+          <Text style={styles.settingsLabel}>{t('settingsTitle')}</Text>
         </AnimatedPressable>
       </View>
 
@@ -298,40 +318,46 @@ export function HomeScreen({
                 opacity: focusOpacity,
               }}
             >
+              {/* White card face, per this redesign's reference — the
+                  per-activity accent now lives on the icon frame below
+                  instead of the whole card face, so `borderColor` is a
+                  soft neutral line rather than the accent's dark shade. */}
               <RaisedCard
                 testID={card.testID}
                 onPress={() => handleCardPress(card)}
-                color={palette.accent}
-                borderColor={palette.accentDark}
+                color={colors.surface}
+                borderColor={colors.line}
                 elevationLevel="level3"
                 tilt="regular"
                 accessibilityLabel={t(card.labelKey)}
                 style={styles.cardFill}
               >
                 <View style={styles.cardContent}>
-                  <View style={styles.emojiBadge}>
+                  <View style={[styles.emojiBadge, { backgroundColor: palette.accent }]}>
                     <Text style={styles.cardEmoji}>{card.emoji}</Text>
                   </View>
-                  <Text style={[styles.cardLabel, { color: palette.onAccentText }]}>{t(card.labelKey)}</Text>
-                  <Text style={[styles.cardTagline, { color: palette.onAccentText }]}>{t(card.taglineKey)}</Text>
+                  <Text style={styles.cardLabel}>{t(card.labelKey)}</Text>
+                  <Text style={styles.cardTagline}>{t(card.taglineKey)}</Text>
                 </View>
               </RaisedCard>
             </Animated.View>
           );
         })}
       </Animated.ScrollView>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.canvas,
     overflow: 'hidden',
-    // Base padding; the actual per-side padding used at render time also
-    // adds this screen's safe-area insets (see the inline style override in
-    // the component) since this is the one screen with no native header.
+    // Background is now the LinearGradient element itself (colors.violet ->
+    // colors.violetDark, see the component above) rather than a flat
+    // `backgroundColor` here — this style object only supplies layout
+    // (flex/overflow) plus the safe-area-aware padding merged in at render
+    // time (see the inline style override in the component) since this is
+    // the one screen with no native header.
   },
   decorTopRight: {
     position: 'absolute',
@@ -340,8 +366,8 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: colors.violetSoft,
-    opacity: 0.6,
+    backgroundColor: colors.white,
+    opacity: 0.1,
   },
   decorBottomLeft: {
     position: 'absolute',
@@ -350,8 +376,8 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: colors.marigoldSoft,
-    opacity: 0.5,
+    backgroundColor: colors.white,
+    opacity: 0.08,
   },
   decorMid: {
     position: 'absolute',
@@ -360,8 +386,8 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: colors.jadeSoft,
-    opacity: 0.35,
+    backgroundColor: colors.white,
+    opacity: 0.06,
   },
   header: {
     flexDirection: 'row',
@@ -370,29 +396,32 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     paddingHorizontal: SIDE_PADDING,
   },
+  // The darker navy-purple header pill from this redesign's reference —
+  // deliberately reuses `colors.violetDark` (already a close match, see
+  // REDESIGN_PROGRESS.md's palette) rather than inventing a new hex, plus a
+  // stronger shadow so it visibly lifts off the lighter gradient behind it.
   greetingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.violetDark,
     borderRadius: radii.pill,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    ...elevation.level2,
-  },
-  greetingHi: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: typography.caption.fontWeight,
-    color: colors.inkMuted,
-  },
-  greetingText: {
-    fontSize: typography.body.fontSize,
-    fontWeight: typography.body.fontWeight,
-    color: colors.ink,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    ...elevation.level3,
   },
   greetingName: {
     fontSize: typography.body.fontSize,
     fontWeight: '800',
-    color: colors.bubblegumDark,
+    color: colors.white,
+  },
+  // Age subtitle under the name — a translucent white rather than a fixed
+  // lighter hex, so it stays readable against `greetingBadge`'s dark fill
+  // without needing its own dedicated color token.
+  greetingAge: {
+    marginTop: spacing.xxs / 2,
+    fontSize: typography.caption.fontSize,
+    fontWeight: typography.caption.fontWeight,
+    color: withAlpha(colors.white, 0.75),
   },
   // Shared by both the real avatar <Image> and its fallback <View> so the
   // badge's height never changes between the two states (kept well under
@@ -415,23 +444,36 @@ const styles = StyleSheet.create({
   },
   // AnimatedPressable's outer Pressable (layout/hit-area only, matching the
   // "outer never animates" convention every design-system pressable shares)
-  // — sized to the full SETTINGS_BUTTON_SIZE so the tappable area itself
-  // never shrinks or shifts as the inner face tilts.
+  // — sized to a fixed pill (SETTINGS_PILL_WIDTH x SETTINGS_BUTTON_SIZE) so
+  // the tappable area itself never shrinks or shifts as the inner face
+  // tilts.
   settingsHitArea: {
-    width: SETTINGS_BUTTON_SIZE,
+    width: SETTINGS_PILL_WIDTH,
     height: SETTINGS_BUTTON_SIZE,
   },
+  // Restyled as a white pill (icon + label), matching this redesign's
+  // reference "For parents" button, rather than the previous small circular
+  // icon-only button — same handleSettingsPress/double-tap-guard logic
+  // above, this only changes the visual container.
   settingsButton: {
-    width: SETTINGS_BUTTON_SIZE,
+    width: SETTINGS_PILL_WIDTH,
     height: SETTINGS_BUTTON_SIZE,
-    borderRadius: SETTINGS_BUTTON_SIZE / 2,
+    borderRadius: radii.pill,
     backgroundColor: colors.surface,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
     ...elevation.level3,
   },
   settingsIcon: {
-    fontSize: 22,
+    fontSize: 18,
+    marginRight: spacing.xxs,
+  },
+  settingsLabel: {
+    fontSize: typography.buttonSmall.fontSize,
+    fontWeight: typography.buttonSmall.fontWeight,
+    color: colors.ink,
   },
   grid: {
     flex: 1,
@@ -453,11 +495,10 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    // Same white-over-color translucent badge trick as CardBackground's own
-    // wash, expressed via the shared `withAlpha` helper (design-system/
-    // tokens.ts) instead of a hand-typed rgba() literal so this stays a
-    // single, documented color-math implementation across the app.
-    backgroundColor: withAlpha(colors.white, 0.35),
+    // backgroundColor is set per-card via `palette.accent` (see the render
+    // above) — this redesign moves the per-activity accent from the whole
+    // card face onto this icon frame instead, matching the reference's
+    // "white card, colorful icon frame" look.
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
@@ -466,16 +507,20 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   cardLabel: {
-    // Color is set per-card via `palette.onAccentText` (see the render
-    // above) rather than a fixed value here — accent colors span too wide
-    // a luminance range for one text color to stay WCAG-accessible on all
-    // of them (white fails badly on the lighter jade/marigold/sky cards;
-    // see ActivityPalette's own `onAccentText` doc comment).
+    // Card face is now always white (see the render above), so the label
+    // uses one fixed dark ink color rather than the old per-accent
+    // `onAccentText` lookup that used to be needed when the accent filled
+    // the whole card.
+    color: colors.ink,
     fontSize: typography.h3.fontSize,
     fontWeight: typography.h3.fontWeight,
     textAlign: 'center',
   },
   cardTagline: {
+    // Same reasoning as cardLabel above: white card face now, so a single
+    // muted ink tone (rather than the old per-accent onAccentText) reads
+    // well on every card regardless of its activity's accent color.
+    color: colors.inkMuted,
     marginTop: spacing.xxs,
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
