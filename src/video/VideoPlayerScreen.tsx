@@ -12,6 +12,7 @@ import {
   RaisedPrimaryButton,
   CelebrationOverlay,
   LoadingPanel,
+  GradientScreenBackground,
 } from '../design-system';
 
 // Video's recognizable per-activity accent (see REDESIGN_PROGRESS.md /
@@ -121,7 +122,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
 
   if (error) {
     return (
-      <View testID="video-player-error" style={[styles.centered, insetStyle(insets)]}>
+      <GradientScreenBackground testID="video-player-error" style={[styles.centered, insetStyle(insets)]}>
         <RaisedCard color={colors.surface} borderColor={palette.accentDark} elevationLevel="level3" style={styles.errorCardOuter}>
           <View style={styles.errorCardInner}>
             <Text style={styles.errorTitle}>{t('videoLoadError')}</Text>
@@ -135,15 +136,15 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
             />
           </View>
         </RaisedCard>
-      </View>
+      </GradientScreenBackground>
     );
   }
 
   if (loading) {
     return (
-      <View style={[styles.container, insetStyle(insets)]}>
-        <LoadingPanel testID="video-player-loading" color={palette.accent} message={t('galleryLoading')} />
-      </View>
+      <GradientScreenBackground style={[styles.container, insetStyle(insets)]}>
+        <LoadingPanel testID="video-player-loading" color={palette.accent} messageColor={colors.white} message={t('galleryLoading')} />
+      </GradientScreenBackground>
     );
   }
 
@@ -219,14 +220,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.canvas,
     padding: spacing.md,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.canvas,
     padding: spacing.md,
   },
   // No card/border chrome here at all, unlike the loading/error states —

@@ -16,6 +16,7 @@ import {
   RaisedPrimaryButton,
   EmptyStatePanel,
   LoadingPanel,
+  GradientScreenBackground,
 } from '../design-system';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
@@ -133,7 +134,7 @@ export function VideoGallery({
 
   if (error) {
     return (
-      <View testID="video-gallery-error" style={[styles.centered, insetStyle]}>
+      <GradientScreenBackground testID="video-gallery-error" style={[styles.centered, insetStyle]}>
         <RaisedCard color={colors.surface} borderColor={palette.accentDark} elevationLevel="level2" style={styles.errorCardOuter}>
           <View style={styles.errorCardInner}>
             <Text style={styles.errorText}>{t('loadError')}</Text>
@@ -147,20 +148,20 @@ export function VideoGallery({
             />
           </View>
         </RaisedCard>
-      </View>
+      </GradientScreenBackground>
     );
   }
 
   if (videos === null) {
     return (
-      <View style={[styles.container, insetStyle]}>
-        <LoadingPanel testID="video-gallery-loading" color={palette.accent} message={t('galleryLoading')} />
-      </View>
+      <GradientScreenBackground style={[styles.container, insetStyle]}>
+        <LoadingPanel testID="video-gallery-loading" color={palette.accent} messageColor={colors.white} message={t('galleryLoading')} />
+      </GradientScreenBackground>
     );
   }
 
   return (
-    <View style={[styles.container, insetStyle]}>
+    <GradientScreenBackground style={[styles.container, insetStyle]}>
       <View style={styles.headerRow}>
         {selectionMode ? (
           <View testID="video-gallery-selection-bar" style={styles.selectionBar}>
@@ -274,20 +275,18 @@ export function VideoGallery({
           }}
         />
       )}
-    </View>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.canvas,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.canvas,
     padding: spacing.md,
   },
   // Thin header row that right-aligns the compact Add button above the
@@ -305,10 +304,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  // Sits directly on the purple gradient background (not a card), so it
+  // needs a light color rather than the old dark `colors.ink`.
   selectionCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.ink,
+    color: colors.white,
   },
   selectionActions: {
     flexDirection: 'row',
