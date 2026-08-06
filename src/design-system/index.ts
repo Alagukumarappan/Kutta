@@ -9,6 +9,7 @@ export * from './useTiltPress';
 export * from './useReducedMotion';
 export * from './AnimatedPressable';
 export * from './SurfaceWash';
+export * from './GradientScreenBackground';
 export * from './RaisedCard';
 export * from './Buttons';
 export * from './CelebrationOverlay';

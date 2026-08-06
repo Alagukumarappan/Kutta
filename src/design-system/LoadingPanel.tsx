@@ -16,16 +16,24 @@ import { colors, spacing, typography } from './tokens';
 export function LoadingPanel({
   color = colors.violet,
   message,
+  // Defaults to the original muted-ink tone, which still reads correctly
+  // wherever this panel sits on a light/white surface (e.g.
+  // ProfilePicturePicker's white modal card). Screens that now render this
+  // directly on the app's purple gradient background (no white card behind
+  // it) pass colors.white instead, since inkMuted's low luminance is nearly
+  // invisible against violet/violetDark.
+  messageColor = colors.inkMuted,
   testID,
 }: {
   color?: string;
   message?: string;
+  messageColor?: string;
   testID?: string;
 }) {
   return (
     <View testID={testID} style={styles.container}>
       <ActivityIndicator size="large" color={color} />
-      {message && <Text style={styles.message}>{message}</Text>}
+      {message && <Text style={[styles.message, { color: messageColor }]}>{message}</Text>}
     </View>
   );
 }
