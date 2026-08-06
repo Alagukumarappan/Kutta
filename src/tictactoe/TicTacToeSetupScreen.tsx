@@ -13,6 +13,8 @@ import {
   getActivityPalette,
   AnimatedPressable,
   RaisedPrimaryButton,
+  GradientScreenBackground,
+  withAlpha,
 } from '../design-system';
 
 export type TicTacToeMode = 'computer' | 'friend';
@@ -93,7 +95,7 @@ export function TicTacToeSetupScreen({
   }
 
   return (
-    <View
+    <GradientScreenBackground
       style={[
         styles.screen,
         {
@@ -213,14 +215,13 @@ export function TicTacToeSetupScreen({
           style={styles.startButton}
         />
       </View>
-    </View>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.canvas,
     alignItems: 'center',
     // Deliberately NOT a ScrollView: this screen's total content (title +
     // both option rows + Start) is small and fixed (never grows with user
@@ -236,17 +237,21 @@ const styles = StyleSheet.create({
   brandEmoji: {
     fontSize: 22,
   },
+  // title/stepLabel sit directly on the purple gradient background (not a
+  // card), so both need a light color — the old dark `colors.ink`/muted
+  // `colors.inkMuted` read fine against the previous cream `colors.canvas`
+  // background but are low-contrast against violet/violetDark.
   title: {
     fontSize: typography.h2.fontSize,
     fontWeight: typography.h2.fontWeight,
-    color: colors.ink,
+    color: colors.white,
     marginTop: spacing.xxs,
     marginBottom: spacing.sm,
   },
   stepLabel: {
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: colors.inkMuted,
+    color: withAlpha(colors.white, 0.85),
     marginBottom: spacing.xs,
     marginTop: spacing.xs,
   },

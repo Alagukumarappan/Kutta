@@ -23,6 +23,7 @@ import {
   clamp,
   getActivityPalette,
   CelebrationOverlay,
+  GradientScreenBackground,
 } from '../design-system';
 
 const PALETTE = getActivityPalette('tictactoe');
@@ -184,7 +185,7 @@ export function TicTacToeScreen({
   const isCelebratoryWin = status.status === 'won' && !isHumanLoss;
 
   return (
-    <View
+    <GradientScreenBackground
       style={[
         styles.screen,
         {
@@ -271,21 +272,23 @@ export function TicTacToeScreen({
           { label: t('tictactoeChangeSetup'), onPress: handleMenu, variant: 'secondary', testID: 'tictactoe-menu' },
         ]}
       />
-    </View>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.canvas,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Sits directly on the purple gradient background (not a card), so it
+  // needs a light color rather than the old dark `colors.ink` (which read
+  // fine against the previous cream `colors.canvas` background).
   statusText: {
     fontSize: typography.h3.fontSize,
     fontWeight: typography.h3.fontWeight,
-    color: colors.ink,
+    color: colors.white,
     marginBottom: spacing.md,
     textAlign: 'center',
   },
