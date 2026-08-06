@@ -24,6 +24,7 @@ import {
   CelebrationOverlay,
   LoadingPanel,
   useReducedMotion,
+  GradientScreenBackground,
 } from '../design-system';
 import {
   computeGridDimensions,
@@ -337,9 +338,9 @@ export function PuzzleScreen({
   // on it" moment everywhere rather than a screen-specific one-off.
   if (order.length === 0 || !isImageSizeReady) {
     return (
-      <View testID="puzzle-loading" style={styles.screen}>
+      <GradientScreenBackground testID="puzzle-loading">
         <LoadingPanel color={PUZZLE_PALETTE.accentDark} />
-      </View>
+      </GradientScreenBackground>
     );
   }
 
@@ -347,6 +348,7 @@ export function PuzzleScreen({
   const rects = computePieceRects(board.width, board.height, rows, cols);
 
   return (
+    <GradientScreenBackground>
     <ScrollView
       style={styles.screen}
       contentContainerStyle={{
@@ -458,13 +460,13 @@ export function PuzzleScreen({
         ]}
       />
     </ScrollView>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.canvas,
   },
   row: {
     flexDirection: 'row',
@@ -477,11 +479,15 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: radii.md,
   },
+  // Sits directly on the purple gradient background (not a card), so it
+  // needs a light color: the old `colors.berryDark` (a fairly dark red)
+  // read fine against the previous cream `colors.canvas` background but is
+  // low-contrast against the new violet/violetDark gradient.
   previewHint: {
     marginBottom: spacing.xs,
     fontSize: typography.body.fontSize,
     fontWeight: '800',
-    color: colors.berryDark,
+    color: colors.white,
     textAlign: 'center',
   },
   // The "recessed tray" the board sits in — a sunken fill (darker than the

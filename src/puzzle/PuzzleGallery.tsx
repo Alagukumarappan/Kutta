@@ -19,6 +19,7 @@ import {
   RaisedCard,
   EmptyStatePanel,
   LoadingPanel,
+  GradientScreenBackground,
 } from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
@@ -134,7 +135,7 @@ export function PuzzleGallery({
     // state had drifted from its siblings despite all three consuming the
     // same design system.
     return (
-      <View testID="puzzle-gallery-error" style={[styles.centeredMessage, insetStyle]}>
+      <GradientScreenBackground testID="puzzle-gallery-error" style={[styles.centeredMessage, insetStyle]}>
         <Text style={styles.errorText}>{t('loadError')}</Text>
         <RaisedCard
           testID="puzzle-gallery-retry"
@@ -149,20 +150,20 @@ export function PuzzleGallery({
             <Text style={styles.retryText}>{t('retry')}</Text>
           </View>
         </RaisedCard>
-      </View>
+      </GradientScreenBackground>
     );
   }
 
   if (images === null) {
     return (
-      <View style={[styles.screen, insetStyle]}>
-        <LoadingPanel testID="puzzle-gallery-loading" color={PUZZLE_PALETTE.accent} message={t('galleryLoading')} />
-      </View>
+      <GradientScreenBackground style={[styles.screen, insetStyle]}>
+        <LoadingPanel testID="puzzle-gallery-loading" color={PUZZLE_PALETTE.accent} messageColor={colors.white} message={t('galleryLoading')} />
+      </GradientScreenBackground>
     );
   }
 
   return (
-    <View style={[styles.screen, insetStyle]}>
+    <GradientScreenBackground style={[styles.screen, insetStyle]}>
       <View style={styles.headerRow}>
         {selectionMode ? (
           <View testID="puzzle-gallery-selection-bar" style={styles.selectionBar}>
@@ -300,14 +301,13 @@ export function PuzzleGallery({
           }}
         />
       )}
-    </View>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.canvas,
   },
   // Thin header row that right-aligns the compact Add button above the
   // list, instead of the button itself acting as a prominent CTA. While in
@@ -382,10 +382,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  // Sits directly on the purple gradient background (not a card), so it
+  // needs a light color rather than the old dark `colors.ink` (which read
+  // fine on the previous cream `colors.canvas` background).
   selectionCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.ink,
+    color: colors.white,
   },
   selectionActions: {
     flexDirection: 'row',
@@ -470,10 +473,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
   },
+  // Same "direct on the gradient, not a card" reasoning as selectionCount
+  // above.
   errorText: {
     fontSize: 17,
     fontWeight: '700',
-    color: colors.ink,
+    color: colors.white,
     textAlign: 'center',
   },
   retryCard: {
