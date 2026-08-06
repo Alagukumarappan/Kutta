@@ -17,6 +17,7 @@ import {
   RaisedPrimaryButton,
   AnimatedPressable,
   withAlpha,
+  GradientScreenBackground,
 } from '../design-system';
 
 // This first-launch screen is where a parent sets a child's profile up —
@@ -125,7 +126,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <View style={styles.outer}>
+    <GradientScreenBackground style={styles.outer}>
     <ScrollView
       style={styles.scrollView}
       contentContainerStyle={[
@@ -309,7 +310,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           <Text style={styles.savingText}>{t('onboardingSavingMessage')}</Text>
         </View>
       )}
-    </View>
+    </GradientScreenBackground>
   );
 }
 
@@ -319,7 +320,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: colors.canvas,
   },
   savingOverlay: {
     position: 'absolute',
@@ -356,10 +356,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxs,
     marginBottom: 0,
   },
+  // title/subtitle sit directly on the purple gradient background (not a
+  // card), so both need a light color — the old dark `colors.ink`/muted
+  // `colors.inkMuted` read fine against the previous cream `colors.canvas`
+  // background but are low-contrast against violet/violetDark.
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: colors.ink,
+    color: colors.white,
     textAlign: 'center',
     marginTop: spacing.xxs,
     marginBottom: spacing.xxs,
@@ -367,7 +371,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: colors.inkMuted,
+    color: withAlpha(colors.white, 0.85),
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
