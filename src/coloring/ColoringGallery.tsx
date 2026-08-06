@@ -14,6 +14,7 @@ import {
   EmptyStatePanel,
   LoadingPanel,
   RaisedCard,
+  GradientScreenBackground,
 } from '../design-system';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
@@ -98,35 +99,37 @@ export function ColoringGallery({
 
   if (error) {
     return (
-      <View testID="coloring-gallery-error" style={[styles.centeredMessage, insetStyle]}>
-        <Text style={styles.errorText}>{t('loadError')}</Text>
-        <RaisedCard
-          testID="coloring-gallery-retry"
-          onPress={retry}
-          color={accent.accent}
-          borderColor={accent.accentDark}
-          tilt="compact"
-          accessibilityLabel={t('retry')}
-          style={styles.retryCard}
-        >
-          <View testID="coloring-gallery-retry-target" style={styles.retryCardInner}>
-            <Text style={styles.retryText}>{t('retry')}</Text>
-          </View>
-        </RaisedCard>
-      </View>
+      <GradientScreenBackground>
+        <View testID="coloring-gallery-error" style={[styles.centeredMessage, insetStyle]}>
+          <Text style={styles.errorText}>{t('loadError')}</Text>
+          <RaisedCard
+            testID="coloring-gallery-retry"
+            onPress={retry}
+            color={accent.accent}
+            borderColor={accent.accentDark}
+            tilt="compact"
+            accessibilityLabel={t('retry')}
+            style={styles.retryCard}
+          >
+            <View testID="coloring-gallery-retry-target" style={styles.retryCardInner}>
+              <Text style={styles.retryText}>{t('retry')}</Text>
+            </View>
+          </RaisedCard>
+        </View>
+      </GradientScreenBackground>
     );
   }
 
   if (images === null) {
     return (
-      <View style={[{ flex: 1 }, insetStyle]}>
-        <LoadingPanel testID="coloring-gallery-loading" color={accent.accent} message={t('galleryLoading')} />
-      </View>
+      <GradientScreenBackground style={insetStyle}>
+        <LoadingPanel testID="coloring-gallery-loading" color={accent.accent} messageColor={colors.white} message={t('galleryLoading')} />
+      </GradientScreenBackground>
     );
   }
 
   return (
-    <View style={[styles.screen, insetStyle]}>
+    <GradientScreenBackground style={[styles.screen, insetStyle]}>
       <View style={styles.headerRow}>
         {selectionMode ? (
           <View testID="coloring-gallery-selection-bar" style={styles.selectionBar}>
@@ -218,14 +221,13 @@ export function ColoringGallery({
           }}
         />
       )}
-    </View>
+    </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.canvas,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
   },
@@ -246,10 +248,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  // Sits directly on the purple gradient background (not a card), so it
+  // needs a light color rather than the old dark `colors.ink` (which read
+  // fine on the previous cream `colors.canvas` background but is nearly
+  // invisible against violet/violetDark).
   selectionCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.ink,
+    color: colors.white,
   },
   selectionActions: {
     flexDirection: 'row',
@@ -329,10 +335,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
   },
+  // Same "direct on the gradient, not a card" reasoning as selectionCount
+  // above — needs a light color to read against the new purple background.
   errorText: {
     fontSize: 17,
     fontWeight: '700',
-    color: colors.ink,
+    color: colors.white,
     textAlign: 'center',
   },
   retryCard: {

@@ -28,6 +28,7 @@ import {
   RaisedPrimaryButton,
   LoadingPanel,
   useReducedMotion,
+  GradientScreenBackground,
 } from '../design-system';
 import { PALETTE, RGBA } from './palette';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -725,10 +726,8 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   const displayImage = filledImage ?? image;
 
   return (
-    <View
+    <GradientScreenBackground
       style={{
-        flex: 1,
-        backgroundColor: colors.canvas,
         paddingTop: insets.top,
         paddingLeft: insets.left,
         paddingRight: insets.right,
@@ -1146,7 +1145,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           </>
         )}
       </View>
-    </View>
+    </GradientScreenBackground>
   );
 }
 
