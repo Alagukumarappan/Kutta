@@ -203,6 +203,8 @@ but back silently doing nothing is inconsistent with the rest of the app.
 It affects Puzzle and Quiz identically, so it belongs to a design-system
 pass rather than a Tic-Tac-Toe one.
 
+---
+
 ## Iteration 4 — the Skia coloring canvas
 
 Four genuine bugs found and fixed; 49 suites / 694 tests green and
