@@ -16,16 +16,20 @@ import * as FileSystem from 'expo-file-system/legacy';
 // doesn't short-circuit before floodFill ever runs. Left `false` by default
 // so every pre-existing test (none of which cares about pixel data) keeps
 // its original behavior of `readPixels` resolving to `null`.
-const mockPixelState = { shouldReturnPixels: false };
+// `buffer` lets an individual test swap in a non-uniform image (see the
+// two-region buffer used by the batched-tap regression test) — left null so
+// every other test keeps the plain all-white buffer.
+const mockPixelState = { shouldReturnPixels: false, buffer: null as Uint8Array | null };
 const WHITE_10X10 = new Uint8Array(10 * 10 * 4).fill(255);
 
 const mockDecodedImage = {
   width: () => 10,
   height: () => 10,
-  readPixels: () =>
-    mockPixelState.shouldReturnPixels
-      ? { buffer: WHITE_10X10.buffer, byteOffset: 0, byteLength: WHITE_10X10.byteLength }
-      : null,
+  readPixels: () => {
+    if (!mockPixelState.shouldReturnPixels) return null;
+    const buffer = mockPixelState.buffer ?? WHITE_10X10;
+    return { buffer: buffer.buffer, byteOffset: buffer.byteOffset, byteLength: buffer.byteLength };
+  },
 };
 
 const mockDecodeState = { shouldSucceed: true };
@@ -67,6 +71,7 @@ describe('ColoringScreen', () => {
     (FileSystem.readAsStringAsync as jest.Mock).mockReset();
     mockDecodeState.shouldSucceed = true;
     mockPixelState.shouldReturnPixels = false;
+    mockPixelState.buffer = null;
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -1327,6 +1332,78 @@ describe('ColoringScreen', () => {
       await fireFillTap(getByTestId);
 
       expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('rapid consecutive fill taps (batched touch events)', () => {
+    // A 10x10 buffer split into two regions the tolerance-10 match can never
+    // bridge: left half white (255), right half mid-grey (200). That makes a
+    // fill in one region observable independently of a fill in the other.
+    function makeTwoRegionBuffer(): Uint8Array {
+      const px = new Uint8Array(10 * 10 * 4);
+      for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 10; x++) {
+          const i = (y * 10 + x) * 4;
+          const v = x < 5 ? 255 : 200;
+          px[i] = v;
+          px[i + 1] = v;
+          px[i + 2] = v;
+          px[i + 3] = 255;
+        }
+      }
+      return px;
+    }
+
+    function pixelAt(buffer: Uint8Array, x: number, y: number): number[] {
+      const i = (y * 10 + x) * 4;
+      return [buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]];
+    }
+
+    // Regression test: a flood fill on a real photo takes long enough that a
+    // second tap lands while the first is still running, and React Native
+    // then delivers BOTH release events in one batch — before React has
+    // re-rendered and refreshed the screen's `pixelsRef` from state. When
+    // the second tap read that stale ref it flooded the pre-first-fill
+    // buffer, so its result silently threw the first fill away: the child
+    // tapped two shapes and only the second one ended up colored.
+    it('keeps the first fill when a second tap on another region arrives in the same event batch', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+      mockPixelState.buffer = makeTwoRegionBuffer();
+      const { StyleSheet } = require('react-native');
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      const canvas = StyleSheet.flatten(getByTestId('coloring-canvas-transform').props.style);
+      const touchArea = getByTestId('coloring-canvas-touch-area');
+      const midY = canvas.height * 0.5;
+
+      // Both releases dispatched inside ONE act() — nothing re-renders
+      // between them, exactly like a real batched pair of touch events.
+      await act(async () => {
+        // 10% across -> pixel column 1, the white (left) region.
+        fireEvent(touchArea, 'responderRelease', {
+          touchHistory: fakeTouchHistory,
+          nativeEvent: { locationX: canvas.width * 0.1, locationY: midY },
+        });
+        // 70% across -> pixel column 7, the grey (right) region.
+        fireEvent(touchArea, 'responderRelease', {
+          touchHistory: fakeTouchHistory,
+          nativeEvent: { locationX: canvas.width * 0.7, locationY: midY },
+        });
+      });
+
+      const fromBytesCalls = (Skia.Data.fromBytes as jest.Mock).mock.calls;
+      const lastBuffer: Uint8Array = fromBytesCalls[fromBytesCalls.length - 1][0];
+      const red = [230, 57, 70, 255]; // PALETTE[0], the default selection
+      expect(pixelAt(lastBuffer, 7, 5)).toEqual(red); // the second tap's region
+      expect(pixelAt(lastBuffer, 1, 5)).toEqual(red); // the first tap's region, NOT reverted
     });
   });
 });

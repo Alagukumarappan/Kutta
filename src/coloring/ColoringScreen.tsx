@@ -332,15 +332,6 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height) return;
 
     const updated = floodFill(pixels, width, height, pixelX, pixelY, selectedColorRef.current);
-    // Capture the pre-fill buffer/image for a single-level undo BEFORE
-    // overwriting state below. `pixels`/`filledImageRef.current` here are
-    // exactly what was on screen right before this fill — floodFill never
-    // mutates its input (see floodFill.ts's own `pixels.slice()`), so this
-    // is just holding onto the reference that already existed, not copying
-    // anything new.
-    previousFillRef.current = { pixels, filledImage: filledImageRef.current };
-    setCanUndoFill(true);
-    setPixels(updated);
 
     const bytesPerRow = width * 4;
     const data = Skia.Data.fromBytes(new Uint8Array(updated.buffer, updated.byteOffset, updated.byteLength));
@@ -349,7 +340,35 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       data,
       bytesPerRow
     );
-    if (newImage) setFilledImage(newImage);
+    // Commit the buffer and the image it produced TOGETHER or not at all. If
+    // MakeImage fails there is nothing new to show, and adopting `updated`
+    // anyway would leave the pixel buffer permanently one fill ahead of the
+    // picture on screen: every later tap would then flood a region the child
+    // can't see, and the undo snapshot would pair a buffer with an image
+    // that never matched it.
+    if (!newImage) return;
+
+    // Capture the pre-fill buffer/image for a single-level undo BEFORE
+    // overwriting state below. `pixels`/`filledImageRef.current` here are
+    // exactly what was on screen right before this fill — floodFill never
+    // mutates its input (see floodFill.ts's own `pixels.slice()`), so this
+    // is just holding onto the reference that already existed, not copying
+    // anything new.
+    previousFillRef.current = { pixels, filledImage: filledImageRef.current };
+    setCanUndoFill(true);
+    // Advance the REFS synchronously, not just the state. React Native hands
+    // JS a BATCH of queued touch events at once, and a flood fill on a real
+    // photo takes long enough that a second tap lands while the first is
+    // still being processed — so both releases can run before React has
+    // re-rendered and refreshed these refs from state. Without this, the
+    // second tap would read the pre-first-fill buffer and its result would
+    // overwrite the first fill entirely: the child taps two shapes and only
+    // the second one gets colored. (Same batched-event hazard as the
+    // Tic-Tac-Toe stale-board bug.)
+    pixelsRef.current = updated;
+    filledImageRef.current = newImage;
+    setPixels(updated);
+    setFilledImage(newImage);
   }
 
   // Restores the single most-recent flood fill's pre-fill state and clears
@@ -361,6 +380,11 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   function handleUndoFill() {
     const previous = previousFillRef.current;
     if (!previous) return;
+    // Refs first, for the same batched-event reason as handleCanvasTap
+    // above: a fill tap can be dispatched in the same batch as this undo,
+    // and would otherwise still be working from the undone buffer.
+    pixelsRef.current = previous.pixels;
+    filledImageRef.current = previous.filledImage;
     setPixels(previous.pixels);
     setFilledImage(previous.filledImage);
     previousFillRef.current = null;
