@@ -356,14 +356,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxs,
     marginBottom: 0,
   },
-  // title/subtitle sit directly on the purple gradient background (not a
-  // card), so both need a light color — the old dark `colors.ink`/muted
-  // `colors.inkMuted` read fine against the previous cream `colors.canvas`
-  // background but are low-contrast against violet/violetDark.
+  // title/subtitle sit directly on the sky gradient background (not a
+  // card). `colors.ink` is used rather than `colors.white`: white only
+  // clears ~2:1-3.1:1 against sky/skyDark, well under what this text needs,
+  // while `colors.ink` clears comfortably higher across the same range —
+  // subtitle uses a 0.9 (not the old 0.85) alpha fade so its still-smaller
+  // text keeps a 4.5:1 minimum even at the skyDark end.
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: colors.white,
+    color: colors.ink,
     textAlign: 'center',
     marginTop: spacing.xxs,
     marginBottom: spacing.xxs,
@@ -371,7 +373,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: withAlpha(colors.white, 0.85),
+    color: withAlpha(colors.ink, 0.9),
     textAlign: 'center',
     marginBottom: spacing.sm,
   },

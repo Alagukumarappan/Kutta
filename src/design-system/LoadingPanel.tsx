@@ -18,10 +18,12 @@ export function LoadingPanel({
   message,
   // Defaults to the original muted-ink tone, which still reads correctly
   // wherever this panel sits on a light/white surface (e.g.
-  // ProfilePicturePicker's white modal card). Screens that now render this
-  // directly on the app's purple gradient background (no white card behind
-  // it) pass colors.white instead, since inkMuted's low luminance is nearly
-  // invisible against violet/violetDark.
+  // ProfilePicturePicker's white modal card). Screens that render this
+  // directly on the app's sky gradient background (no white card behind it)
+  // pass colors.ink instead — inkMuted's own reduced contrast, and
+  // colors.white's ~2:1-3.1:1 against sky/skyDark, both fall well under the
+  // 4.5:1 this text needs, while full-strength colors.ink clears it
+  // comfortably across the whole gradient.
   messageColor = colors.inkMuted,
   testID,
 }: {

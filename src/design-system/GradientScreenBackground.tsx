@@ -3,12 +3,17 @@ import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from './tokens';
 
-// Shared violet -> violetDark gradient every child-facing screen now uses as
+// Shared sky -> skyDark gradient every child-facing screen now uses as
 // its root background, extracted from HomeScreen's own original
 // <LinearGradient colors={[colors.violet, colors.violetDark]} start={{x:0,y:0}}
 // end={{x:1,y:1}} /> (see HomeScreen.tsx) so the exact colors/direction can't
 // silently drift between screens as each one adopts it — every consumer gets
 // this one definition instead of re-typing the same colors/start/end props.
+// Switched from the original violet/violetDark to sky/skyDark (a bright,
+// cheerful blue) per the app-wide re-theme — HomeScreen.tsx keeps its own
+// separate inline <LinearGradient> (never migrated onto this shared
+// component) and was updated to the same sky/skyDark pair alongside this
+// file so the two don't drift apart.
 //
 // `showDecorativeBlobs` opts into the same soft, low-opacity white circles
 // Home uses for "layered depth" over the flat gradient. Kept OPTIONAL (default
@@ -35,7 +40,7 @@ export function GradientScreenBackground({
   return (
     <LinearGradient
       testID={testID}
-      colors={[colors.violet, colors.violetDark]}
+      colors={[colors.sky, colors.skyDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.fill, style]}

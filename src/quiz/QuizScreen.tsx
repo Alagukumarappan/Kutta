@@ -384,14 +384,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
-  // Sits directly on the purple gradient background (not a card), so it
-  // needs a light color rather than the old dark `colors.ink` (which read
-  // fine on the previous cream background but is nearly invisible against
-  // violet/violetDark).
+  // Sits directly on the sky gradient background (not a card). `dsColors.ink`
+  // is used rather than `dsColors.white`: white only clears ~2:1-3.1:1
+  // against sky/skyDark, well under the 4.5:1 this text needs, while ink
+  // clears 5.2:1-8.2:1 across the same range.
   messageText: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: dsColors.white,
+    color: dsColors.ink,
     textAlign: 'center',
     marginBottom: spacing.md,
   },

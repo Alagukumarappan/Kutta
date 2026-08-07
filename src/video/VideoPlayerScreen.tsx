@@ -143,7 +143,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   if (loading) {
     return (
       <GradientScreenBackground style={[styles.container, insetStyle(insets)]}>
-        <LoadingPanel testID="video-player-loading" color={palette.accent} messageColor={colors.white} message={t('galleryLoading')} />
+        <LoadingPanel testID="video-player-loading" color={palette.accent} messageColor={colors.ink} message={t('galleryLoading')} />
       </GradientScreenBackground>
     );
   }

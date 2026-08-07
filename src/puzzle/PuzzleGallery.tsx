@@ -157,7 +157,7 @@ export function PuzzleGallery({
   if (images === null) {
     return (
       <GradientScreenBackground style={[styles.screen, insetStyle]}>
-        <LoadingPanel testID="puzzle-gallery-loading" color={PUZZLE_PALETTE.accent} messageColor={colors.white} message={t('galleryLoading')} />
+        <LoadingPanel testID="puzzle-gallery-loading" color={PUZZLE_PALETTE.accent} messageColor={colors.ink} message={t('galleryLoading')} />
       </GradientScreenBackground>
     );
   }
@@ -382,13 +382,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // Sits directly on the purple gradient background (not a card), so it
-  // needs a light color rather than the old dark `colors.ink` (which read
-  // fine on the previous cream `colors.canvas` background).
+  // Sits directly on the sky gradient background (not a card). `colors.ink`
+  // is used rather than `colors.white`: white only clears ~2:1-3.1:1
+  // against sky/skyDark, well under the 4.5:1 this text needs, while
+  // `colors.ink` clears 5.2:1-8.2:1 across the same range.
   selectionCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.ink,
   },
   selectionActions: {
     flexDirection: 'row',
@@ -478,7 +479,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 17,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.ink,
     textAlign: 'center',
   },
   retryCard: {

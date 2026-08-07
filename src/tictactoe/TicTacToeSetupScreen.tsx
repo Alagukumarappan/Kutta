@@ -237,21 +237,23 @@ const styles = StyleSheet.create({
   brandEmoji: {
     fontSize: 22,
   },
-  // title/stepLabel sit directly on the purple gradient background (not a
-  // card), so both need a light color — the old dark `colors.ink`/muted
-  // `colors.inkMuted` read fine against the previous cream `colors.canvas`
-  // background but are low-contrast against violet/violetDark.
+  // title/stepLabel sit directly on the sky gradient background (not a
+  // card). `colors.ink` is used rather than `colors.white`: white only
+  // clears ~2:1-3.1:1 against sky/skyDark, well under what this text needs,
+  // while `colors.ink` clears comfortably higher across the same range —
+  // stepLabel uses a 0.9 (not the old 0.85) alpha fade so its still-smaller
+  // text keeps a 4.5:1 minimum even at the skyDark end.
   title: {
     fontSize: typography.h2.fontSize,
     fontWeight: typography.h2.fontWeight,
-    color: colors.white,
+    color: colors.ink,
     marginTop: spacing.xxs,
     marginBottom: spacing.sm,
   },
   stepLabel: {
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: withAlpha(colors.white, 0.85),
+    color: withAlpha(colors.ink, 0.9),
     marginBottom: spacing.xs,
     marginTop: spacing.xs,
   },

@@ -479,15 +479,15 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: radii.md,
   },
-  // Sits directly on the purple gradient background (not a card), so it
-  // needs a light color: the old `colors.berryDark` (a fairly dark red)
-  // read fine against the previous cream `colors.canvas` background but is
-  // low-contrast against the new violet/violetDark gradient.
+  // Sits directly on the sky gradient background (not a card). `colors.ink`
+  // is used rather than `colors.white`: white only clears ~2:1-3.1:1
+  // against sky/skyDark, well under the 4.5:1 this text needs, while
+  // `colors.ink` clears 5.2:1-8.2:1 across the same range.
   previewHint: {
     marginBottom: spacing.xs,
     fontSize: typography.body.fontSize,
     fontWeight: '800',
-    color: colors.white,
+    color: colors.ink,
     textAlign: 'center',
   },
   // The "recessed tray" the board sits in — a sunken fill (darker than the

@@ -123,7 +123,7 @@ export function ColoringGallery({
   if (images === null) {
     return (
       <GradientScreenBackground style={insetStyle}>
-        <LoadingPanel testID="coloring-gallery-loading" color={accent.accent} messageColor={colors.white} message={t('galleryLoading')} />
+        <LoadingPanel testID="coloring-gallery-loading" color={accent.accent} messageColor={colors.ink} message={t('galleryLoading')} />
       </GradientScreenBackground>
     );
   }
@@ -248,14 +248,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // Sits directly on the purple gradient background (not a card), so it
-  // needs a light color rather than the old dark `colors.ink` (which read
-  // fine on the previous cream `colors.canvas` background but is nearly
-  // invisible against violet/violetDark).
+  // Sits directly on the sky gradient background (not a card). `colors.ink`
+  // is used rather than `colors.white` here: white only clears ~2:1-3.1:1
+  // against sky/skyDark (well under the 4.5:1 this 16px/700 text needs),
+  // while `colors.ink` clears 5.2:1-8.2:1 across the same range — the same
+  // per-hue reasoning tokens.ts's `ActivityPalette.onAccentText` already
+  // documents for sky (see getActivityPalette's comment).
   selectionCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.ink,
   },
   selectionActions: {
     flexDirection: 'row',
@@ -336,11 +338,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   // Same "direct on the gradient, not a card" reasoning as selectionCount
-  // above — needs a light color to read against the new purple background.
+  // above — `colors.ink` reads reliably across the sky/skyDark range,
+  // unlike `colors.white`.
   errorText: {
     fontSize: 17,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.ink,
     textAlign: 'center',
   },
   retryCard: {

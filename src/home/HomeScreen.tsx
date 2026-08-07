@@ -215,7 +215,7 @@ export function HomeScreen({
 
   return (
     <LinearGradient
-      colors={[colors.violet, colors.violetDark]}
+      colors={[colors.sky, colors.skyDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[
@@ -230,12 +230,12 @@ export function HomeScreen({
     >
       {/* Purely decorative depth shapes behind everything — soft, static,
           low-opacity WHITE-translucent circles bleeding off the edges of the
-          screen, so the rich purple gradient background reads as layered
-          rather than a single flat fill. Re-tuned for this dark background:
+          screen, so the sky gradient background reads as layered rather
+          than a single flat fill. Re-tuned for this saturated background:
           the old violet/marigold/jade soft tints (chosen for the previous
           cream `colors.canvas` background) would either disappear into the
-          new purple or clash with it, so these are all one neutral white at
-          a low, varying opacity instead. pointerEvents="none" so they can
+          new sky blue or clash with it, so these are all one neutral white
+          at a low, varying opacity instead. pointerEvents="none" so they can
           never intercept a child's tap. */}
       <View style={styles.decorTopRight} pointerEvents="none" />
       <View style={styles.decorBottomLeft} pointerEvents="none" />
@@ -352,8 +352,8 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     overflow: 'hidden',
-    // Background is now the LinearGradient element itself (colors.violet ->
-    // colors.violetDark, see the component above) rather than a flat
+    // Background is now the LinearGradient element itself (colors.sky ->
+    // colors.skyDark, see the component above) rather than a flat
     // `backgroundColor` here — this style object only supplies layout
     // (flex/overflow) plus the safe-area-aware padding merged in at render
     // time (see the inline style override in the component) since this is
@@ -396,32 +396,38 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     paddingHorizontal: SIDE_PADDING,
   },
-  // The darker navy-purple header pill from this redesign's reference —
-  // deliberately reuses `colors.violetDark` (already a close match, see
-  // REDESIGN_PROGRESS.md's palette) rather than inventing a new hex, plus a
-  // stronger shadow so it visibly lifts off the lighter gradient behind it.
+  // The header pill's fill — reuses `colors.skyDark` (the gradient's own
+  // dark end, matching this redesign's original "reuse the gradient's dark
+  // shade" reasoning for `colors.violetDark` under the old palette) rather
+  // than inventing a new hex, plus a stronger shadow so it visibly lifts off
+  // the lighter gradient behind it.
   greetingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.violetDark,
+    backgroundColor: colors.skyDark,
     borderRadius: radii.pill,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     ...elevation.level3,
   },
+  // `colors.ink` rather than `colors.white`: white only clears ~3.1:1
+  // against `skyDark`, under the 4.5:1 this 17px/800 text needs, while ink
+  // clears 5.2:1.
   greetingName: {
     fontSize: typography.body.fontSize,
     fontWeight: '800',
-    color: colors.white,
+    color: colors.ink,
   },
-  // Age subtitle under the name — a translucent white rather than a fixed
-  // lighter hex, so it stays readable against `greetingBadge`'s dark fill
-  // without needing its own dedicated color token.
+  // Age subtitle under the name — a translucent ink rather than a fixed
+  // lighter hex, so it stays readable against `greetingBadge`'s `skyDark`
+  // fill without needing its own dedicated color token. 0.9 alpha (rather
+  // than plain `colors.inkMuted`, which falls well short here) keeps this
+  // smaller caption text at a 4.5:1 minimum against skyDark.
   greetingAge: {
     marginTop: spacing.xxs / 2,
     fontSize: typography.caption.fontSize,
     fontWeight: typography.caption.fontWeight,
-    color: withAlpha(colors.white, 0.75),
+    color: withAlpha(colors.ink, 0.9),
   },
   // Shared by both the real avatar <Image> and its fallback <View> so the
   // badge's height never changes between the two states (kept well under
@@ -433,14 +439,18 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   avatarPlaceholder: {
-    backgroundColor: colors.violetSoft,
+    backgroundColor: colors.skySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // `colors.ink` rather than `colors.skyDark`: skyDark-on-skySoft is only
+  // ~2.8:1 (skySoft is a much lighter tint than the old violetSoft was
+  // relative to violetDark), well under the 4.5:1 this text needs, while ink
+  // clears it easily (~14.5:1).
   avatarPlaceholderText: {
     fontSize: typography.body.fontSize,
     fontWeight: 'bold',
-    color: colors.violetDark,
+    color: colors.ink,
   },
   // AnimatedPressable's outer Pressable (layout/hit-area only, matching the
   // "outer never animates" convention every design-system pressable shares)

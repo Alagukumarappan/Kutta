@@ -282,13 +282,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Sits directly on the purple gradient background (not a card), so it
-  // needs a light color rather than the old dark `colors.ink` (which read
-  // fine against the previous cream `colors.canvas` background).
+  // Sits directly on the sky gradient background (not a card). `colors.ink`
+  // is used rather than `colors.white`: white only clears ~2:1-3.1:1
+  // against sky/skyDark, well under the 4.5:1 this text needs, while
+  // `colors.ink` clears 5.2:1-8.2:1 across the same range.
   statusText: {
     fontSize: typography.h3.fontSize,
     fontWeight: typography.h3.fontWeight,
-    color: colors.white,
+    color: colors.ink,
     marginBottom: spacing.md,
     textAlign: 'center',
   },
