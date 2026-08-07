@@ -5,6 +5,7 @@ import {
   isBoardFull,
   getEmptyIndices,
   getGameStatus,
+  playerToMove,
   findBestMove,
   getComputerMove,
   WINNING_COMBINATIONS,
@@ -62,6 +63,25 @@ describe('isBoardFull / getEmptyIndices', () => {
   it('lists every empty index in order', () => {
     const board = boardFrom(['X', null, 'O', null, null, 'X', null, null, null]);
     expect(getEmptyIndices(board)).toEqual([1, 3, 4, 6, 7, 8]);
+  });
+});
+
+describe('playerToMove', () => {
+  it('gives X the first move on an empty board', () => {
+    expect(playerToMove(createEmptyBoard())).toBe('X');
+  });
+
+  it('alternates strictly as marks are added, regardless of where they are', () => {
+    const board = createEmptyBoard();
+    const expected: ('X' | 'O')[] = ['X', 'O', 'X', 'O', 'X', 'O', 'X', 'O', 'X'];
+    // Deliberately not in index order — whose turn it is depends only on HOW
+    // MANY marks are down, never on which cells they landed in.
+    const order = [4, 0, 8, 2, 6, 1, 7, 3, 5];
+    order.forEach((index, moveNumber) => {
+      expect(playerToMove(board)).toBe(expected[moveNumber]);
+      board[index] = expected[moveNumber];
+    });
+    expect(isBoardFull(board)).toBe(true);
   });
 });
 

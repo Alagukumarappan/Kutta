@@ -57,6 +57,19 @@ export function getEmptyIndices(board: Board): number[] {
   return indices;
 }
 
+// Not present in the source (whose component tracks a `currentPlayer` field
+// alongside the board). Whose turn it is is not independent information: X
+// always moves first and the two players strictly alternate, so the number
+// of marks already on the board determines it completely. Deriving it here
+// — rather than storing it as a second piece of state next to the board —
+// makes the two impossible to fall out of sync (see TicTacToeScreen.tsx,
+// where two taps delivered by the native side in a single React batch used
+// to do exactly that).
+export function playerToMove(board: Board): Player {
+  const filled = board.reduce<number>((count, cell) => (cell === null ? count : count + 1), 0);
+  return filled % 2 === 0 ? 'X' : 'O';
+}
+
 export type GameStatus =
   | { status: 'in-progress' }
   | { status: 'won'; winner: Player; line: readonly number[] }

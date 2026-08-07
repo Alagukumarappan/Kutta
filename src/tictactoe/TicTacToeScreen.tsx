@@ -7,6 +7,7 @@ import {
   createEmptyBoard,
   getGameStatus,
   getComputerMove,
+  playerToMove,
   HUMAN_PLAYER,
   COMPUTER_PLAYER,
   type Board,
@@ -67,7 +68,18 @@ export function TicTacToeScreen({
   // being the app's own child — a real coin flip, not a hardcoded "the
   // child always starts."
   const [childIsX, setChildIsX] = useState(() => Math.random() < 0.5);
-  const [currentPlayer, setCurrentPlayer] = useState<Player>(HUMAN_PLAYER);
+  // Whose turn it is is DERIVED from the board, never stored alongside it.
+  // It used to be its own `currentPlayer` state updated by hand next to
+  // every setBoard, and the two could genuinely desync: React Native
+  // delivers a batch of queued touch events to JS in one go, so two taps
+  // that land close together (a child drumming on the board — or one real
+  // tap plus a stray second finger) both run against the SAME pre-update
+  // render. The second one then rebuilt the next board from the stale copy,
+  // erasing the first tap's mark completely: the child tapped two squares
+  // and only the second one appeared. Deriving it makes that impossible,
+  // and lets the setBoard updaters below re-check everything against the
+  // very latest board instead of a snapshot.
+  const currentPlayer: Player = playerToMove(board);
 
   const status = getGameStatus(board);
   const isGameOver = status.status !== 'in-progress';
@@ -105,11 +117,13 @@ export function TicTacToeScreen({
       const move = getComputerMove(board, difficulty, Math.random, opponentMark);
       if (move === null) return;
       setBoard((prev) => {
+        // Belt and braces: never overwrite a cell that somehow already has a
+        // mark (that would silently delete one of the child's own moves).
+        if (prev[move] !== null) return prev;
         const next = prev.slice();
         next[move] = opponentMark;
         return next;
       });
-      setCurrentPlayer(childMark);
     }, COMPUTER_MOVE_DELAY_MS);
     return () => {
       cancelled = true;
@@ -119,18 +133,33 @@ export function TicTacToeScreen({
   }, [isComputersTurn]);
 
   function handleCellPress(index: number) {
+    // Cheap early-out for the ordinary case. The REAL decision is re-made
+    // inside the updater below against the latest board, because `board`
+    // here can already be one move out of date (see the currentPlayer
+    // comment above: a batch of queued touches all run against the same
+    // render).
     if (isGameOver || board[index] !== null || isComputersTurn) return;
-    const next = board.slice();
-    next[index] = currentPlayer;
-    setBoard(next);
-    setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
+    setBoard((prev) => {
+      if (prev[index] !== null) return prev;
+      if (getGameStatus(prev).status !== 'in-progress') return prev;
+      const mark = playerToMove(prev);
+      // In computer mode a tap may only ever place the CHILD's own mark —
+      // without this, a second batched tap would place the computer's mark
+      // for it, letting the child (accidentally or otherwise) play both
+      // sides.
+      if (mode === 'computer' && mark !== childMark) return prev;
+      const next = prev.slice();
+      next[index] = mark;
+      return next;
+    });
   }
 
   function handleRetry() {
     if (retryFiredRef.current) return;
     retryFiredRef.current = true;
     setBoard(createEmptyBoard());
-    setCurrentPlayer(HUMAN_PLAYER);
+    // (No turn to reset — an empty board already derives to X, who always
+    // moves first.)
     // Fresh coin flip for the new game — the same child winning/starting
     // repeatedly on every Retry would defeat the point of randomizing this
     // at all.

@@ -336,6 +336,70 @@ describe('TicTacToeScreen', () => {
     });
   });
 
+  // Regression tests for a real bug: whose turn it was used to live in its
+  // own `currentPlayer` state updated by hand next to every setBoard, and
+  // the next board was built from the `board` of the render the tap's
+  // handler was created in. React Native hands JS a BATCH of queued touch
+  // events at once, so two taps landing close together (a 2-8 year old
+  // drumming on the board, or a stray second finger) both ran against that
+  // same pre-update render — and the second one rebuilt the board from the
+  // stale copy, erasing the first tap's mark entirely. Both taps are
+  // reproduced here inside a single act(), which is exactly that batch.
+  describe('two taps delivered in a single batch (a child drumming on the board)', () => {
+    // React logs "overlapping act() calls" for the deliberately-nested
+    // act below — that nesting IS the batch being reproduced, so the
+    // warning is expected noise here rather than a signal. Same
+    // spy-and-restore idiom as ColoringScreen's own console tests.
+    function silenceOverlappingActWarning() {
+      return jest.spyOn(console, 'error').mockImplementation(() => {});
+    }
+
+    it('friend mode: both taps land, and the first one is not wiped out by the second', async () => {
+      silenceOverlappingActWarning();
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'friend' });
+
+      const firstCell = getByTestId('tictactoe-cell-0');
+      const secondCell = getByTestId('tictactoe-cell-1');
+      await act(async () => {
+        fireEvent.press(firstCell);
+        fireEvent.press(secondCell);
+      });
+
+      // Sam's X must still be there; Alex's O is the second tap.
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(cellValue(queryByTestId, 1)).toBe('O');
+      // ...and the turn is back to Sam, matching the two marks on the board.
+      expect(getByTestId('tictactoe-status').props.children).toBe("Sam's turn");
+    });
+
+    it("computer mode: a batched second tap never places the computer's mark for it", async () => {
+      jest.useFakeTimers();
+      silenceOverlappingActWarning();
+      const { getByTestId, queryByTestId } = await renderGame({ mode: 'computer', difficulty: 'hard' });
+
+      const firstCell = getByTestId('tictactoe-cell-0');
+      const secondCell = getByTestId('tictactoe-cell-1');
+      await act(async () => {
+        fireEvent.press(firstCell);
+        fireEvent.press(secondCell);
+      });
+
+      // Exactly the child's own single move — the extra tap must not have
+      // let the child play the computer's side, nor erased their own move.
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(cellValue(queryByTestId, 1)).toBeNull();
+
+      // The computer still gets its normal turn afterwards.
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+      const filled = Array.from({ length: 9 }, (_, i) => cellValue(queryByTestId, i)).filter(Boolean).length;
+      expect(filled).toBe(2);
+
+      jest.useRealTimers();
+    });
+  });
+
   // Regression tests for a real, reported issue: the app's own child always
   // started (as X) every single game — computer mode and friend mode alike
   // — which the child hunting this loop was explicitly asked to make a real
