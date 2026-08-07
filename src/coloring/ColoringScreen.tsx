@@ -10,6 +10,8 @@ import {
   SkPath,
   ColorType,
   AlphaType,
+  FilterMode,
+  MipmapMode,
   SkImage,
 } from '@shopify/react-native-skia';
 import { floodFill, pixelMatchesColorExactly } from './floodFill';
@@ -92,6 +94,69 @@ const TOOLBAR_PANEL_SLIDE_DISTANCE = 320;
 // eventually degrading into visibly blocky pixels.
 const MIN_ZOOM_SCALE = 1;
 const MAX_ZOOM_SCALE = 4;
+
+// The longest side we are willing to hold as a RAW RGBA PIXEL BUFFER.
+//
+// Coloring is the one activity a parent can point at their own photos (see
+// ColoringGallery / the "+" add-files button), and a phone camera shot is
+// routinely 4000x3000. Nothing downstream here works on the encoded file:
+// `readPixels` below expands the image into a plain RGBA byte array, which
+// for 4000x3000 is 48 MB — and then EVERY flood fill allocates three more
+// buffers that size (floodFill's own `pixels.slice()`, the Skia.Data copy,
+// and the resulting SkImage), while the undo snapshot deliberately holds
+// the previous pair alive too. That is a quarter of a gigabyte of churn per
+// tap, which is an out-of-memory kill on exactly the cheap, low-RAM Android
+// tablet a child is most likely to be handed. The flood fill itself would
+// also have to walk 12 million pixels per tap, freezing the UI for seconds
+// with no feedback.
+//
+// 1600 is comfortably above CANVAS_MAX_SIZE (900) — the canvas can never
+// display more detail than this even at MAX_ZOOM_SCALE on a 3x-density
+// screen — and brings the same photo down to a ~7.7 MB buffer.
+const MAX_PIXEL_BUFFER_DIMENSION = 1600;
+
+// Shrinks an oversized decoded photo to MAX_PIXEL_BUFFER_DIMENSION on its
+// longest side, preserving aspect ratio. Anything already within budget is
+// returned untouched (the overwhelmingly common case: every bundled sample
+// coloring page). Every failure path deliberately falls back to the
+// full-size image rather than to nothing — a slow, memory-hungry picture is
+// still far better for the child than an error screen.
+function downscaleForColoring(decoded: SkImage): SkImage {
+  const sourceWidth = decoded.width();
+  const sourceHeight = decoded.height();
+  const longestSide = Math.max(sourceWidth, sourceHeight);
+  if (!Number.isFinite(longestSide) || longestSide <= MAX_PIXEL_BUFFER_DIMENSION) return decoded;
+
+  const ratio = MAX_PIXEL_BUFFER_DIMENSION / longestSide;
+  const targetWidth = Math.max(1, Math.round(sourceWidth * ratio));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * ratio));
+
+  try {
+    const surface = Skia.Surface.MakeOffscreen(targetWidth, targetHeight);
+    if (!surface) return decoded;
+    // Linear filtering, not the default nearest-neighbour sampling: a
+    // point-sampled downscale of a line drawing throws away whole outline
+    // pixels, leaving broken, speckled edges — which the flood fill would
+    // then happily leak through, coloring the whole page instead of the
+    // shape the child tapped.
+    surface
+      .getCanvas()
+      .drawImageRectOptions(
+        decoded,
+        Skia.XYWHRect(0, 0, sourceWidth, sourceHeight),
+        Skia.XYWHRect(0, 0, targetWidth, targetHeight),
+        FilterMode.Linear,
+        MipmapMode.None
+      );
+    const snapshot = surface.makeImageSnapshot();
+    if (!snapshot) return decoded;
+    // An offscreen surface's snapshot can be GPU-backed, and `readPixels`
+    // needs an image the CPU can read back.
+    return snapshot.makeNonTextureImage() ?? snapshot;
+  } catch {
+    return decoded;
+  }
+}
 
 type ToolMode = 'fill' | 'pen';
 
@@ -275,7 +340,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         const decoded = Skia.Image.MakeImageFromEncoded(data);
         if (cancelled) return;
         if (decoded) {
-          setImage(decoded);
+          setImage(downscaleForColoring(decoded));
         } else {
           setImageLoadFailed(true);
         }

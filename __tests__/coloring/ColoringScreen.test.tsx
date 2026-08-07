@@ -34,6 +34,18 @@ const mockDecodedImage = {
 
 const mockDecodeState = { shouldSucceed: true };
 
+// A stand-in for a real parent-added camera photo (4000x3000), used by the
+// downscale tests. `mockOversizedState.image` is swapped in as
+// MakeImageFromEncoded's result for those tests only.
+const mockOversizedState = { image: null as unknown };
+const mockDownscaledImage = { width: () => 1600, height: () => 1200, readPixels: () => null };
+const mockOversizedImage = { width: () => 4000, height: () => 3000, readPixels: () => null };
+const mockSurfaceState = {
+  drawImageRectOptions: jest.fn(),
+  makeImageSnapshot: jest.fn(),
+  makeOffscreen: jest.fn(),
+};
+
 jest.mock('@shopify/react-native-skia', () => ({
   Canvas: ({ children }: any) => children ?? null,
   Image: () => null,
@@ -41,13 +53,19 @@ jest.mock('@shopify/react-native-skia', () => ({
   Skia: {
     Data: { fromBytes: jest.fn(() => ({})) },
     Image: {
-      MakeImageFromEncoded: jest.fn(() => (mockDecodeState.shouldSucceed ? mockDecodedImage : null)),
+      MakeImageFromEncoded: jest.fn(() =>
+        mockDecodeState.shouldSucceed ? mockOversizedState.image ?? mockDecodedImage : null
+      ),
       MakeImage: jest.fn(() => mockDecodedImage),
     },
     Path: { Make: jest.fn(() => ({ moveTo: jest.fn(), lineTo: jest.fn(), copy: jest.fn() })) },
+    Surface: { MakeOffscreen: (...args: unknown[]) => mockSurfaceState.makeOffscreen(...args) },
+    XYWHRect: (x: number, y: number, width: number, height: number) => ({ x, y, width, height }),
   },
   ColorType: { RGBA_8888: 'RGBA_8888' },
   AlphaType: { Unpremul: 'Unpremul' },
+  FilterMode: { Nearest: 'Nearest', Linear: 'Linear' },
+  MipmapMode: { None: 'None', Nearest: 'Nearest', Linear: 'Linear' },
 }));
 
 jest.mock('expo-file-system/legacy', () => ({
@@ -72,6 +90,16 @@ describe('ColoringScreen', () => {
     mockDecodeState.shouldSucceed = true;
     mockPixelState.shouldReturnPixels = false;
     mockPixelState.buffer = null;
+    mockOversizedState.image = null;
+    mockSurfaceState.drawImageRectOptions = jest.fn();
+    mockSurfaceState.makeImageSnapshot = jest.fn(() => ({
+      ...mockDownscaledImage,
+      makeNonTextureImage: () => mockDownscaledImage,
+    }));
+    mockSurfaceState.makeOffscreen = jest.fn(() => ({
+      getCanvas: () => ({ drawImageRectOptions: mockSurfaceState.drawImageRectOptions }),
+      makeImageSnapshot: mockSurfaceState.makeImageSnapshot,
+    }));
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -1449,6 +1477,69 @@ describe('ColoringScreen', () => {
       // hides itself again exactly as it would have without the repeat tap.
       await fireEvent.press(getByTestId('undo-fill'));
       expect(queryByTestId('undo-fill')).toBeNull();
+    });
+  });
+
+  describe('oversized parent-added photos', () => {
+    // Coloring is the one activity a parent can point at their own photos,
+    // and a phone camera shot is routinely 4000x3000. Every stage
+    // downstream of the decode works on a RAW RGBA buffer — 48 MB at that
+    // size — and each flood fill allocates three more of them while the
+    // undo snapshot holds the previous pair alive, i.e. a quarter of a
+    // gigabyte of churn per tap on exactly the cheap low-RAM Android tablet
+    // a child is most likely to be handed.
+    it('downscales a camera-sized photo to the pixel-buffer budget, preserving aspect ratio', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockOversizedState.image = mockOversizedImage;
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      // 4000x3000 scaled so the longest side is 1600 -> 1600x1200.
+      expect(mockSurfaceState.makeOffscreen).toHaveBeenCalledWith(1600, 1200);
+      // Linear filtering, not the default nearest sampling: point-sampling a
+      // line drawing down drops whole outline pixels, and the flood fill
+      // would then leak straight through the gaps.
+      expect(mockSurfaceState.drawImageRectOptions).toHaveBeenCalledWith(
+        mockOversizedImage,
+        { x: 0, y: 0, width: 4000, height: 3000 },
+        { x: 0, y: 0, width: 1600, height: 1200 },
+        'Linear',
+        'None'
+      );
+    });
+
+    it('leaves an already-modest picture completely alone (no offscreen surface at all)', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      expect(mockSurfaceState.makeOffscreen).not.toHaveBeenCalled();
+    });
+
+    it('still shows the picture (not an error screen) if the downscale itself fails', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockOversizedState.image = mockOversizedImage;
+      mockSurfaceState.makeOffscreen = jest.fn(() => null);
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+
+      // A slow, memory-hungry picture still beats an error screen.
+      expect(queryByTestId('coloring-image-load-error')).toBeNull();
     });
   });
 });
