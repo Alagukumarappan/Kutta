@@ -91,6 +91,27 @@ describe('RootNavigator header titles', () => {
     expect(findAllTitleProps(toJSON())).not.toContain('settings');
   });
 
+  // Regression: RootNavigator renders a LanguageProvider while the profile is
+  // still loading (splash — no saved language known yet, so it passes "en")
+  // AND, at the same tree position, once the profile has resolved. React
+  // updates that provider in place instead of remounting it, so the "en" the
+  // splash render seeded it with used to stick for the whole session: a child
+  // with a German profile got the ENTIRE app in English on every launch,
+  // recoverable only by a parent re-saving the language in Settings.
+  it('renders the app in the profile\'s saved language, not English, for a German profile', async () => {
+    (profileStore.getProfile as jest.Mock).mockResolvedValue({ ...profile, language: 'de' });
+
+    const { findByTestId, findByText, queryByText } = await render(<RootNavigator />);
+
+    await findByTestId('home-child-name');
+    // "Malen"/"Fotopuzzle" are the German Home card labels; their English
+    // counterparts must not be on screen at all.
+    await findByText('Malen');
+    await findByText('Fotopuzzle');
+    expect(queryByText('Coloring')).toBeNull();
+    expect(queryByText('Photo Puzzle')).toBeNull();
+  });
+
   // If the SAF grant to the root folder was revoked, or a content subfolder
   // was deleted/renamed outside the app, FolderErrorScreen's Retry button is
   // the only way to recover without leaving the app entirely — it needs an

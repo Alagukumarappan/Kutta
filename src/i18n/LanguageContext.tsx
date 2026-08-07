@@ -18,6 +18,29 @@ export function LanguageProvider({
   children: React.ReactNode;
 }) {
   const [language, setLanguage] = useState<Language>(initialLanguage);
+  // `useState(initialLanguage)` only reads the prop on the FIRST render of
+  // this provider instance — and RootNavigator renders a LanguageProvider at
+  // the same position in its tree both while the profile is still loading
+  // (splash, where there is no saved language yet so it passes "en") and
+  // afterwards (with the profile's real language). React reconciles those
+  // two renders as the SAME element type at the SAME position, so the
+  // provider is UPDATED, not remounted: the "en" from the splash render
+  // stuck forever, and every German-profile child saw the whole app in
+  // English on every single launch until a parent went into Settings and
+  // re-saved the language (which works only because SettingsScreen calls
+  // `setLanguage` directly). Re-deriving from the prop when it actually
+  // changes is React's documented "adjust state when a prop changes"
+  // pattern — done during render (not in an effect) so the corrected
+  // language is used for the very first paint of the real screen, with no
+  // flash of the wrong language. `setLanguage` still wins for any change
+  // that doesn't come from a new `initialLanguage` (Settings' own save
+  // calls it, and then re-renders this provider with a MATCHING prop, so
+  // the two can't fight each other).
+  const [appliedInitialLanguage, setAppliedInitialLanguage] = useState<Language>(initialLanguage);
+  if (appliedInitialLanguage !== initialLanguage) {
+    setAppliedInitialLanguage(initialLanguage);
+    setLanguage(initialLanguage);
+  }
 
   const value = useMemo<LanguageContextValue>(
     () => ({
