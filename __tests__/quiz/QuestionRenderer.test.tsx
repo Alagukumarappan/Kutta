@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccessibilityInfo } from 'react-native';
-import { render, fireEvent, within } from '@testing-library/react-native';
+import { render, fireEvent, within, act } from '@testing-library/react-native';
 import { QuestionRenderer } from '../../src/quiz/QuestionRenderer';
 import type { Question } from '../../src/types/quiz';
 import { colors } from '../../src/design-system';
@@ -578,6 +578,38 @@ describe('QuestionRenderer', () => {
       await fireEvent.press(getByTestId('quiz-retry-answer'));
       expect(onRetry).toHaveBeenCalledTimes(1);
       expect(onSelect).not.toHaveBeenCalled();
+      expect(onNext).not.toHaveBeenCalled();
+    });
+
+    // Regression test for iteration 6: the feedback Modal was the only one in
+    // the app with no onRequestClose. RN's Modal always captures Android's
+    // hardware/gesture back natively and dispatches it to JS, so without the
+    // prop the press was silently dropped — and since every activity screen
+    // is headerShown:false, back is the child's only way out of the quiz.
+    // Back is routed to the non-destructive retry (never onNext), so it can
+    // neither score nor skip the question.
+    it('dismisses the feedback overlay via retry (never onNext) on the Android back button', async () => {
+      const onRetry = jest.fn();
+      const onNext = jest.fn();
+
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={onNext}
+          onRetry={onRetry}
+        />
+      );
+
+      const modal = getByTestId('quiz-feedback-modal');
+      expect(modal.props.onRequestClose).toBeDefined();
+      await act(async () => {
+        modal.props.onRequestClose();
+      });
+
+      expect(onRetry).toHaveBeenCalledTimes(1);
       expect(onNext).not.toHaveBeenCalled();
     });
   });

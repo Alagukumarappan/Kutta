@@ -1,5 +1,4 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import sampleQuestionsFile from '../../sample-content/quiz/questions.json';
 import { filterQuestionsByAge } from '../../src/quiz/filterQuestions';
 import { AGE_OPTIONS } from '../../src/components/AgePicker';
 import type { Question } from '../../src/types/quiz';
@@ -45,9 +44,9 @@ describe('filterQuestionsByAge', () => {
   // looked perfectly healthy the whole time, which is why this asserts the
   // real inclusive eligibility rule instead.
   describe('shipped sample content', () => {
-    const sampleQuestions: Question[] = JSON.parse(
-      readFileSync(join(__dirname, '../../sample-content/quiz/questions.json'), 'utf8')
-    ).questions;
+    // The very file src/storage/sampleContent.ts bundles and seeds onto the
+    // device, so this checks what a parent actually gets.
+    const sampleQuestions = sampleQuestionsFile.questions as unknown as Question[];
 
     it.each(AGE_OPTIONS)('has eligible questions for a %i year old', (age) => {
       expect(filterQuestionsByAge(sampleQuestions, age).length).toBeGreaterThan(0);

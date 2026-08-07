@@ -638,7 +638,26 @@ export function QuestionRenderer({
           // own building blocks are reused directly (SurfaceWash's
           // proportions via `surfaceWash` tokens, and the raised
           // primary/secondary buttons for Retry/Next) instead.
-          <Modal visible transparent animationType="fade">
+          <Modal
+            testID="quiz-feedback-modal"
+            visible
+            transparent
+            animationType="fade"
+            // Android's hardware/gesture back. RN's Modal always registers a
+            // back-press callback natively and dispatches the event to JS, so
+            // WITHOUT this prop back is captured by the modal's own window and
+            // then silently dropped — and because every activity screen is
+            // headerShown:false (see RootNavigator), back is the child's only
+            // way out of the quiz. So while this overlay was up (a large share
+            // of quiz time), back did nothing at all, repeatedly, with no
+            // indication why. Routed to onRetry rather than onNext because
+            // back must never be destructive: retry only clears the local
+            // selection on the SAME question, so it can't score or skip
+            // anything (see the onRetry prop doc above). The overlay then
+            // unmounts and a second back press leaves the quiz normally. Every
+            // other Modal in this app already sets this prop.
+            onRequestClose={onRetry}
+          >
             <View style={styles.feedbackBackdrop}>
               <Animated.View testID="quiz-feedback" style={[styles.feedbackCard, elevation.level5, feedbackCardEntranceStyle]}>
                 <View style={styles.feedbackCardClip}>
