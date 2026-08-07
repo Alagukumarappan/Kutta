@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, TextInput, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
@@ -183,14 +184,29 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
                 )}
               </AnimatedPressable>
               <View style={styles.nameInputColumn}>
+                {/* No `label` prop here (unlike Settings' equivalent name
+                    field): the styles.label Text above this whole row
+                    already serves as this card's heading for BOTH the
+                    avatar picker and this input together, matching the
+                    Age/Language cards' own external-label pattern in the
+                    same row — giving this TextInput its own duplicate
+                    floating label would double up on that heading without
+                    covering the avatar it also labels. mode="outlined" +
+                    dense still gets the polished animated border and
+                    correctly themed focus state from the nice
+                    outlined style, just keyed off the existing
+                    placeholder instead of a label. */}
                 <TextInput
+                  mode="outlined"
+                  dense
                   testID="onboarding-name-input"
                   value={name}
                   onChangeText={handleNameChange}
                   maxLength={CHILD_NAME_MAX_LENGTH}
-                  style={[styles.textInput, nameValid ? styles.textInputFilled : styles.textInputEmpty]}
                   placeholder="Name"
-                  placeholderTextColor={colors.inkMuted}
+                  outlineColor={nameValid ? colors.bubblegumDark : colors.line}
+                  activeOutlineColor={colors.bubblegumDark}
+                  style={[styles.textInput, nameValid && styles.textInputFilled]}
                 />
                 {pictureUri && (
                   <Text
@@ -460,19 +476,10 @@ const styles = StyleSheet.create({
     color: colors.berryDark,
   },
   textInput: {
-    borderWidth: 2,
-    borderRadius: radii.md,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    fontSize: 17,
-    color: colors.ink,
     backgroundColor: colors.surfaceSunk,
-  },
-  textInputEmpty: {
-    borderColor: colors.line,
+    fontSize: 17,
   },
   textInputFilled: {
-    borderColor: colors.bubblegumDark,
     backgroundColor: colors.bubblegumSoft,
   },
   folderButtonOuter: {
