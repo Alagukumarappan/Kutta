@@ -156,6 +156,23 @@ export function SettingsScreen({
   // leave pendingFolderUri set to whichever one happened to finish first
   // rather than the one the parent actually meant to end up with.
   const pickingFolderRef = useRef(false);
+  // `resetting` is state, so it only starts blocking handleReset on the NEXT
+  // render — and it isn't even set until the confirmation has been accepted.
+  // Two taps on "Reset everything" landing in one touch batch (a child
+  // drumming on the screen, an impatient double-tap) therefore both got
+  // through and queued TWO confirmation dialogs. Confirming the first one
+  // wipes the profile and unmounts this screen, leaving the second
+  // "Reset everything?" dialog sitting on top of the freshly-shown
+  // Onboarding screen — and its Reset button still runs performReset against
+  // this unmounted screen's closures. This ref is checked-and-set
+  // synchronously, so only one dialog can ever be open; it is released again
+  // if the parent cancels or dismisses it, so Reset stays usable.
+  const resetConfirmOpenRef = useRef(false);
+  // Second line of defence, guarding the wipe itself the same way
+  // saveInFlightRef guards handleSave — a re-entrant performReset would run
+  // two concurrent clears (and two onReset callbacks) against the same
+  // storage.
+  const resetInFlightRef = useRef(false);
   // handleSave awaits confirmMigration()/migrateContent() before persisting
   // — both potentially slow (a real confirmation dialog, a real file copy)
   // — but nothing disables the name/age/language/picture fields while that
@@ -254,19 +271,34 @@ export function SettingsScreen({
   }
 
   function handleReset() {
-    if (!profile || resetting) return;
+    if (!profile || resetting || resetConfirmOpenRef.current) return;
+    resetConfirmOpenRef.current = true;
     Alert.alert(
       t('settingsResetConfirmTitle'),
       t('settingsResetConfirmBody'),
       [
-        { text: t('cancel'), style: 'cancel', onPress: () => {} },
+        {
+          text: t('cancel'),
+          style: 'cancel',
+          onPress: () => {
+            resetConfirmOpenRef.current = false;
+          },
+        },
         { text: t('settingsReset'), style: 'destructive', onPress: performReset },
       ],
-      { cancelable: true }
+      {
+        cancelable: true,
+        onDismiss: () => {
+          resetConfirmOpenRef.current = false;
+        },
+      }
     );
   }
 
   async function performReset() {
+    resetConfirmOpenRef.current = false;
+    if (resetInFlightRef.current) return;
+    resetInFlightRef.current = true;
     setResetting(true);
     try {
       if (profile?.rootFolderUri) {
@@ -290,6 +322,7 @@ export function SettingsScreen({
       await clearPuzzleDifficulty();
       onReset?.();
     } finally {
+      resetInFlightRef.current = false;
       setResetting(false);
     }
   }

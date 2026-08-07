@@ -825,6 +825,66 @@ describe('SettingsScreen', () => {
       expect(puzzleDifficultyStore.clearPuzzleDifficulty).toHaveBeenCalledTimes(1);
     });
 
+    // Regression test for a real bug: `resetting` is state, so it only starts
+    // blocking handleReset on the NEXT render — and it isn't even set until
+    // the confirmation has been accepted. Two taps landing in one touch batch
+    // (a child drumming on the screen) therefore queued TWO "Reset
+    // everything?" dialogs: confirming the first wipes the profile and
+    // unmounts this screen, leaving the second dialog sitting on top of the
+    // freshly-shown Onboarding screen with a live, destructive button.
+    it('opens only one confirmation dialog for a rapid double-tap on Reset', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue(null);
+      (profileStore.clearProfile as jest.Mock).mockResolvedValue(undefined);
+      const onReset = jest.fn();
+
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={onReset} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      const resetButton = getByTestId('settings-reset');
+      // Two presses on the SAME captured element without re-querying — the
+      // "stale double-tap" shape this codebase's other double-fire guards are
+      // tested with.
+      await act(async () => {
+        fireEvent.press(resetButton);
+        fireEvent.press(resetButton);
+        await Promise.resolve();
+      });
+
+      expect(Alert.alert).toHaveBeenCalledTimes(1);
+
+      // And confirming that one dialog still wipes exactly once.
+      await confirmAlertWith('Reset everything');
+      await waitFor(() => expect(profileStore.clearProfile).toHaveBeenCalledTimes(1));
+      expect(onReset).toHaveBeenCalledTimes(1);
+    });
+
+    // The single-dialog guard must be released again when the parent backs
+    // out, or Reset would be dead for the rest of the session.
+    it('still allows a later reset after the confirmation was cancelled', async () => {
+      (folderAccess.findChildUri as jest.Mock).mockResolvedValue(null);
+      (profileStore.clearProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByTestId, findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen onReset={jest.fn()} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await fireEvent.press(getByTestId('settings-reset'));
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(1));
+      await confirmAlertWith('Cancel');
+
+      await fireEvent.press(getByTestId('settings-reset'));
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(2));
+      await confirmAlertWith('Reset everything');
+      await waitFor(() => expect(profileStore.clearProfile).toHaveBeenCalledTimes(1));
+    });
+
     it('does NOT reset anything if the parent cancels the confirmation', async () => {
       (folderAccess.findChildUri as jest.Mock).mockResolvedValue('content://tree/old/Kutta-games');
       const onReset = jest.fn();
