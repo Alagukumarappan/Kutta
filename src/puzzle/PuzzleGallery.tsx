@@ -104,9 +104,16 @@ export function PuzzleGallery({
 
   useEffect(() => {
     let cancelled = false;
-    getPuzzleDifficulty().then((stored) => {
-      if (!cancelled) setDifficulty(stored);
-    });
+    getPuzzleDifficulty()
+      .then((stored) => {
+        if (!cancelled) setDifficulty(stored);
+      })
+      // A failed AsyncStorage read just means this session keeps the
+      // default difficulty — matching the fire-and-forget catch on the
+      // matching write below. Without it the rejection is unhandled, which
+      // React Native surfaces as a dev warning/redbox over a gallery that
+      // is otherwise working perfectly.
+      .catch(() => {});
     return () => {
       cancelled = true;
     };

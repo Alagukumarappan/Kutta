@@ -309,6 +309,32 @@ describe('PuzzleGallery', () => {
       const { getPuzzleDifficulty } = require('../../src/storage/puzzleDifficultyStore');
       await waitFor(async () => expect(await getPuzzleDifficulty()).toBe(12));
     });
+
+    // The matching WRITE already swallows its failure; the READ did not, so
+    // an AsyncStorage failure left an unhandled promise rejection (a dev
+    // warning/redbox) on top of an otherwise perfectly working gallery.
+    it('falls back to the default difficulty without an unhandled rejection if the stored value cannot be read', async () => {
+      (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      (AsyncStorage.getItem as jest.Mock).mockRejectedValueOnce(new Error('storage unavailable'));
+      const rejections: unknown[] = [];
+      const onRejection = (reason: unknown) => rejections.push(reason);
+      process.on('unhandledRejection', onRejection);
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleGallery picturesFolderUri="content://tree/pictures" onSelect={jest.fn()} />
+        </LanguageProvider>
+      );
+      await findByTestId('puzzle-gallery-empty');
+      await new Promise<void>((resolve) => {
+        setImmediate(() => resolve());
+      });
+
+      expect((await findByTestId('puzzle-difficulty-picker')).props.accessibilityLabel).toBe('Difficulty: 4');
+      expect(rejections).toEqual([]);
+      process.off('unhandledRejection', onRejection);
+    });
   });
 
   // Regression tests for the premium-polish accessibility pass: the
