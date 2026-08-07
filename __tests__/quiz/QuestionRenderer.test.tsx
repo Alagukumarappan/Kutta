@@ -105,6 +105,83 @@ describe('QuestionRenderer', () => {
     expect(getByTestId('question-image-broken')).toBeTruthy();
   });
 
+  // Regression tests for iteration 6: ImageWithFallback kept its "failed"
+  // flag in plain state that nothing ever reset, and every <ImageWithFallback>
+  // in this file keeps the SAME React instance across a question change (the
+  // question image sits at a fixed position in the tree, and the option cards
+  // are keyed by option.id — which the real questions.json reuses as
+  // 'a'/'b'/'c'/'d' on EVERY question). So one missing picture file poisoned
+  // that slot for the rest of the session: perfectly good images kept
+  // rendering the grey 🖼️ placeholder, which on an image-category question
+  // means the child is asked to pick between pictures they cannot see.
+  it('clears a broken-image placeholder once the question image URI changes', async () => {
+    const { getByTestId, queryByTestId, rerender } = await render(
+      <QuestionRenderer
+        question={imageQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    await fireEvent(getByTestId('question-image'), 'error');
+    expect(getByTestId('question-image-broken')).toBeTruthy();
+
+    // Advance to the next question, whose image is a different, loadable file.
+    await rerender(
+      <QuestionRenderer
+        question={combinedQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    expect(queryByTestId('question-image-broken')).toBeNull();
+    expect(getByTestId('question-image')).toBeTruthy();
+  });
+
+  it('clears a broken option-image placeholder on the next question even though option ids repeat', async () => {
+    const nextCombinedQuestion: Question = {
+      ...combinedQuestion,
+      id: 'q2-next',
+      options: [
+        { id: 'a', image: 'content://tree/quiz/images/cat.png', text: { en: 'Cat', de: 'Katze' } },
+        { id: 'b', image: 'content://tree/quiz/images/dog.png', text: { en: 'Dog', de: 'Hund' } },
+        { id: 'c', image: 'content://tree/quiz/images/cow.png', text: { en: 'Cow', de: 'Kuh' } },
+        { id: 'd', image: 'content://tree/quiz/images/bee.png', text: { en: 'Bee', de: 'Biene' } },
+      ],
+    };
+
+    const { getByTestId, queryByTestId, rerender } = await render(
+      <QuestionRenderer
+        question={combinedQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    await fireEvent(getByTestId('option-image-c'), 'error');
+    expect(getByTestId('option-image-c-broken')).toBeTruthy();
+
+    await rerender(
+      <QuestionRenderer
+        question={nextCombinedQuestion}
+        language="en"
+        selectedOptionId={null}
+        onSelect={jest.fn()}
+        onNext={jest.fn()}
+      />
+    );
+
+    expect(queryByTestId('option-image-c-broken')).toBeNull();
+    expect(getByTestId('option-image-c')).toBeTruthy();
+  });
+
   it('calls onSelect (without showing feedback yet) when an option is first tapped', async () => {
     const onSelect = jest.fn();
 

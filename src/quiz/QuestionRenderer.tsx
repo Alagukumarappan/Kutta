@@ -85,7 +85,20 @@ function ImageWithFallback({
   style: object;
   fallbackIconSize?: number;
 }) {
-  const [failed, setFailed] = React.useState(false);
+  // The failure is remembered AS the uri that failed, not as a bare boolean.
+  // Every <ImageWithFallback> in this file keeps the same React instance
+  // across a question change — the question image sits at a fixed position in
+  // the tree, and the option cards are keyed by `option.id`, which the real
+  // questions.json reuses as 'a'/'b'/'c'/'d' on EVERY question — so a boolean
+  // that nothing ever reset stayed `true` for the rest of the session. One
+  // missing picture file therefore poisoned that slot permanently: every
+  // later question's perfectly loadable image kept rendering the grey
+  // placeholder, and on an image-category question that means asking a
+  // 2-8 year old to choose between pictures they cannot see. Comparing
+  // against the CURRENT uri makes the flag self-clearing the moment the
+  // source changes, with no effect and no extra render pass.
+  const [failedUri, setFailedUri] = React.useState<string | null>(null);
+  const failed = failedUri === uri;
 
   if (failed) {
     return (
@@ -99,7 +112,7 @@ function ImageWithFallback({
     <Image
       source={{ uri }}
       testID={testID}
-      onError={() => setFailed(true)}
+      onError={() => setFailedUri(uri)}
       style={[styles.image, style]}
       resizeMode="contain"
     />
