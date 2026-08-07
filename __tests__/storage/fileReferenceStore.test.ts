@@ -189,13 +189,48 @@ describe('fileReferenceStore', () => {
       expect(stored.map((r) => r.uri)).toEqual(['content://tree/a.png', 'content://tree/b.png']);
     });
 
-    it('treats a getInfoAsync rejection (e.g. a revoked SAF grant) the same as a missing file', async () => {
+    // Regression test for irreversible data loss. A getInfoAsync REJECTION
+    // is not an answer — an unmounted SD card, an unreachable cloud
+    // provider, a grant not yet re-established after a restart. Deleting the
+    // reference on that basis (which this used to do) meant one bad moment
+    // wiped every file the parent had added, recoverable only by re-picking
+    // each one by hand. Hide it for this load; keep it for the next.
+    it('hides but KEEPS a reference it could not check (unmounted card, unreachable provider)', async () => {
       (FileSystem.getInfoAsync as jest.Mock).mockRejectedValue(new Error('permission revoked'));
       await addFileReferences('video', ['content://tree/a.mp4']);
 
       const valid = await pruneMissingFileReferences('video');
       expect(valid).toEqual([]);
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://tree/a.mp4']);
+    });
+
+    it('shows the kept reference again once the file becomes reachable', async () => {
+      (FileSystem.getInfoAsync as jest.Mock).mockRejectedValue(new Error('card removed'));
+      await addFileReferences('video', ['content://tree/a.mp4']);
+      expect(await pruneMissingFileReferences('video')).toEqual([]);
+
+      (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+      expect(await pruneMissingFileReferences('video')).toEqual(['content://tree/a.mp4']);
+    });
+
+    // ...but a definitive "not there" IS an answer, so that one is dropped
+    // for good rather than lingering invisibly forever.
+    it('still permanently forgets a reference whose file definitively does not exist', async () => {
+      (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+      await addFileReferences('video', ['content://tree/a.mp4']);
+
+      expect(await pruneMissingFileReferences('video')).toEqual([]);
       expect(await getFileReferences('video')).toEqual([]);
+    });
+
+    it('does not rewrite storage when a check merely failed', async () => {
+      (FileSystem.getInfoAsync as jest.Mock).mockRejectedValue(new Error('offline'));
+      await addFileReferences('coloring', ['content://tree/a.png']);
+      const setItemSpy = jest.spyOn(AsyncStorage, 'setItem');
+      setItemSpy.mockClear();
+
+      await pruneMissingFileReferences('coloring');
+      expect(setItemSpy).not.toHaveBeenCalled();
     });
 
     it('does not rewrite storage when nothing needed pruning', async () => {

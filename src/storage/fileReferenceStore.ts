@@ -134,12 +134,23 @@ export async function removeFileReference(
   return next;
 }
 
-// Verifies every reference's file still exists, drops only the ones that
-// don't (a deleted file, a revoked SAF grant, an unmounted SD card), and
-// persists the pruned list — the same "safe empty result, don't take down
-// the others" behavior as resolveProfilePictureUri (profilePicture.ts), just
-// applied per-entry to a whole list. Storage is only rewritten when
-// something actually needed pruning.
+// Returns the uris that can actually be shown right now, and permanently
+// forgets the ones whose file is definitively gone — the same "safe result,
+// don't take down the others" behavior as resolveProfilePictureUri
+// (profilePicture.ts), applied per-entry to a whole list. Storage is only
+// rewritten when something actually needed forgetting.
+//
+// The distinction between "gone" and "can't tell" is deliberate and
+// load-bearing. `getInfoAsync` RESOLVING with exists:false is a real answer:
+// the file is not there, so the reference is dead and is dropped. Its
+// THROWING is not an answer at all — an SD card that happens to be
+// unmounted, a cloud provider that is momentarily unreachable, a permission
+// grant not yet re-established after a restart. Treating that as "gone"
+// (which this used to) meant one bad moment silently and irreversibly
+// deleted every reference the parent had added, with no way back other than
+// re-picking every file by hand. Those references are now kept and merely
+// hidden for this load, so they reappear by themselves once whatever was
+// wrong is fixed.
 export async function pruneMissingFileReferences(type: FileReferenceContentType): Promise<string[]> {
   const refs = await getFileReferences(type);
   if (refs.length === 0) return [];
@@ -148,18 +159,18 @@ export async function pruneMissingFileReferences(type: FileReferenceContentType)
     refs.map(async (ref) => {
       try {
         const info = await FileSystem.getInfoAsync(ref.uri);
-        return info.exists ? ref : null;
+        return { ref, keep: info.exists, show: info.exists };
       } catch {
-        return null;
+        return { ref, keep: true, show: false };
       }
     })
   );
-  const valid = checked.filter((ref): ref is FileReference => ref !== null);
 
-  if (valid.length !== refs.length) {
-    await saveFileReferences(type, valid);
+  const kept = checked.filter((entry) => entry.keep).map((entry) => entry.ref);
+  if (kept.length !== refs.length) {
+    await saveFileReferences(type, kept);
   }
-  return valid.map((ref) => ref.uri);
+  return checked.filter((entry) => entry.show).map((entry) => entry.ref.uri);
 }
 
 // Used by Settings' "Reset everything" flow, alongside clearProfile and
