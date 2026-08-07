@@ -358,9 +358,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Reads from the activity palette's contrast-audited `onAccentText`
+  // instead of a hard-coded white (same reasoning as PuzzleGallery's own
+  // retry label) — for coloring's bubblegum accent that resolves to white
+  // anyway, so nothing changes visually here; it just can't silently drift
+  // if the accent hue is ever re-tuned.
   retryText: {
     fontSize: 17,
     fontWeight: '800',
-    color: colors.white,
+    color: accent.onAccentText,
   },
 });

@@ -494,9 +494,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Sits on the card's opaque PUZZLE_PALETTE.accent (jade) fill, so it must
+  // use that palette's own contrast-audited `onAccentText` rather than a
+  // hard-coded white: white on jade is only ~2.1:1 (see tokens.ts, which
+  // picks colors.ink for exactly this hue), which made "Retry" hard to read
+  // in the one place a parent needs it — after a folder-load failure.
   retryText: {
     fontSize: 17,
     fontWeight: '800',
-    color: colors.white,
+    color: PUZZLE_PALETTE.onAccentText,
   },
 });
