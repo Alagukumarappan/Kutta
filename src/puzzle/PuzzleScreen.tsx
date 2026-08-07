@@ -61,6 +61,15 @@ const PUZZLE_PALETTE = getActivityPalette('puzzle');
 // eating meaningfully more into the crop.
 const SLOT_BORDER = 4;
 
+// A photo size is only usable if BOTH dimensions are finite and strictly
+// positive - anything else (a corrupt file reported as 0x0, a bogus
+// Infinity) would produce a NaN/Infinity aspect ratio downstream.
+function isUsablePhotoSize(imgWidth: number, imgHeight: number): boolean {
+  return (
+    Number.isFinite(imgWidth) && Number.isFinite(imgHeight) && imgWidth > 0 && imgHeight > 0
+  );
+}
+
 function PuzzlePiece({
   imageUri,
   rect,
@@ -270,7 +279,21 @@ export function PuzzleScreen({
     Image.getSize(
       imageUri,
       (imgWidth, imgHeight) => {
-        if (!cancelled) setImageSize({ width: imgWidth, height: imgHeight });
+        if (cancelled) return;
+        // Image.getSize can "succeed" with degenerate dimensions for a
+        // truncated/corrupt file (0, or a non-finite value) - and a zero
+        // height makes the preview's own `aspectRatio: imageWidth /
+        // imageHeight` NaN or Infinity, which is not a layout value React
+        // Native can use, while `imageSize?.width ?? 1` does NOT catch it
+        // (?? only replaces null/undefined, not 0). computePuzzleBoardSize
+        // already guards its own copy of this; route the whole screen
+        // through the SAME square fallback the unreadable-photo path uses
+        // instead of guarding each consumer separately.
+        if (!isUsablePhotoSize(imgWidth, imgHeight)) {
+          setImageSizeFailed(true);
+          return;
+        }
+        setImageSize({ width: imgWidth, height: imgHeight });
       },
       () => {
         // Photo dimensions couldn't be read - fall back to treating it as

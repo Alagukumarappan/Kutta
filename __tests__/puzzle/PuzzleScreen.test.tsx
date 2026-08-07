@@ -499,6 +499,34 @@ describe('PuzzleScreen', () => {
     expect(await utils.findByTestId('puzzle-slot-0')).toBeTruthy();
   });
 
+  // Image.getSize can report success with degenerate dimensions for a
+  // truncated/corrupt image. Before this guard, `imageSize?.width ?? 1` let
+  // those straight through (?? only replaces null/undefined, never 0), and
+  // the preview's `aspectRatio: imageWidth / imageHeight` became NaN or
+  // Infinity — not a value React Native's layout engine can use.
+  it.each([
+    [0, 0, 'a 0x0 corrupt photo'],
+    [400, 0, 'a photo reported with zero height'],
+    [Number.NaN, Number.NaN, 'a photo reported with non-finite dimensions'],
+  ])('falls back to a square layout for %i x %i (%s)', async (photoWidth, photoHeight, _label) => {
+    getSizeSpy.mockRestore();
+    getSizeSpy = jest
+      .spyOn(Image, 'getSize')
+      .mockImplementation((_uri: string, success: (w: number, h: number) => void) => {
+        success(photoWidth, photoHeight);
+      });
+
+    const utils = await renderPuzzleScreen(IMAGE_URI, 4);
+
+    await waitFor(() => expect(utils.queryByTestId('puzzle-loading')).toBeNull());
+    expect(await utils.findByTestId('puzzle-slot-0')).toBeTruthy();
+    expect(await utils.findByTestId('puzzle-slot-3')).toBeTruthy();
+
+    const { StyleSheet } = require('react-native');
+    const previewStyle = StyleSheet.flatten(utils.getByTestId('puzzle-preview').props.style);
+    expect(previewStyle.aspectRatio).toBe(1);
+  });
+
   // These tests prove the board's column count is deterministic - i.e. it comes
   // from the explicit groupPiecesIntoRows structure PuzzleScreen now renders
   // (rows of exactly `cols` sibling Pressables each), not from a flexWrap:'wrap'
