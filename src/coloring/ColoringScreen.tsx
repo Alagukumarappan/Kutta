@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert, Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -283,6 +283,33 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // preferred over nativeEvent.locationX/locationY in the first place.
   const touchAreaRef = useRef<View>(null);
   const touchAreaOriginRef = useRef({ x: 0, y: 0 });
+
+  const measureTouchAreaOrigin = useCallback(() => {
+    touchAreaRef.current?.measureInWindow?.((x, y) => {
+      if (Number.isFinite(x) && Number.isFinite(y)) touchAreaOriginRef.current = { x, y };
+    });
+  }, []);
+
+  // The touch area's WINDOW position can change without its OWN onLayout
+  // ever firing, and a stale origin means every touch is read at the wrong
+  // place — the child paints where they didn't touch and fills the wrong
+  // shape. onLayout is dispatched only when a view's frame changes RELATIVE
+  // TO ITS PARENT, and the exact case that breaks that assumption is easy
+  // for a child to trigger: this screen is locked to LANDSCAPE (both
+  // directions — see RootNavigator's ScreenOrientation.lockAsync), so
+  // turning the tablet around 180 degrees moves the notch/camera cutout
+  // from one side to the other. insets.left and insets.right swap, the
+  // gradient background's own padding swaps with them, and the whole
+  // centered stack slides sideways by the cutout's width — but the touch
+  // area's SUM of insets (and therefore its own size and its offset within
+  // its centered parent) is unchanged, so nothing below the padding gets a
+  // layout callback. Re-measuring whenever the window geometry or the
+  // insets change closes that gap; the rAF lets the native layout pass land
+  // first, since measuring in the commit phase can read the old frame.
+  useEffect(() => {
+    const frame = requestAnimationFrame(measureTouchAreaOrigin);
+    return () => cancelAnimationFrame(frame);
+  }, [measureTouchAreaOrigin, width, height, insets.top, insets.bottom, insets.left, insets.right]);
 
   // --- Touch cursor indicator ------------------------------------------
   // Raw SCREEN point (locationX/Y within coloring-canvas-touch-area, the
@@ -835,7 +862,15 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         paddingRight: insets.right,
       }}
     >
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      {/* This container's own frame DOES move when the safe-area padding
+          above it changes (the 180-degree landscape flip described on
+          measureTouchAreaOrigin's effect), even though its descendants'
+          frames don't — so it is the lowest view whose onLayout can still
+          be relied on to notice that the touch area has slid sideways. */}
+      <View
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+        onLayout={measureTouchAreaOrigin}
+      >
         {!imageLoadFailed && image === null ? (
           <View testID="coloring-image-loading" style={{ width: canvasWidth, height: canvasHeight }}>
             {/* messageColor={colors.ink} because this panel renders straight
@@ -879,11 +914,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
               // view, so onLayout (which fires after every mount AND after
               // any later resize, e.g. an orientation change) is the right
               // trigger, not a one-time effect on mount alone.
-              onLayout={() => {
-                touchAreaRef.current?.measureInWindow((x, y) => {
-                  touchAreaOriginRef.current = { x, y };
-                });
-              }}
+              onLayout={measureTouchAreaOrigin}
               {...panResponder.panHandlers}
             >
               {/* Clips zoomed/panned content to the canvas's own footprint
