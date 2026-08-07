@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 3 / 40**
+**Iteration count: 4 / 40**
 
 ---
 
@@ -203,3 +203,101 @@ but back silently doing nothing is inconsistent with the rest of the app.
 It affects Puzzle and Quiz identically, so it belongs to a design-system
 pass rather than a Tic-Tac-Toe one.
 
+## Iteration 4 — the Skia coloring canvas
+
+Four genuine bugs found and fixed; 49 suites / 694 tests green and
+`npx tsc --noEmit` clean.
+
+1. **A second fill tap erased the first one.** `handleCanvasTap` reads the
+   pixel buffer out of `pixelsRef`, which — like every ref on this screen —
+   is only refreshed from state during render. A flood fill on a real photo
+   takes long enough that a second tap lands while the first is still being
+   processed, and React Native then hands JS BOTH release events in one
+   batch, before any re-render. The second tap therefore flooded the
+   pre-first-fill buffer and its result replaced the first fill outright:
+   the child taps two shapes and only the second one comes out colored —
+   the exact stale-snapshot shape as iteration 3's Tic-Tac-Toe bug. Both
+   refs now advance synchronously alongside the state, and `handleUndoFill`
+   does the same for the mirror case (a fill batched behind an undo). The
+   commit is also atomic now: if `Skia.Image.MakeImage` returns null there
+   is nothing new to show, and adopting the updated buffer anyway left the
+   pixel data permanently one fill ahead of the picture on screen, so every
+   later tap flooded a region the child could not see. Regression test
+   reproduces the batch in a single `act()` and was confirmed to fail
+   without the fix.
+2. **A repeat tap threw the undo point away.** Tapping a region that is
+   already exactly the selected color cannot change a pixel — `floodFill`
+   has an early exit for it — but the screen ran the whole pipeline anyway,
+   including replacing its single undo snapshot with the post-fill state.
+   A 2-8 year old taps the same shape over and over, so the common sequence
+   was: fill the wrong shape, tap it again (nothing visibly happens), press
+   Undo, get nothing back. `handleCanvasTap` now recognises the no-op up
+   front via a new exported `pixelMatchesColorExactly` (literally the same
+   condition `floodFill`'s early exit uses, so they cannot drift apart),
+   which also saves a full-buffer copy plus a whole new SkImage per repeat
+   tap — tens of megabytes of churn for zero visible change.
+3. **A camera-sized parent photo could OOM-kill the app.** Coloring is the
+   one activity a parent can point at their own pictures, and a phone shot
+   is routinely 4000x3000. Nothing here worked on the encoded file:
+   `readPixels` expanded whatever was decoded into a raw RGBA array (48 MB
+   at that size) and every fill then allocated three more that size
+   (floodFill's `slice()`, the `Skia.Data` copy, the resulting SkImage)
+   while the undo snapshot deliberately held the previous pair alive — a
+   quarter of a gigabyte of churn per tap on exactly the cheap low-RAM
+   Android tablet a child gets handed, plus 12 million pixels to walk per
+   fill, freezing the UI for seconds with no feedback. A decoded image whose
+   longest side exceeds 1600 is now scaled down first (aspect ratio kept).
+   1600 is comfortably above `CANVAS_MAX_SIZE` (900), so no displayable
+   detail is lost even at maximum zoom, and it brings that photo to a
+   ~7.7 MB buffer. Linear filtering, not the default nearest sampling —
+   point-sampling a line drawing drops whole outline pixels and the fill
+   would leak straight through the gaps. Every failure path falls back to
+   the full-size image; a slow picture still beats an error screen.
+4. **Turning the tablet around made the child paint in the wrong place.**
+   Touches are read as pageX/pageY minus the touch area's measured window
+   origin, refreshed only from that view's own `onLayout` — which fires on a
+   frame change RELATIVE TO ITS PARENT. This screen is locked to LANDSCAPE
+   in BOTH directions, so a 180-degree flip moves the notch to the other
+   side: `insets.left`/`insets.right` swap, the background's padding swaps
+   with them, the whole centered stack slides sideways by the cutout's
+   width — but the touch area's inset SUM is unchanged, so its size and its
+   offset within its centered parent are identical and no layout callback
+   reaches it. The origin then stayed wrong for the rest of the session,
+   every touch reading tens of pixels off. Re-measurement is now a shared
+   callback, additionally driven by the centered container's `onLayout` (its
+   frame genuinely does move) and by an effect keyed on window size and each
+   inset, via rAF so the native layout pass lands first.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **Flood fill.** Explicit stack, not recursion, so no stack-overflow risk
+  regardless of region size; `visited` is a full-size `Uint8Array` so no
+  pixel is filled twice; the bounds check happens on pop, before any buffer
+  access, so no coordinate can read or write outside the array; an
+  out-of-range seed reads `undefined`, matches nothing and fills nothing;
+  the `<=` tolerance boundary is inclusive and tested; alpha is compared
+  like any other channel; a uniform image filling entirely is correct
+  behaviour, not a bug. The caller floors both coordinates and range-checks
+  them before calling, so a fractional seed (which would silently fill
+  nothing) can't reach it.
+- **Palette.** Minimum max-channel distance between any two of the 17
+  swatches is 32 — more than three times the flood fill's tolerance of 10 —
+  so no two colors can be confused by the matcher or by a child's eye.
+- **Multi-touch.** A second finger joining mid-stroke abandons the
+  in-progress path rather than leaving a stray line, and re-baselines the
+  pinch instead of applying pinch math against a stale one; a two-finger
+  gesture ending never triggers a fill; per-frame (not per-gesture) pinch
+  baselines mean error can't compound. The stroke-finishing null-path race
+  fixed earlier is still correctly handled by the captured `finished` local.
+- **Zoom/pan math.** `canvasTransform.ts`'s model, its clamp, and the
+  top-left `transformOrigin` in the render still agree exactly; the
+  screen-to-canvas inversion is guarded against a zero/non-finite scale.
+- **base64 decoder.** Padding handling and the byte-length math are correct
+  for well-formed input, and unknown characters can't push writes past the
+  allocated buffer.
+
+**Noted, not fixed (feature, not a bug):** there is no save/export at all —
+a colored picture only lives in component state, so leaving the screen
+discards it. Adding persistence is a feature with its own storage/privacy
+design (where the copy goes, whether it's written back into the parent's
+SAF folder), not something to bolt on inside a bug-hunt pass.
