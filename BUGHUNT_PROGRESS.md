@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 4 / 40**
+**Iteration count: 5 / 40**
 
 ---
 
@@ -303,3 +303,84 @@ a colored picture only lives in component state, so leaving the screen
 discards it. Adding persistence is a feature with its own storage/privacy
 design (where the copy goes, whether it's written back into the parent's
 SAF folder), not something to bolt on inside a bug-hunt pass.
+
+---
+
+## Iteration 5 — the Photo Puzzle feature
+
+Three genuine bugs found and fixed; 49 suites / 700 tests green and
+`npx tsc --noEmit` clean.
+
+1. **Two quick taps lost the child's move — the same stale-snapshot bug for
+   the third time.** The puzzle is tap-to-swap (there is no drag), and
+   `handleTapSlot` read BOTH `selectedSlot` and `order` out of the render its
+   closure was created in. React Native delivers queued touch events in a
+   BATCH, so a 2-8 year old tapping two pieces in quick succession ran both
+   handlers against the same pre-update snapshot, in two distinct ways:
+   (a) a pick-then-drop pair with nothing selected yet did NOTHING AT ALL —
+   the second tap still saw `selectedSlot === null` and just moved the
+   selection, so the child tapped two pieces and the board did not change;
+   (b) a swap batched behind another swap rebuilt the board from the stale
+   `order`, so the earlier swap was silently discarded and a piece the child
+   had just moved jumped back. Selection now advances through a ref
+   synchronously alongside the state, and the swap applies inside a
+   functional `setOrder` updater that re-reads the latest board (with a
+   bounds check, so a tap batched behind a Retry can't index off the end of a
+   fresh order). `startPuzzle` clears the ref too. Both cases have regression
+   tests reproducing the batch in a single `act()`, confirmed to fail before
+   the fix. Exactly the shape of iteration 3's Tic-Tac-Toe and iteration 4's
+   Coloring bugs — worth checking any remaining tap handler in the app for
+   the same pattern.
+2. **A corrupt photo produced a NaN layout value.** `Image.getSize` reports
+   SUCCESS with degenerate dimensions (0x0, or a non-finite value) for a
+   truncated/corrupt file, and the screen's `imageSize?.width ?? 1` guard did
+   not catch it — `??` only replaces null/undefined, never `0`. The preview's
+   `aspectRatio: imageWidth / imageHeight` then became `NaN`/`Infinity`,
+   which is not a layout value RN can use, and `isPortrait` was decided on
+   nonsense. `computePuzzleBoardSize` already guarded its own copy of this,
+   so only two of the three consumers were protected; such a size now routes
+   through the SAME square fallback the unreadable-photo path already uses.
+3. **A failed difficulty read left an unhandled rejection.**
+   `PuzzleGallery`'s load-on-mount `getPuzzleDifficulty()` had no `.catch`,
+   unlike the matching fire-and-forget write right below it, so an
+   AsyncStorage failure surfaced a dev warning/redbox over a gallery that
+   would otherwise carry on perfectly well with the default difficulty.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **Win detection across every difficulty.** All four offered piece counts
+  are genuinely wired: `computeGridDimensions` covers 4/6/9/12 in both
+  orientations, `rows * cols` always equals the piece count, and the existing
+  suite already drives all eight (count, orientation) combinations through
+  the real rendered tree. Completion is `order.every((p, i) => p === i)` on
+  integer piece indices — no geometry, no floating point, and no "near a
+  slot" tolerance anywhere — so the visual state and the win check cannot
+  disagree in either direction. There is no drop-target/snap math to be
+  off-by-one about: `slotIndex = rowIndex * cols + colIndex` is the only
+  position arithmetic, and it is exact for non-square grids too.
+- **Multi-touch.** Each slot is a plain `Pressable`; RN's responder system
+  gives the touch to exactly one of them, so a second finger cannot start a
+  parallel "drag" — the two-fingers case reduces to the batched-tap case
+  fixed above. No piece can be duplicated or stuck mid-move because a piece's
+  position is purely the `order` array, never a transient gesture state.
+- **Retry/reshuffle.** `handleRetryPuzzle` goes through the exact same
+  `startPuzzle` path as the initial setup, so it re-runs `shufflePieceOrder`
+  (guaranteed non-identity, verified by the existing Math.random call-count
+  test), clears the selection, and clears the correctness baseline so the new
+  layout can't fire a stray celebratory pop. Nothing survives a retry: the
+  per-slot `Animated.Value`s are keyed by slot and always settle at 1.
+- **Difficulty wiring.** The chosen difficulty is passed as a navigation
+  param at the moment the tile is tapped and is a required prop on
+  `PuzzleScreen`, which shuffles once on mount — there is no async store read
+  on the puzzle screen at all, so no race can hand it a stale value.
+- **Extreme aspect ratios.** `computePuzzleBoardSize` never produces a
+  negative or zero board (both axes are floored at `PUZZLE_MIN_SIZE` before
+  the aspect fit, and the make-up scale is clamped to the space actually
+  available), so a panorama or a very tall portrait lays out without error.
+
+**Noted, not fixed (needs a design decision, not a bug fix):** an extreme
+panorama (say 4000x200) legitimately produces a very short board, and at 12
+pieces each piece can end up only ~10px tall — technically correct, but far
+under a usable touch target for a small child. Capping the board's aspect
+ratio (letterboxing the source photo) would fix it but changes what the
+puzzle shows, which is a product decision rather than a correctness one.
