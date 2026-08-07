@@ -746,3 +746,123 @@ deliberately tightened for this reason. The real fix is a one-off extracted
 thumbnail image per tile instead of a live player, which is a rewrite of
 the tile with its own design questions — not something to guess at inside a
 bug-hunt pass.
+
+---
+
+## Iteration 10 — internationalization (en/de) and the design-token system
+
+Four genuine bugs found and fixed; 50 suites / 737 tests green and
+`npx tsc --noEmit` clean.
+
+1. **The app ALWAYS launched in English, no matter what language the parent
+   had saved.** `RootNavigator` renders a `LanguageProvider` at the same
+   position in its returned tree twice: once while the profile is still
+   loading (`profile === undefined` -> splash, which has no saved language
+   to pass and hardcodes `initialLanguage="en"`) and again afterwards with
+   the profile's real language. React reconciles those two renders as the
+   same element type at the same position, so the provider is UPDATED, not
+   remounted — and `LanguageProvider`'s `useState(initialLanguage)` only ever
+   reads that prop on its first render. The splash's `"en"` therefore stuck
+   for the entire session: a German-speaking 2-8 year old got the whole app
+   — every Home card, every quiz button, every gallery empty state — in
+   English on every single launch. The one thing that made it *look* like it
+   worked is that `SettingsScreen` calls `setLanguage()` directly on save, so
+   a parent who went in and re-saved the language got German... until the
+   next cold start. Every existing test used an `'en'` profile, so nothing
+   caught it. `LanguageProvider` now re-derives its language whenever
+   `initialLanguage` actually changes, using React's documented
+   adjust-state-during-render pattern (not an effect) so the corrected
+   language is used for the very first paint, with no flash of English; an
+   explicit `setLanguage()` choice is still preserved when `initialLanguage`
+   has not changed.
+2. **Four failure alerts were hardcoded English with a raw exception body.**
+   `Alert.alert('Error', err instanceof Error ? err.message : String(err))`
+   in `OnboardingScreen`'s folder pick AND its save, `SettingsScreen`'s
+   folder pick, and `FolderErrorScreen`'s "Choose a different folder". For
+   these paths `err.message` is a technical SAF/Java string, so a
+   German-speaking parent got an untranslated heading over text they could
+   neither read nor act on — on first-launch onboarding and on the
+   folder-recovery screen, the two places where an unreadable error most
+   likely leaves them stuck. `folderPickError` already existed in
+   `strings.ts`, fully translated, for exactly this and had never been wired
+   to any call site (found by cross-referencing every `t(...)`/`tFormat(...)`
+   call site against the string table); a matching `onboardingSaveError` was
+   added for the save path. The raw exception now goes to `console.warn`.
+3. **Settings' accomplishments panel said "1 quizzes completed".** The panel
+   only renders once at least one activity is finished, so a count of exactly
+   1 is the FIRST value any parent ever sees there — and both English strings
+   were plural-only (the key's own comment asserted a plain count "reads fine
+   for 1 quiz completed", which is simply not true of the string it was
+   attached to). Added singular variants selected on `count === 1`. German
+   needs no distinct plural noun in this phrasing, so its two forms are
+   deliberately identical rather than invented.
+4. **Settings' age-picker placeholder failed WCAG AA (3.71:1).** This is the
+   token duplication biting for real: `AgePicker`'s shared BASE styles still
+   come from the old `src/theme/tokens` palette, whose `disabledText`
+   (#8A8478) was chosen against that module's warm #FFF6E9 background.
+   Settings was later re-themed onto `colors.parent`, where every card is
+   opaque white — on which that color measures 3.71:1, under the 4.5:1 floor
+   for the normal-weight 18px text this is. It is also the control's ONLY
+   visible label until an age is picked. Switched to
+   `colors.parent.inkMuted`, the exact token every other muted label on that
+   same card already uses (4.61:1); Onboarding is untouched because its
+   "playful" variant overrides this color outright. Covered by a real
+   computed-contrast test, not a pinned hex.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **Key coverage.** A static cross-reference of every `t('...')`/
+  `tFormat('...')`/`translate('...')` call site in `src/` and `__tests__/`
+  against `UI_STRINGS` found ZERO keys used but not defined — so no missing
+  key can crash or leak a raw key name to a child. The only dynamically
+  chosen keys go through `StringKey`-typed constant tables
+  (`HomeScreen`'s card list, `TicTacToeSetupScreen`'s difficulties,
+  `palette.ts`'s `nameKey`s, `RootNavigator`'s `titleFor`), all of which
+  `tsc` checks — there is no string concatenation anywhere in the key path.
+  All 153 keys have both `en` and `de`, and every `{placeholder}` set is
+  identical between the two languages (no German string missing a variable
+  the English one interpolates, or vice versa).
+- **Language-switch propagation.** Nothing anywhere caches a translated
+  string in state, a ref, or a `useMemo` — every call site invokes `t`/
+  `tFormat` during render, so a context change re-renders all of them at
+  once. RN `Modal`s (AgePicker, LanguageSelector, ProfilePicturePicker, the
+  puzzle difficulty picker) render inside the same React tree, so they get
+  the new context too; the native-stack header `title`s are recomputed in
+  `AppStack`'s own render, which consumes `useLanguage`. `Alert.alert`
+  strings are all built at call time. No half-translated screen is reachable.
+- **Content bilinguality.** `loadQuestions`' validator REJECTS any question or
+  option whose text isn't `{en, de}` with both as strings, so a half-
+  translated `questions.json` drops the affected question rather than
+  rendering `undefined` at a child. All 120 shipped sample questions carry
+  distinct en/de text.
+- **The other count/placeholder strings.** `quizProgressLabel`
+  ("Question {current} of {total}"), `gallerySelectedCount`, `ageOptionLabel`
+  (ages 2-8), `homeAgeLabel`, and `puzzleDifficultyOptionLabel`
+  (difficulties are 4/6/9/12) can never take a value of 1 in a position where
+  singular/plural matters, so #3 above was the only real pluralization bug.
+  Every interpolated German string re-orders its own placeholder naturally
+  ("{name} ist dran" vs "{name}'s turn") rather than transliterating English
+  word order, and no unit/noun is concatenated outside a template anywhere.
+- **The tokens duplication itself is REAL but deliberate, and only drifted
+  once.** `src/theme/tokens.ts` and `src/design-system/tokens.ts` are
+  genuinely two separate modules, not a wrapper: the new one re-exports only
+  the pure layout math (`clamp`, `computeResponsiveRectSize`, `EdgeInsets`,
+  `ZERO_INSETS`) and defines a wholly independent palette/spacing/radii
+  scale, with a long comment explaining that editing the old palette in place
+  would have silently reskinned every not-yet-migrated screen. What remains
+  live off the OLD module today is small and now audited: `AgePicker` and
+  `LanguageSelector` take `colors`/`radii`/`spacing`/`shadow` from it for
+  their structural base styles (each variant then overrides the colors from
+  the new palette), `AddFilesButton` takes `radii`/`spacing`/`shadow`, and
+  `QuizScreen` takes `spacing`. Note the two `spacing` scales are NOT the
+  same (`xs` is 4 in the old module and 8 in the new; `sm` is 8 vs 12), so
+  these are not interchangeable and a blind merge would silently re-space
+  four components — deliberately not attempted here. The only place the drift
+  produced an actual defect is fix #4; the base `colors.ink` used for
+  `AgePicker`/`LanguageSelector` option text is #2D3142 on a white modal card
+  (~12:1) and the shared `field` border matches what the already-shipped
+  `parent` variant of `LanguageSelector` uses, so neither is a regression.
+- **`Language` type safety.** `t()` indexes `UI_STRINGS[key][lang]` with
+  `lang: Language`, a two-member union, so there is no runtime path where an
+  unexpected language code yields `undefined` — a third language would fail
+  `tsc` at every string in the table rather than shipping half-translated.
