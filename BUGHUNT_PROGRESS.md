@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 1 / 40**
+**Iteration count: 2 / 40**
 
 ---
 
@@ -84,3 +84,53 @@ note in ATTRIBUTION.md). But:
 migration, and reset flows; the re-entrancy guards on all three screens; the
 `maxLength` caps; the Splash orientation comment (accurate — splash really
 does run under the PORTRAIT_UP lock).
+
+---
+
+## Iteration 2 — the individually-added file reference feature
+
+Four genuine bugs found and fixed; 49 suites / 682 tests green and
+`npx tsc --noEmit` clean.
+
+1. **Added pictures silently vanished.** The picker hands images back as a
+   copy in the app's CACHE directory, and that copy was the only one kept.
+   Android reclaims cache under storage pressure and "Clear cache" wipes it
+   outright, so a coloring page added weeks earlier could just be gone.
+   Picked images are now copied into `documentDirectory/kutta-added/` first
+   (falling back to the old behaviour if the copy fails). Because those
+   copies then have no other owner, removing such an item now deletes the
+   bytes too instead of leaking them into storage the parent cannot see;
+   files still belonging to the parent are left strictly alone. Videos stay
+   referenced in place — copying a multi-gigabyte file would be worse.
+2. **A failed check permanently destroyed references.**
+   `pruneMissingFileReferences` treated a `getInfoAsync` REJECTION as "the
+   file does not exist" and wrote the shortened list back. But an unmounted
+   SD card, an unreachable cloud provider, or a grant not re-established
+   after a restart all throw — so one bad moment irreversibly wiped every
+   file the parent had added. Only a resolved `exists:false` prunes now; a
+   failed check hides the item for that load and keeps the reference.
+3. **A broken content folder hid the added files too.** Both sources loaded
+   through one `Promise.all`, so a revoked SAF grant replaced the whole
+   gallery with an error screen — hiding perfectly reachable added pictures
+   AND the "+" button, which only exists in the normal header. Mirror case
+   equally bad: a failed AsyncStorage read blanked a healthy folder. Settled
+   independently now; the error screen appears only when nothing is showable.
+4. **"Reset everything" left the pictures on disk.** It cleared the
+   AsyncStorage keys only. With copies now living in app storage that meant
+   the previous child's photos persisted indefinitely after an explicit
+   reset. The copies are deleted too, best-effort.
+
+**Checked and found fine:** `clearAllFileReferences` really is wired into
+Settings' reset (alongside `clearProfile`/`clearActivityLog`/difficulty);
+content types are properly independent; malformed-JSON and malformed-entry
+handling; the multi-select removal path's reference-vs-real-file split; the
+`inFlightRef` double-tap guard; deliberately NOT applying the gallery's
+extension filter to references (picked videos have no extension in their
+`content://` uri, so filtering would hide them all).
+
+**Known limitation, not fixable here:** individually-picked VIDEOS keep a
+`content://` uri whose read grant is not persistable — `expo-document-picker`
+exposes no `takePersistableUriPermission` equivalent, and adding one would
+mean a new native dependency. After a reboot such a video may become
+unreadable; thanks to fix 2 the reference now survives rather than being
+destroyed, but the item will be hidden until access returns.
