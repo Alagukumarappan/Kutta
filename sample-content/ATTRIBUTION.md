@@ -14,3 +14,12 @@ All from Wikimedia Commons, public domain / CC0 (no attribution legally required
 - **sports-car.jpg** — "Red sports coupe car" by Leon Brooks, via public-domain-image.com. Public domain.
 - **doll.jpg** — "Knitted rag doll", Wikimedia Commons. CC0.
 - **superhero.png** — generic flying-superhero silhouette clipart (originally by "ocal" on Clker.com, minor edit by a Wikimedia contributor). Public domain. Deliberately generic/original artwork — not Spider-Man, Superman, or any other trademarked character — so it's safe to use and share without any licensing concern.
+
+## Coloring starter pages (`coloring/`)
+
+- **elephant.jpeg**, **bunny.jpeg** — generic line-art coloring pages, no visible third-party branding.
+- **hero.png** — same public-domain superhero clipart as `pictures/superhero.png` above (reused here); not any trademarked character.
+- **princess.png** — "DancingBlondPrincess", Wikimedia Commons / OpenClipartVectors, via Pixabay. CC0 (Public Domain Dedication). Generic clipart character, not Barbie or any other trademarked character/brand.
+- **car-icon.png** — same Twemoji car icon as `quiz/images/car.png` (reused here); CC-BY 4.0, see the Twemoji credit at the top of this file.
+
+**Note:** earlier versions of this folder briefly included files named `spiderman.png`, `barbie.png`, and `car.png` sourced from third-party "free printable coloring page" websites — those carried both a trademark risk (official-style Spider-Man/Marvel branding and logo) and a copyright risk (visible third-party site watermarks, unclear commercial-redistribution rights). They have been permanently removed and replaced with the properly-licensed, generic content listed above. If you're reviewing this repo's history: do not reintroduce branded/watermarked third-party coloring pages.

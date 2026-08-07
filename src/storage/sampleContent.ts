@@ -14,11 +14,11 @@ interface SampleAsset {
 }
 
 const SAMPLE_COLORING: SampleAsset[] = [
-  { name: 'barbie.png', module: require('../../sample-content/coloring/barbie.png'), mimeType: 'image/png' },
   { name: 'bunny.jpeg', module: require('../../sample-content/coloring/bunny.jpeg'), mimeType: 'image/jpeg' },
-  { name: 'car.png', module: require('../../sample-content/coloring/car.png'), mimeType: 'image/png' },
+  { name: 'car-icon.png', module: require('../../sample-content/coloring/car-icon.png'), mimeType: 'image/png' },
   { name: 'elephant.jpeg', module: require('../../sample-content/coloring/elephant.jpeg'), mimeType: 'image/jpeg' },
-  { name: 'spiderman.png', module: require('../../sample-content/coloring/spiderman.png'), mimeType: 'image/png' },
+  { name: 'hero.png', module: require('../../sample-content/coloring/hero.png'), mimeType: 'image/png' },
+  { name: 'princess.png', module: require('../../sample-content/coloring/princess.png'), mimeType: 'image/png' },
 ];
 
 const SAMPLE_PICTURES: SampleAsset[] = [

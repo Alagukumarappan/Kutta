@@ -126,7 +126,7 @@ describe('sampleContent', () => {
 
       expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledWith(
         'content://tree/coloring',
-        'barbie.png',
+        'hero.png',
         'image/png'
       );
       expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledWith(
