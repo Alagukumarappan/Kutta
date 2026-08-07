@@ -37,42 +37,66 @@ interface MockVideoPlayer {
 jest.mock('expo-video', () => {
   const ReactLib = require('react');
   const RN = require('react-native');
-  const listenersByEvent = new Map<string, Set<Listener>>();
 
-  const mockPlayer: MockVideoPlayer = {
-    play: jest.fn(),
-    replace: jest.fn(),
-    currentTime: 0,
-    status: 'idle',
-    addListener: jest.fn((event: string, cb: Listener) => {
-      if (!listenersByEvent.has(event)) listenersByEvent.set(event, new Set());
-      listenersByEvent.get(event)!.add(cb);
-      return { remove: jest.fn(() => listenersByEvent.get(event)?.delete(cb)) };
-    }),
-    emit: ((event: string, payload?: StatusChangePayload) => {
-      // A real player's own `status` getter reflects its most recent
-      // statusChange too — kept in sync here so a later test reading
-      // `player.status` again (or a second mount reusing this same mock
-      // instance) sees the up-to-date value, not a stale 'idle'.
-      if (event === 'statusChange' && payload) mockPlayer.status = payload.status;
-      listenersByEvent.get(event)?.forEach((cb) => cb(payload));
-    }) as MockVideoPlayer['emit'],
-  };
+  function createMockPlayer(): MockVideoPlayer {
+    const listenersByEvent = new Map<string, Set<Listener>>();
+    const player: MockVideoPlayer = {
+      play: jest.fn(),
+      replace: jest.fn(),
+      currentTime: 0,
+      status: 'idle',
+      addListener: jest.fn((event: string, cb: Listener) => {
+        if (!listenersByEvent.has(event)) listenersByEvent.set(event, new Set());
+        listenersByEvent.get(event)!.add(cb);
+        return { remove: jest.fn(() => listenersByEvent.get(event)?.delete(cb)) };
+      }),
+      emit: ((event: string, payload?: StatusChangePayload) => {
+        // A real player's own `status` getter reflects its most recent
+        // statusChange too — kept in sync here so a later test reading
+        // `player.status` again (or a second mount reusing this same mock
+        // instance) sees the up-to-date value, not a stale 'idle'.
+        if (event === 'statusChange' && payload) player.status = payload.status;
+        listenersByEvent.get(event)?.forEach((cb) => cb(payload));
+      }) as MockVideoPlayer['emit'],
+    };
+    return player;
+  }
+
+  // Real `useVideoPlayer` keys its player on the source uri (see
+  // expo-modules-core's useReleasingSharedObject deps) — a different uri
+  // yields a genuinely DIFFERENT player object, and the previous one is
+  // released. Mirrored here so a test can drive a live source change.
+  const playersBySource = new Map<string, MockVideoPlayer>();
+  function playerFor(source: string): MockVideoPlayer {
+    let player = playersBySource.get(source);
+    if (!player) {
+      player = createMockPlayer();
+      playersBySource.set(source, player);
+    }
+    return player;
+  }
 
   return {
-    useVideoPlayer: jest.fn((_source: string, setup?: (player: MockVideoPlayer) => void) => {
-      setup?.(mockPlayer);
-      return mockPlayer;
+    useVideoPlayer: jest.fn((source: string, setup?: (player: MockVideoPlayer) => void) => {
+      const player = playerFor(source);
+      setup?.(player);
+      return player;
     }),
     VideoView: (props: Record<string, unknown>) => ReactLib.createElement(RN.View, { testID: 'video-view', ...props }),
-    __mockPlayer: mockPlayer,
+    __playersBySource: playersBySource,
+    __playerFor: playerFor,
   };
 });
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { __mockPlayer } = require('expo-video') as { __mockPlayer: MockVideoPlayer };
-
 const VIDEO_URI = 'content://tree/videos/party.mp4';
+const OTHER_VIDEO_URI = 'content://tree/videos/dinosaurs.mp4';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { __playersBySource, __playerFor } = require('expo-video') as {
+  __playersBySource: Map<string, MockVideoPlayer>;
+  __playerFor: (source: string) => MockVideoPlayer;
+};
+const __mockPlayer = __playerFor(VIDEO_URI);
 
 // The screen now shows a loading spinner until the player reports
 // 'readyToPlay' (see the quality-evolution loading-state fix) — every test
@@ -88,8 +112,10 @@ async function emitReady() {
 describe('VideoPlayerScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    __mockPlayer.status = 'idle';
-    __mockPlayer.currentTime = 0;
+    __playersBySource.forEach((player) => {
+      player.status = 'idle';
+      player.currentTime = 0;
+    });
   });
 
   it('renders the video view when playback is healthy', async () => {
@@ -477,6 +503,70 @@ describe('VideoPlayerScreen', () => {
 
       expect(queryByTestId('video-finished')).toBeNull();
       expect(__mockPlayer.replace).not.toHaveBeenCalled();
+    });
+  });
+
+  // Two quick taps on two DIFFERENT gallery tiles both dispatch
+  // navigate('video-detail', ...); if the second lands after this screen has
+  // mounted it updates the route params rather than pushing a second copy
+  // (see RootNavigator), i.e. a live videoUri change on a mounted player.
+  // expo-video hands back a genuinely new player for the new source, so none
+  // of the previous video's per-source UI state may survive with it.
+  describe('when the video source changes underneath a mounted player', () => {
+    it('does not carry the previous video\'s error screen over to the new one', async () => {
+      const { rerender, findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoPlayerScreen videoUri={VIDEO_URI} />
+        </LanguageProvider>
+      );
+
+      await act(async () => {
+        __mockPlayer.emit('statusChange', { status: 'error' });
+      });
+      await findByTestId('video-player-error');
+
+      await act(async () => {
+        rerender(
+          <LanguageProvider initialLanguage="en">
+            <VideoPlayerScreen videoUri={OTHER_VIDEO_URI} />
+          </LanguageProvider>
+        );
+      });
+
+      expect(queryByTestId('video-player-error')).toBeNull();
+      await findByTestId('video-player-loading');
+
+      await act(async () => {
+        __playerFor(OTHER_VIDEO_URI).emit('statusChange', { status: 'readyToPlay' });
+      });
+      await findByTestId('video-view');
+    });
+
+    it('does not leave the previous video\'s completion panel over the new one, and still shows its first-load spinner', async () => {
+      const { rerender, findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoPlayerScreen videoUri={VIDEO_URI} />
+        </LanguageProvider>
+      );
+
+      await emitReady();
+      await act(async () => {
+        __mockPlayer.emit('playToEnd');
+      });
+      await findByTestId('video-finished');
+
+      await act(async () => {
+        rerender(
+          <LanguageProvider initialLanguage="en">
+            <VideoPlayerScreen videoUri={OTHER_VIDEO_URI} />
+          </LanguageProvider>
+        );
+      });
+
+      expect(queryByTestId('video-finished')).toBeNull();
+      // The "already loaded once" latch belongs to the OLD source — the new
+      // one has loaded nothing yet, so its first-load spinner must appear.
+      await findByTestId('video-player-loading');
     });
   });
 

@@ -93,6 +93,25 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   }, [error, finished]);
 
   useEffect(() => {
+    // A NEW player object means a genuinely different source: `useVideoPlayer`
+    // keys its player on the source uri (see expo-video's
+    // useReleasingSharedObject deps), so it builds a fresh one — and releases
+    // the old — whenever `videoUri` changes. Every piece of per-source UI
+    // state here has to start over with it, because none of it belongs to the
+    // new video: a leftover `error` would show the "could not be played"
+    // screen over a perfectly good file, a leftover `finished` would show the
+    // previous video's completion panel on top of one that just started, and
+    // a leftover "already loaded once" latch would suppress the first-load
+    // spinner. Narrow but reachable: two quick taps on two DIFFERENT gallery
+    // tiles both dispatch `navigate('video-detail', ...)`, and if the second
+    // lands after this screen has mounted it updates the route params rather
+    // than pushing a second copy (see RootNavigator) — i.e. a live videoUri
+    // change on a mounted player screen.
+    setError(false);
+    setFinished(false);
+    hasLoadedRef.current = false;
+    setLoading(true);
+
     // The player is created (and told to play) synchronously above, before
     // this effect ever runs — its status can already have settled to
     // 'readyToPlay' or even 'error' by the time this subscribes (e.g. a
