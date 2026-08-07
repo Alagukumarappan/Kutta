@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 7 / 40**
+**Iteration count: 8 / 40**
 
 ---
 
@@ -556,3 +556,93 @@ Three genuine bugs found and fixed; 49 suites / 716 tests green and
   impossible (the Save button is disabled while migrating AND guarded by the
   in-flight ref), and an interrupted run leaves the old content fully intact
   since the delete never happens without a passing verification.
+
+---
+
+## Iteration 8 — the shared design system: CelebrationOverlay, Home, and a whole-tree back-button audit
+
+Two genuine bugs found and fixed (one of them the item iteration 3 logged and
+deliberately left); 49 suites / 723 tests green and `npx tsc --noEmit` clean.
+
+1. **Android back did nothing on every activity's completion panel — and on
+   Video it was a genuine dead end.** The shared `CelebrationOverlay`'s
+   `Modal` had no `onRequestClose`. RN's Modal always registers a back-press
+   callback natively and dispatches it to JS, so without the prop the press
+   is captured by the modal's own window and silently dropped — the same
+   mechanism iteration 6 fixed on Quiz's separate feedback modal. Every
+   activity screen is `headerShown: false` (see RootNavigator), so back is
+   the child's ONLY way out. Puzzle and Tic-Tac-Toe at least offered a
+   visible exit button, so this was "inconsistent"; **Video was not**. Its
+   panel's only action is "Watch Again", and `VideoPlayerScreen` has no
+   `onMenu`/`onBack` prop at all — so a finished video trapped the child:
+   watch again, finish, panel returns, forever, with the OS home button the
+   only escape. That is the case iteration 3's "nobody is trapped" note
+   missed, because Video adopted the overlay afterwards. Back now routes to
+   each panel's own non-destructive exit — Puzzle to `onNext` (the gallery;
+   deliberately NOT Retry, which would reshuffle the puzzle the child just
+   solved), Tic-Tac-Toe to `onMenu` (exactly where "Change setup" goes), and
+   Video to a plain dismiss so the panel closes and a second back leaves the
+   player normally, matching the convention iteration 6 set. The prop is
+   REQUIRED rather than optional, so a future host has to make that decision
+   deliberately instead of inheriting a broken back button by omission —
+   enforced by tsc, not by a comment.
+2. **Two fingers could fire two DIFFERENT exits from one completion panel.**
+   Adding back as a third exit made this obvious, but it predates it: each
+   host's double-fire guards are per-BUTTON (Puzzle's `retryFiredRef` vs
+   `nextFiredRef`, Tic-Tac-Toe's `retryFiredRef` vs `menuFiredRef`), so
+   nothing stopped both from running. RN's responder system gives each
+   concurrent touch its own view and delivers the queued events in ONE JS
+   batch, so a 2-8 year old with a finger on "Play Again" and another on
+   "Change setup" ran both against the same pre-update render: the board
+   reset AND the screen popped back to setup, i.e. fresh state written into
+   a screen already on its way out. (Iteration 3 checked those two refs and
+   found them individually sound — which they are; the gap is that there are
+   two of them.) One shared latch now lives in `CelebrationOverlay` itself,
+   covering every action AND `onRequestClose`, so a presentation fires
+   exactly one exit; it re-arms during RENDER whenever the panel is hidden
+   (not in an effect, which would land a frame too late). Every host hides
+   the panel in response to its actions, so it can't strand a live panel
+   with dead buttons — covered by its own regression test. Same batched-tap
+   class as iterations 3, 4, 5, 6 and 7, this time at the design-system
+   layer rather than inside one activity.
+
+**Global back-button audit.** Every `<Modal` in `src/` was checked: the six
+are `CelebrationOverlay` (fixed above), `QuestionRenderer`'s feedback modal
+(iteration 6), `PuzzleGallery`'s difficulty dropdown, `ProfilePicturePicker`,
+`LanguageSelector` and `AgePicker`. All six now wire `onRequestClose`
+sensibly; there are no deliberate exceptions left and no other Modal-like
+surface (no `Portal`/`Dialog`, no `BackHandler` usage anywhere).
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **HomeScreen's navigation guards.** `navLockRef` is keyed per card plus a
+  distinct `'settings-icon'` key, checked-and-set synchronously before
+  `onNavigate`, re-armed by a timer that is itself tracked and cleared on
+  unmount — so no stray timer outlives the instance that scheduled it.
+- **HomeScreen's scroll-linked focus animation.** There is no "focused card"
+  STATE at all — the scale/opacity are pure `scrollX.interpolate()` outputs
+  on the native driver, so nothing can disagree with which card a tap hits:
+  each card's `onPress` closes over its own `CardSpec`, never over an index
+  derived from the scroll position. The interpolation peaks exactly at the
+  `snapToInterval` snap points (both derive from the same
+  `CARD_WIDTH + CARD_GAP` step), and the transform is applied to a wrapper
+  whose hit box RN maps touches through correctly, so a tap during a fling
+  navigates to the card actually under the finger.
+- **Dropdown/picker races.** Two option rows tapped in one batch on
+  `AgePicker`/`LanguageSelector`/the puzzle difficulty dropdown run both
+  `onChange`es, but each is a plain staged `setState` and the last one wins,
+  so the value shown always matches the option the parent touched last —
+  no corruption and nothing to reconcile. `ProfilePicturePicker` already
+  guards selection (`selectingRef`) and "Browse anywhere" (`browsingRef`,
+  which also refuses to open while a selection is in flight), and
+  `AddFilesButton`'s `inFlightRef` still blocks a second native picker.
+- **Gallery tile double-taps.** Not the same risk as Home's cards: the
+  galleries navigate via `navigation.navigate` (not `push`) to a detail
+  route, so a repeat dispatch for a route already on top updates its params
+  rather than stacking a second copy of the screen.
+- **The rest of the shared design system.** `AnimatedPressable`/`RaisedCard`
+  keep the outer-Pressable/inner-Animated.View split, so a tilt transform
+  can never distort a hit box; `useTiltPress` stops its in-flight spring on
+  unmount and resets defensively when a control becomes disabled;
+  `GradientScreenBackground`'s decorative blobs are all `pointerEvents="none"`
+  so they can't intercept a tap.
