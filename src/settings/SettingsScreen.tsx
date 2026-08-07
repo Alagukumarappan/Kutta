@@ -16,17 +16,39 @@ import { AgePicker } from '../components/AgePicker';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { ProfilePicturePicker } from './ProfilePicturePicker';
 import type { Profile } from '../types/profile';
-import { colors, radii, spacing, elevation, typography, motion, parentPaperTheme } from '../design-system';
+import {
+  colors,
+  radii,
+  spacing,
+  elevation,
+  typography,
+  motion,
+  parentPaperTheme,
+  GradientScreenBackground,
+} from '../design-system';
 
-// This screen deliberately renders in Kutta's CALMER "parent" register (see
-// `colors.parent`/`parentPaperTheme` in `src/design-system/`) rather than the
-// playful bubblegum/violet/jade child-facing palette — a parent scanning
-// this screen quickly to fix a name typo or swap the content folder
-// shouldn't be fighting toy colors or bouncy tilt animations to do it. A
-// local <PaperProvider> wraps just this screen's subtree (per
-// paperTheme.ts's own guidance) so it never needs App.tsx's top-level
-// PaperProvider to change, and every other screen keeps the playful theme
-// untouched.
+// This screen keeps Kutta's CALMER "parent" register for its cards, inputs,
+// and controls (see `colors.parent`/`parentPaperTheme` in
+// `src/design-system/`) rather than the playful bubblegum/violet/jade
+// child-facing palette — a parent scanning this screen quickly to fix a name
+// typo or swap the content folder shouldn't be fighting toy colors or bouncy
+// tilt animations to do it. A local <PaperProvider> wraps just this screen's
+// subtree (per paperTheme.ts's own guidance) so it never needs App.tsx's
+// top-level PaperProvider to change, and every other screen keeps the
+// playful theme untouched.
+//
+// The one thing that DID change (full-consistency re-theme): the flat
+// `colors.parent.background` root fill is now the same shared
+// `GradientScreenBackground` (sky/skyDark) every other screen uses, per an
+// explicit ask to make the background consistent everywhere — Settings was
+// previously the one deliberate exception. Every card below is still an
+// OPAQUE `colors.parent.surface` (white) box, so this swap doesn't touch any
+// text/input contrast inside them; only two things sit directly on the new
+// gradient rather than inside a card — the title (large, bold, still clears
+// 3:1) and the Reset button, which needed its background changed from
+// `'transparent'` to `colors.berrySoft` (see resetButton below) since its
+// berry border/text were designed against a flat near-white backdrop and
+// nearly vanish directly on the saturated sky gradient.
 //
 // Only the PRESENTATION changed in this redesign pass: every handler below
 // (staged-not-eager-save, migration confirm/progress/error, picture
@@ -374,7 +396,7 @@ export function SettingsScreen({
 
   if (!profile) {
     return (
-      <View testID="settings-loading" style={[styles.scrollView, styles.screen, insetStyle]} />
+      <GradientScreenBackground testID="settings-loading" style={insetStyle} />
     );
   }
 
@@ -382,7 +404,7 @@ export function SettingsScreen({
 
   return (
     <PaperProvider theme={parentPaperTheme}>
-      <>
+      <GradientScreenBackground>
         <ScrollView
           testID="settings-loaded"
           style={styles.scrollView}
@@ -567,7 +589,7 @@ export function SettingsScreen({
             onClose={() => setPickerVisible(false)}
           />
         )}
-      </>
+      </GradientScreenBackground>
     </PaperProvider>
   );
 }
@@ -575,7 +597,9 @@ export function SettingsScreen({
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: colors.parent.background,
+    // Background now comes from the shared GradientScreenBackground this
+    // screen renders into (see the component above) rather than a flat fill
+    // here.
   },
   screen: {
     flexGrow: 1,
@@ -803,7 +827,14 @@ const styles = StyleSheet.create({
   // button — it sits below Save and must never visually compete with it as
   // the screen's primary action, while still reading unmistakably as
   // destructive via the same berry error hue used by removePictureButton
-  // above.
+  // above. Unlike removePictureButton, this one sits directly on the
+  // screen's root background rather than inside a white card — now that
+  // root is the saturated sky gradient (not the old flat near-white
+  // `colors.parent.background`), a literal `'transparent'` fill let the
+  // berry border/text blend almost invisibly into it (as low as ~1:1-1.4:1
+  // contrast). `colors.berrySoft` gives it the same light, opaque backing
+  // removePictureButton already uses, so the berry border/text read exactly
+  // as before regardless of what's behind it.
   resetButton: {
     minHeight: 44,
     justifyContent: 'center',
@@ -813,7 +844,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1.5,
     borderColor: colors.berry,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.berrySoft,
   },
   resetButtonDisabled: {
     opacity: 0.5,
