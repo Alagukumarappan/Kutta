@@ -409,6 +409,10 @@ export function SettingsScreen({
           testID="settings-loaded"
           style={styles.scrollView}
           contentContainerStyle={[styles.screen, insetStyle]}
+          /* Without this, the first tap on "Save changes" while the name
+             keyboard is still up only dismisses the keyboard — the parent
+             has to tap Save twice, and the first tap reads as ignored. */
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.title}>{t('settingsTitle')}</Text>

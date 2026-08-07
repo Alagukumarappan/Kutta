@@ -139,6 +139,11 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           paddingBottom: spacing.sm + insets.bottom,
         },
       ]}
+      /* Without this, the first tap on Save (or on the age/language/folder
+         controls) while the name keyboard is still up is swallowed purely to
+         dismiss the keyboard, so a parent has to tap twice and the first tap
+         looks like the app ignored them. */
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.brandBadge}>🐾</Text>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -96,17 +96,35 @@ export function TicTacToeSetupScreen({
   }
 
   return (
-    <GradientScreenBackground
-      style={[
-        styles.screen,
-        {
-          paddingTop: spacing.md + insets.top,
-          paddingBottom: spacing.md + insets.bottom,
-          paddingLeft: spacing.md + insets.left,
-          paddingRight: spacing.md + insets.right,
-        },
-      ]}
-    >
+    <GradientScreenBackground>
+      {/* A ScrollView purely as a keyboard safety net, not because this
+          screen's content is long: picking "a friend" reveals a text field,
+          and this app is locked to LANDSCAPE, where the on-screen keyboard
+          eats well over half the window height. The activity is resized to
+          fit (windowSoftInputMode=adjustResize), so with the previous plain
+          centered View the Start button — and often the name field itself —
+          were simply clipped off with no gesture able to reach them: a child
+          typing their friend's name could not start the game without first
+          dismissing the keyboard, with nothing on screen saying so.
+          flexGrow:1 + justifyContent:'center' keeps the exact centered
+          layout whenever there IS room, so nothing changes with the keyboard
+          closed. keyboardShouldPersistTaps="handled" means the first tap on
+          Start counts as the tap, instead of being swallowed just to dismiss
+          the keyboard. */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.screen,
+          {
+            paddingTop: spacing.md + insets.top,
+            paddingBottom: spacing.md + insets.bottom,
+            paddingLeft: spacing.md + insets.left,
+            paddingRight: spacing.md + insets.right,
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <Text style={styles.brandEmoji}>⭕❌</Text>
       <Text style={styles.title}>{t('tictactoeSetupTitle')}</Text>
 
@@ -229,23 +247,26 @@ export function TicTacToeSetupScreen({
           style={styles.startButton}
         />
       </View>
+      </ScrollView>
     </GradientScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  scrollView: {
     flex: 1,
+  },
+  screen: {
+    // flexGrow (not flex) so this container still centers its content in the
+    // full viewport when everything fits — the normal, keyboard-closed case —
+    // while being free to grow past it and genuinely scroll when the keyboard
+    // shrinks the window. Every element below is still sized to fit even a
+    // short landscape-locked phone screen without scrolling (an earlier,
+    // larger scale — h1 title, 120dp option cards, a 64dp Start button —
+    // pushed the difficulty row and Start off-screen: a real, reported bug),
+    // so the scroll is a safety net, never the expected interaction.
+    flexGrow: 1,
     alignItems: 'center',
-    // Deliberately NOT a ScrollView: this screen's total content (title +
-    // both option rows + Start) is small and fixed (never grows with user
-    // data, unlike a gallery), so once every element below is sized to fit
-    // even a short landscape-locked phone screen, scrolling would only add
-    // an extra gesture for no benefit. See the compacted sizes below —
-    // previously this screen used a much larger scale (h1 title, 120dp
-    // option cards, a full-size 64dp Start button) that could push the
-    // difficulty row and Start button off-screen with no way to reach them
-    // on a shorter viewport (a real, reported bug, not hypothetical).
     justifyContent: 'center',
   },
   brandEmoji: {
