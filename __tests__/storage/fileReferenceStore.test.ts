@@ -16,6 +16,7 @@ jest.mock('expo-file-system/legacy', () => ({
   getInfoAsync: jest.fn(),
   makeDirectoryAsync: jest.fn(),
   copyAsync: jest.fn(),
+  deleteAsync: jest.fn(),
 }));
 
 describe('fileReferenceStore', () => {
@@ -271,8 +272,33 @@ describe('fileReferenceStore', () => {
       expect(await getFileReferences('video')).toEqual([]);
     });
 
+    // Dropping the references alone would leave every picture the previous
+    // child's parent added still sitting in this app's own storage — real
+    // photos of a real child, kept indefinitely, after a parent explicitly
+    // asked for everything to be reset.
+    it('also deletes the copied files themselves, not just the references to them', async () => {
+      (FileSystem.deleteAsync as jest.Mock).mockResolvedValue(undefined);
+
+      await clearAllFileReferences();
+
+      expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///data/app/kutta-added/', {
+        idempotent: true,
+      });
+    });
+
     it('does not throw when there was nothing to clear', async () => {
+      (FileSystem.deleteAsync as jest.Mock).mockResolvedValue(undefined);
       await expect(clearAllFileReferences()).resolves.toBeUndefined();
+    });
+
+    // The reset has already cleared everything the app can reach; a failed
+    // file delete must not leave the parent stuck on a half-finished reset.
+    it('completes the reset even if the files cannot be deleted', async () => {
+      (FileSystem.deleteAsync as jest.Mock).mockRejectedValue(new Error('read-only'));
+      await addFileReferences('coloring', ['file:///data/app/kutta-added/1-0-a.png']);
+
+      await expect(clearAllFileReferences()).resolves.toBeUndefined();
+      expect(await getFileReferences('coloring')).toEqual([]);
     });
   });
 });

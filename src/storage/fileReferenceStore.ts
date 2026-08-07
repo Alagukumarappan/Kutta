@@ -181,4 +181,20 @@ export async function pruneMissingFileReferences(type: FileReferenceContentType)
 // everything" not actually reset everything.
 export async function clearAllFileReferences(): Promise<void> {
   await Promise.all(ALL_CONTENT_TYPES.map((type) => AsyncStorage.removeItem(keyFor(type))));
+
+  // Dropping the references alone would leave every picture the previous
+  // child's parent added still sitting in this app's own storage — real
+  // photos of a real child, kept indefinitely (unlike the cache these used
+  // to live in, nothing ever reclaims documentDirectory) after a parent
+  // explicitly asked for everything to be reset. Best-effort: a failure
+  // here must not stop the reset, which has already cleared everything the
+  // app can actually reach.
+  const dir = addedFilesDir();
+  if (dir) {
+    try {
+      await FileSystem.deleteAsync(dir, { idempotent: true });
+    } catch {
+      // ignored — see above
+    }
+  }
 }

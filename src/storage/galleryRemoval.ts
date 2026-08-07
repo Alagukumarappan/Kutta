@@ -37,7 +37,11 @@ export async function removeGalleryItems(
         // still living in the parent's own photo library, say — is left
         // strictly alone, same as before.
         if (isAppOwnedCopy(uri)) {
-          await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+          try {
+            await FileSystem.deleteAsync(uri, { idempotent: true });
+          } catch {
+            // ignored — see above
+          }
         }
       } else {
         await FileSystem.StorageAccessFramework.deleteAsync(uri, { idempotent: true });
