@@ -35,6 +35,7 @@ export function CelebrationOverlay({
   title,
   message,
   actions = [],
+  onRequestClose,
   testID = 'celebration-overlay',
 }: {
   visible: boolean;
@@ -47,6 +48,19 @@ export function CelebrationOverlay({
   title: string;
   message?: string;
   actions?: CelebrationAction[];
+  // Android's hardware/gesture back while this panel is up. REQUIRED (not
+  // optional) on purpose: RN's Modal always registers a back-press callback
+  // natively and dispatches the event to JS, so a Modal WITHOUT this prop
+  // captures the press in its own window and silently drops it. Every
+  // activity screen is headerShown:false (see RootNavigator), so back is the
+  // child's only way out — and VideoPlayerScreen's completion panel offers
+  // no exit action at all, which made a finished video a genuine dead end.
+  // Making the prop required means a future host has to make that decision
+  // deliberately (passing an explicit no-op) instead of inheriting a broken
+  // back button by omission. Route it to whatever the NON-DESTRUCTIVE
+  // "leave this panel" action is — the same convention QuestionRenderer's
+  // feedback modal already follows.
+  onRequestClose: () => void;
   testID?: string;
 }) {
   const reducedMotion = useReducedMotion();
@@ -123,13 +137,48 @@ export function CelebrationOverlay({
     AccessibilityInfo.announceForAccessibility(message ? `${title}. ${message}` : title);
   }, [visible, title, message]);
 
+  // One presentation of this panel may only ever fire ONE of its exits.
+  //
+  // The per-screen guards each host already has are per-BUTTON (Puzzle's
+  // retryFiredRef vs nextFiredRef, Tic-Tac-Toe's retryFiredRef vs
+  // menuFiredRef), so they stop a double-tap on the same button but not two
+  // different exits firing together. React Native's responder system hands
+  // each concurrent touch to a different view and delivers the queued events
+  // to JS in one batch, so a 2-8 year old putting two fingers down — one on
+  // "Play Again", one on "Change setup" — really can run both handlers
+  // against the same pre-update render: the board resets AND the screen pops
+  // back to setup, i.e. state written into a screen that is on its way out.
+  // Adding Android back as a third exit (below) would have widened exactly
+  // the same hole, so the latch lives here, shared by every action and by
+  // onRequestClose, instead of being re-derived per host.
+  //
+  // Re-armed during RENDER whenever the panel is not showing (not in an
+  // effect, which would run a frame too late to be trusted), so the next
+  // time it pops up its buttons are live again. Every host hides the panel
+  // in response to its actions, so this cannot leave a still-visible panel
+  // permanently dead.
+  const actionLatchRef = React.useRef(false);
+  if (!visible) actionLatchRef.current = false;
+
+  function fireExit(run: () => void) {
+    if (actionLatchRef.current) return;
+    actionLatchRef.current = true;
+    run();
+  }
+
   if (!visible) return null;
 
   const washTint = tone === 'success' ? colors.jade : colors.violet;
   const washShade = tone === 'success' ? colors.jadeDark : colors.violetDark;
 
   return (
-    <Modal visible transparent animationType="fade" testID={testID}>
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      testID={testID}
+      onRequestClose={() => fireExit(onRequestClose)}
+    >
       <View style={styles.backdrop}>
         <Animated.View
           testID="celebration-overlay-card"
@@ -168,7 +217,7 @@ export function CelebrationOverlay({
                       key={action.label}
                       testID={action.testID}
                       label={action.label}
-                      onPress={action.onPress}
+                      onPress={(event) => fireExit(() => action.onPress(event))}
                       size="compact"
                     />
                   ) : (
@@ -176,7 +225,7 @@ export function CelebrationOverlay({
                       key={action.label}
                       testID={action.testID}
                       label={action.label}
-                      onPress={action.onPress}
+                      onPress={(event) => fireExit(() => action.onPress(event))}
                       size="compact"
                     />
                   )

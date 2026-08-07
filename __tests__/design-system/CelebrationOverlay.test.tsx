@@ -5,13 +5,13 @@ import { CelebrationOverlay } from '../../src/design-system/CelebrationOverlay';
 
 describe('CelebrationOverlay', () => {
   it('renders nothing when not visible', async () => {
-    const { queryByTestId } = await render(<CelebrationOverlay visible={false} title="Nice!" />);
+    const { queryByTestId } = await render(<CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Nice!" />);
     expect(queryByTestId('celebration-overlay')).toBeNull();
   });
 
   it('shows the title, message, and celebration bubble when visible with tone="success"', async () => {
     const { getByText, getByTestId } = await render(
-      <CelebrationOverlay visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      <CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
     );
     expect(getByText('Great job!')).toBeTruthy();
     expect(getByText('You finished the puzzle')).toBeTruthy();
@@ -21,7 +21,7 @@ describe('CelebrationOverlay', () => {
 
   it('does not render the celebration bubble for tone="neutral"', async () => {
     const { queryByTestId } = await render(
-      <CelebrationOverlay visible title="No pictures yet" emoji="🖼️" tone="neutral" />
+      <CelebrationOverlay onRequestClose={jest.fn()} visible title="No pictures yet" emoji="🖼️" tone="neutral" />
     );
     expect(queryByTestId('celebration-bubble')).toBeNull();
   });
@@ -35,7 +35,7 @@ describe('CelebrationOverlay', () => {
   // dialog appeared at all.
   it('marks the card as a modal and gives the title an announcing role', async () => {
     const { getByText, getByTestId } = await render(
-      <CelebrationOverlay visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      <CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
     );
 
     const titleNode = getByText('Great job!');
@@ -55,7 +55,7 @@ describe('CelebrationOverlay', () => {
     const announceSpy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
 
     const { rerender } = await render(
-      <CelebrationOverlay visible={false} title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      <CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
     );
     // Other tests in this file mount visible celebration overlays whose
     // effects can still be flushing async work when this test starts, so
@@ -65,7 +65,7 @@ describe('CelebrationOverlay', () => {
 
     await act(async () => {
       rerender(
-        <CelebrationOverlay visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+        <CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
       );
     });
 
@@ -78,6 +78,7 @@ describe('CelebrationOverlay', () => {
     const onSecondary = jest.fn();
     const { getByText } = await render(
       <CelebrationOverlay
+        onRequestClose={jest.fn()}
         visible
         title="All done"
         actions={[
@@ -89,14 +90,134 @@ describe('CelebrationOverlay', () => {
 
     await fireEvent.press(getByText('Play Again'));
     expect(onPrimary).toHaveBeenCalledTimes(1);
+  });
 
+  it('renders and fires the secondary action button', async () => {
+    const onPrimary = jest.fn();
+    const onSecondary = jest.fn();
+    const { getByText } = await render(
+      <CelebrationOverlay
+        onRequestClose={jest.fn()}
+        visible
+        title="All done"
+        actions={[
+          { label: 'Play Again', onPress: onPrimary },
+          { label: 'Home', onPress: onSecondary, variant: 'secondary' },
+        ]}
+      />
+    );
+
+    // Separate render from the primary-action test above on purpose: one
+    // presentation of this panel now only ever fires ONE exit (see the
+    // batched-two-finger test below), so pressing both buttons on the same
+    // still-visible panel is exactly the case that is deliberately blocked.
     await fireEvent.press(getByText('Home'));
     expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(onPrimary).not.toHaveBeenCalled();
+  });
+
+  // Regression test: the per-screen double-fire guards each host has are
+  // per-BUTTON (Puzzle's retryFiredRef vs nextFiredRef, Tic-Tac-Toe's
+  // retryFiredRef vs menuFiredRef), so nothing stopped two DIFFERENT exits
+  // firing together. React Native gives each concurrent touch its own view
+  // and delivers the queued events in one JS batch, so a child with two
+  // fingers down — one on "Play Again", one on "Change setup" — ran both:
+  // the board reset AND the screen popped away, writing state into a screen
+  // already leaving. Same batched-tap class as iterations 3-7.
+  it('fires only the first exit when two different actions land in one touch batch', async () => {
+    const onPrimary = jest.fn();
+    const onSecondary = jest.fn();
+    const { getByText } = await render(
+      <CelebrationOverlay
+        onRequestClose={jest.fn()}
+        visible
+        title="All done"
+        actions={[
+          { label: 'Play Again', onPress: onPrimary },
+          { label: 'Home', onPress: onSecondary, variant: 'secondary' },
+        ]}
+      />
+    );
+
+    // React logs "overlapping act() calls" for the deliberately-nested
+    // presses below; that is the point — it is what a real touch batch looks
+    // like. Same shape as TicTacToeScreen's own batched-tap regression test.
+    await act(async () => {
+      fireEvent.press(getByText('Play Again'));
+      fireEvent.press(getByText('Home'));
+    });
+
+    expect(onPrimary).toHaveBeenCalledTimes(1);
+    expect(onSecondary).not.toHaveBeenCalled();
+  });
+
+  // Regression test for iteration 8: this Modal had no onRequestClose at
+  // all, so Android's hardware/gesture back was captured by the modal's own
+  // window and silently dropped on EVERY activity's completion panel
+  // (Puzzle, Tic-Tac-Toe, Video) — and every activity screen is
+  // headerShown:false, so back is the child's only way out.
+  it('routes the Android back button to onRequestClose, once', async () => {
+    const onRequestClose = jest.fn();
+    const onPrimary = jest.fn();
+    const { getByTestId, getByText } = await render(
+      <CelebrationOverlay
+        onRequestClose={onRequestClose}
+        visible
+        title="All done"
+        testID="celebration-overlay"
+        actions={[{ label: 'Play Again', onPress: onPrimary }]}
+      />
+    );
+
+    const modal = getByTestId('celebration-overlay');
+    expect(modal.props.onRequestClose).toBeDefined();
+    await act(async () => {
+      modal.props.onRequestClose();
+    });
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+
+    // Back shares the same one-exit-per-presentation latch as the buttons,
+    // so a back press batched together with a tap on the visible action
+    // cannot double-fire two different exits.
+    await act(async () => {
+      modal.props.onRequestClose();
+      fireEvent.press(getByText('Play Again'));
+    });
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+    expect(onPrimary).not.toHaveBeenCalled();
+  });
+
+  it('re-arms its actions the next time it becomes visible', async () => {
+    const onPrimary = jest.fn();
+    const overlay = (visible: boolean) => (
+      <CelebrationOverlay
+        onRequestClose={jest.fn()}
+        visible={visible}
+        title="All done"
+        actions={[{ label: 'Play Again', onPress: onPrimary }]}
+      />
+    );
+
+    const { getByText, rerender } = await render(overlay(true));
+    await fireEvent.press(getByText('Play Again'));
+    expect(onPrimary).toHaveBeenCalledTimes(1);
+
+    // Every host hides this panel in response to an action, so the latch has
+    // to release on the way down — otherwise a second puzzle/game would show
+    // a completion panel with dead buttons.
+    await act(async () => {
+      rerender(overlay(false));
+    });
+    await act(async () => {
+      rerender(overlay(true));
+    });
+    await fireEvent.press(getByText('Play Again'));
+    expect(onPrimary).toHaveBeenCalledTimes(2);
   });
 
   it('stops its animations and unmounts cleanly', async () => {
     jest.useFakeTimers();
-    const { unmount } = await render(<CelebrationOverlay visible title="Great job!" emoji="🎉" tone="success" />);
+    const { unmount } = await render(<CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
 
     await act(async () => {
       jest.advanceTimersByTime(300);
@@ -128,10 +249,10 @@ describe('CelebrationOverlay', () => {
       const timingSpy = jest.spyOn(Animated, 'timing');
 
       const { rerender } = await render(
-        <CelebrationOverlay visible={false} title="Great job!" emoji="🎉" tone="success" />
+        <CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Great job!" emoji="🎉" tone="success" />
       );
       await act(async () => {
-        rerender(<CelebrationOverlay visible title="Great job!" emoji="🎉" tone="success" />);
+        rerender(<CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
       });
 
       expect(springSpy).not.toHaveBeenCalled();
@@ -143,10 +264,10 @@ describe('CelebrationOverlay', () => {
       const springSpy = jest.spyOn(Animated, 'spring');
 
       const { rerender } = await render(
-        <CelebrationOverlay visible={false} title="Great job!" emoji="🎉" tone="success" />
+        <CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Great job!" emoji="🎉" tone="success" />
       );
       await act(async () => {
-        rerender(<CelebrationOverlay visible title="Great job!" emoji="🎉" tone="success" />);
+        rerender(<CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
       });
 
       expect(springSpy).toHaveBeenCalled();

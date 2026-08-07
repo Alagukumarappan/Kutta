@@ -120,6 +120,13 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     player.play();
   }, [player, videoUri]);
 
+  // Dismisses the completion panel without touching playback — see the
+  // onRequestClose comment on <CelebrationOverlay> below for why back needs
+  // its own non-destructive exit on this screen specifically.
+  const handleDismissFinished = useCallback(() => {
+    setFinished(false);
+  }, []);
+
   if (error) {
     return (
       <GradientScreenBackground testID="video-player-error" style={[styles.centered, insetStyle(insets)]}>
@@ -200,6 +207,17 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
         emoji="🎉"
         title={t('videoFinished')}
         testID="video-finished"
+        // The worst instance of the missing-back-button gap this overlay had:
+        // unlike Puzzle and Tic-Tac-Toe, this panel offers NO exit action at
+        // all (just "Watch Again"), and this screen is headerShown:false with
+        // no onMenu/onBack prop — so back really was a child's only way off
+        // it, and the Modal was swallowing it. Every finished video therefore
+        // dead-ended: watch again, finish, panel returns, forever. Back now
+        // simply dismisses the panel (the video stays on its last frame) and
+        // a second back leaves the player normally — the same "close the
+        // overlay, don't do anything destructive, second press exits"
+        // convention QuestionRenderer's feedback modal follows.
+        onRequestClose={handleDismissFinished}
         actions={[{ label: t('videoWatchAgain'), onPress: handleRetry, testID: 'video-watch-again' }]}
       />
     </View>

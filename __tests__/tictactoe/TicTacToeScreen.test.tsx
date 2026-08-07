@@ -141,6 +141,32 @@ describe('TicTacToeScreen', () => {
       expect(onMenu).toHaveBeenCalledTimes(1);
     });
 
+    // Regression test for iteration 8: the shared CelebrationOverlay's Modal
+    // had no onRequestClose, so Android's back press was captured by the
+    // modal's own window and silently dropped while the game-over panel was
+    // up — on a headerShown:false screen where back is the child's only way
+    // out. Back now goes exactly where the visible "Change setup" button
+    // goes, and shares its one-exit-per-presentation latch so it cannot
+    // double-fire with a tap on "Play Again".
+    it('routes the Android back button on the game-over panel to onMenu', async () => {
+      const onMenu = jest.fn();
+      const { getByTestId, findByTestId } = await renderGame({ mode: 'friend', onMenu });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+      await fireEvent.press(getByTestId('tictactoe-cell-3'));
+      await fireEvent.press(getByTestId('tictactoe-cell-1'));
+      await fireEvent.press(getByTestId('tictactoe-cell-4'));
+      await fireEvent.press(getByTestId('tictactoe-cell-2'));
+
+      const overlay = await findByTestId('tictactoe-complete');
+      expect(overlay.props.onRequestClose).toBeDefined();
+      await act(async () => {
+        overlay.props.onRequestClose();
+      });
+
+      expect(onMenu).toHaveBeenCalledTimes(1);
+    });
+
     it('declares a draw when the board fills with no winner', async () => {
       const { getByTestId, findByTestId } = await renderGame({ mode: 'friend' });
 

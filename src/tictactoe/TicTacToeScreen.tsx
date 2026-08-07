@@ -296,6 +296,12 @@ export function TicTacToeScreen({
         title={statusText()}
         message={isHumanLoss ? t('tictactoeTryAgainEncouragement') : undefined}
         testID="tictactoe-complete"
+        // Android back on the game-over panel goes exactly where the visible
+        // "Change setup" button goes (onMenu -> back to the setup screen),
+        // which is also what back would have done on this
+        // headerShown:false screen with no Modal covering it. The game is
+        // already over, so nothing is lost by leaving.
+        onRequestClose={handleMenu}
         actions={[
           { label: t('tictactoePlayAgain'), onPress: handleRetry, testID: 'tictactoe-retry' },
           { label: t('tictactoeChangeSetup'), onPress: handleMenu, variant: 'secondary', testID: 'tictactoe-menu' },

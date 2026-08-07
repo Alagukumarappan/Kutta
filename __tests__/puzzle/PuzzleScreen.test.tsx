@@ -306,6 +306,31 @@ describe('PuzzleScreen', () => {
       expect(onNext).toHaveBeenCalledTimes(1);
     });
 
+    // Regression test for iteration 8: the shared CelebrationOverlay's Modal
+    // had no onRequestClose, so Android's back press was captured by the
+    // modal's own window and silently dropped while the completion panel was
+    // up — on a headerShown:false screen where back is the child's only way
+    // out. Back now goes where "Next" goes (back to the gallery), never to
+    // Retry, which would reshuffle the puzzle the child just solved.
+    it('routes the Android back button on the completion panel to onNext', async () => {
+      const onNext = jest.fn();
+      const utils = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleScreen imageUri={IMAGE_URI} pieceCount={4} onNext={onNext} />
+        </LanguageProvider>
+      );
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      const overlay = utils.getByTestId('puzzle-complete');
+      expect(overlay.props.onRequestClose).toBeDefined();
+      await act(async () => {
+        overlay.props.onRequestClose();
+      });
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
     it('guards Next against a rapid double-press, only calling onNext once', async () => {
       const onNext = jest.fn();
       const utils = await render(

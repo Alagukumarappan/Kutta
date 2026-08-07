@@ -502,6 +502,14 @@ export function PuzzleScreen({
         emoji="🎉"
         title={t('puzzleComplete')}
         testID="puzzle-complete"
+        // Android back while the "you did it!" panel is up. Routed to the
+        // same place "Next" goes (back to the gallery via onNext), which is
+        // exactly what back would have done on this headerShown:false screen
+        // if no Modal were covering it — and it's non-destructive: the
+        // puzzle is already finished, so leaving it can't lose any progress.
+        // Deliberately NOT Retry, which would reshuffle the solved board and
+        // make back read as "undo what I just did".
+        onRequestClose={handleNextPuzzle}
         actions={[
           { label: t('retry'), onPress: handleRetryPuzzle, variant: 'secondary', testID: 'puzzle-retry' },
           { label: t('quizNext'), onPress: handleNextPuzzle, testID: 'puzzle-next' },

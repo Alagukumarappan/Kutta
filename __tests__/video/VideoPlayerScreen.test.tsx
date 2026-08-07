@@ -344,6 +344,38 @@ describe('VideoPlayerScreen', () => {
       expect(__mockPlayer.play).toHaveBeenCalled();
       expect(queryByTestId('video-finished')).toBeNull();
     });
+
+    // Regression test for iteration 8: the shared CelebrationOverlay's Modal
+    // had no onRequestClose, and RN's Modal captures Android's back press in
+    // its own window and drops it. This screen is headerShown:false and its
+    // completion panel offers NO exit action (only "Watch Again"), so a
+    // finished video was a genuine dead end for a child — the only escape
+    // was the OS home button. Back now dismisses the panel; a second back
+    // leaves the player normally, and playback is left untouched (no
+    // accidental replay).
+    it('lets the Android back button dismiss the completion panel without replaying', async () => {
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoPlayerScreen videoUri={VIDEO_URI} />
+        </LanguageProvider>
+      );
+
+      await emitReady();
+      await act(async () => {
+        __mockPlayer.emit('playToEnd');
+      });
+
+      const overlay = await findByTestId('video-finished');
+      expect(overlay.props.onRequestClose).toBeDefined();
+      __mockPlayer.replace.mockClear();
+
+      await act(async () => {
+        overlay.props.onRequestClose();
+      });
+
+      expect(queryByTestId('video-finished')).toBeNull();
+      expect(__mockPlayer.replace).not.toHaveBeenCalled();
+    });
   });
 
   it('does not update state (and does not warn) when a status event arrives after the screen has been unmounted', async () => {
