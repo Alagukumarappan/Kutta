@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet, ScrollView, Image, Animated } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet, ScrollView, Image, Animated } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider, TextInput } from 'react-native-paper';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { getProfile, saveProfile, clearProfile } from '../storage/profileStore';
@@ -426,8 +426,16 @@ export function SettingsScreen({
 
           <View style={styles.row}>
             <View style={[styles.card, styles.halfCard]}>
-              <Text style={styles.label}>{t('onboardingName')}</Text>
+              {/* Unlike OnboardingScreen's equivalent name field (whose
+                  external label heads a row containing an avatar picker
+                  too), this card's label describes ONLY this TextInput —
+                  so it's replaced outright by Paper's own built-in
+                  floating label instead of keeping both, per this
+                  migration's "reduce to one cleaner element" guidance. */}
               <TextInput
+                mode="outlined"
+                dense
+                label={t('onboardingName')}
                 testID="settings-name-input"
                 value={profile.name}
                 onChangeText={(name) => setProfile({ ...profile, name: name.slice(0, CHILD_NAME_MAX_LENGTH) })}
@@ -645,14 +653,6 @@ const styles = StyleSheet.create({
     color: colors.parent.ink,
   },
   textInput: {
-    borderWidth: 1,
-    borderColor: colors.parent.border,
-    borderRadius: radii.md,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: typography.body.fontSize,
-    fontWeight: '600',
-    color: colors.parent.ink,
     backgroundColor: colors.parent.background,
   },
   folderStatus: {
