@@ -1,13 +1,22 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
 import { TicTacToeSetupScreen } from '../../src/tictactoe/TicTacToeSetupScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import { paperTheme } from '../../src/design-system/paperTheme';
 
+// The friend-name field now builds on react-native-paper's own TextInput,
+// which in the real app always renders inside App.tsx's top-level
+// <PaperProvider theme={paperTheme}> — mirrored here (same pattern as
+// __tests__/onboarding/OnboardingScreen.test.tsx) so Paper's theme context
+// is present exactly like production, not just its bare built-in default.
 function renderScreen(onStart: jest.Mock = jest.fn()) {
   return render(
-    <LanguageProvider initialLanguage="en">
-      <TicTacToeSetupScreen onStart={onStart} />
-    </LanguageProvider>
+    <PaperProvider theme={paperTheme}>
+      <LanguageProvider initialLanguage="en">
+        <TicTacToeSetupScreen onStart={onStart} />
+      </LanguageProvider>
+    </PaperProvider>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { Difficulty } from './ticTacToeEngine';
@@ -177,8 +178,20 @@ export function TicTacToeSetupScreen({
         // profile (set during onboarding), so only the friend's name needs
         // asking for here.
         <View style={styles.friendNameRow}>
+          {/* stepLabel is the wizard-step QUESTION ("What's your friend's
+              name?"), matching the "Choose an opponent"/"Choose difficulty"
+              headings above it — not merely this field's label, so it stays
+              as its own Text rather than being folded into Paper's label.
+              The field's own former placeholder ("Friend's name") becomes
+              Paper's built-in floating label instead, so it's still shown
+              but now with the nicer animated affordance once genuinely
+              used as a label rather than disappearing on focus like a
+              plain placeholder would. */}
           <Text style={styles.stepLabel}>{t('tictactoeFriendNamePrompt')}</Text>
           <TextInput
+            mode="outlined"
+            dense
+            label={t('tictactoeFriendNamePlaceholder')}
             testID="tictactoe-friend-name-input"
             value={friendName}
             onChangeText={handleFriendNameChange}
@@ -196,9 +209,10 @@ export function TicTacToeSetupScreen({
             // comment on why maxLength alone isn't a strong enough
             // guarantee) — this prop is just the matching native-level cue.
             maxLength={FRIEND_NAME_MAX_LENGTH}
+            outlineColor={trimmedFriendName.length > 0 ? PALETTE.accentDark : colors.line}
+            activeOutlineColor={PALETTE.accentDark}
             style={[styles.friendNameInput, trimmedFriendName.length > 0 && styles.friendNameInputFilled]}
-            placeholder={t('tictactoeFriendNamePlaceholder')}
-            placeholderTextColor={colors.inkMuted}
+            contentStyle={styles.friendNameInputContent}
             accessibilityLabel={t('tictactoeFriendNamePrompt')}
           />
         </View>
@@ -325,19 +339,13 @@ const styles = StyleSheet.create({
   },
   friendNameInput: {
     width: 200,
-    minHeight: touchTarget.minimum,
-    borderRadius: radii.md,
-    borderWidth: 2,
-    borderColor: colors.line,
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-    fontSize: typography.bodySmall.fontSize,
-    fontWeight: typography.bodySmall.fontWeight,
-    color: colors.ink,
+  },
+  friendNameInputContent: {
     textAlign: 'center',
   },
   friendNameInputFilled: {
-    borderColor: PALETTE.accentDark,
+    backgroundColor: colors.surface,
   },
   startWrapper: {
     marginTop: spacing.md,
