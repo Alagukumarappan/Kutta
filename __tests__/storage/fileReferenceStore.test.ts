@@ -6,11 +6,16 @@ import {
   removeFileReference,
   pruneMissingFileReferences,
   clearAllFileReferences,
+  persistPickedFile,
+  isAppOwnedCopy,
 } from '../../src/storage/fileReferenceStore';
 
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///data/app/',
   getInfoAsync: jest.fn(),
+  makeDirectoryAsync: jest.fn(),
+  copyAsync: jest.fn(),
 }));
 
 describe('fileReferenceStore', () => {
@@ -59,6 +64,70 @@ describe('fileReferenceStore', () => {
         JSON.stringify([{ uri: 'content://tree/good.png', addedAt: 1 }, { oops: true }, null, 'not-an-object'])
       );
       expect(await getFileReferences('coloring')).toEqual([{ uri: 'content://tree/good.png', addedAt: 1 }]);
+    });
+  });
+
+  // Regression tests for a real, silent data-loss bug: the picker hands
+  // images back as a copy in the app's CACHE directory, which Android
+  // reclaims whenever storage runs low (and which "Clear cache" wipes on
+  // demand) — so a coloring page a parent added weeks ago could simply be
+  // gone, with no action on their part and nothing to explain it.
+  describe('persistPickedFile', () => {
+    beforeEach(() => {
+      (FileSystem.makeDirectoryAsync as jest.Mock).mockResolvedValue(undefined);
+      (FileSystem.copyAsync as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('copies the picked file out of the cache into persistent app storage', async () => {
+      const result = await persistPickedFile('file:///data/cache/DocumentPicker/tmp.png', 'dog.png');
+
+      expect(result.startsWith('file:///data/app/kutta-added/')).toBe(true);
+      expect(result.endsWith('-dog.png')).toBe(true);
+      expect(FileSystem.copyAsync).toHaveBeenCalledWith({
+        from: 'file:///data/cache/DocumentPicker/tmp.png',
+        to: result,
+      });
+    });
+
+    it('creates the destination directory (including parents) before copying', async () => {
+      await persistPickedFile('file:///data/cache/tmp.png', 'dog.png');
+      expect(FileSystem.makeDirectoryAsync).toHaveBeenCalledWith('file:///data/app/kutta-added/', {
+        intermediates: true,
+      });
+    });
+
+    it('keeps two files picked in the same batch apart even when they share a name', async () => {
+      const a = await persistPickedFile('file:///data/cache/1.png', 'photo.png', 0);
+      const b = await persistPickedFile('file:///data/cache/2.png', 'photo.png', 1);
+      expect(a).not.toEqual(b);
+    });
+
+    it('sanitises a hostile file name rather than building a path out of it', async () => {
+      const result = await persistPickedFile('file:///data/cache/tmp.png', '../../etc/passwd');
+      expect(result.startsWith('file:///data/app/kutta-added/')).toBe(true);
+      // The whole thing collapses to ONE ordinary path segment: no
+      // separators to escape the directory with, and no leading dot to
+      // start a relative hop with.
+      const fileName = result.split('kutta-added/')[1];
+      expect(fileName).not.toContain('/');
+      expect(fileName.startsWith('.')).toBe(false);
+    });
+
+    it('falls back to the original uri when the copy fails, rather than losing the pick', async () => {
+      (FileSystem.copyAsync as jest.Mock).mockRejectedValue(new Error('no space'));
+      const result = await persistPickedFile('file:///data/cache/tmp.png', 'dog.png');
+      expect(result).toBe('file:///data/cache/tmp.png');
+    });
+  });
+
+  describe('isAppOwnedCopy', () => {
+    it('recognises a file this app copied for itself', () => {
+      expect(isAppOwnedCopy('file:///data/app/kutta-added/123-0-dog.png')).toBe(true);
+    });
+
+    it('does not claim ownership of the parent-owned files it merely references', () => {
+      expect(isAppOwnedCopy('content://com.android.providers.media/document/video%3A42')).toBe(false);
+      expect(isAppOwnedCopy('file:///data/app/other/dog.png')).toBe(false);
     });
   });
 

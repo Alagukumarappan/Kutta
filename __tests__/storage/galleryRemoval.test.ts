@@ -5,16 +5,49 @@ import { addFileReferences, getFileReferences } from '../../src/storage/fileRefe
 
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///data/app/',
+  deleteAsync: jest.fn(),
   StorageAccessFramework: {
     deleteAsync: jest.fn(),
   },
 }));
+
+const APP_OWNED = 'file:///data/app/kutta-added/1700000000000-0-dog.png';
 
 describe('removeGalleryItems', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
     jest.clearAllMocks();
     (FileSystem.StorageAccessFramework.deleteAsync as jest.Mock).mockResolvedValue(undefined);
+    (FileSystem.deleteAsync as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  // A picked IMAGE is copied into the app's own storage when added, so that
+  // copy has no other owner: dropping only the reference used to leak it
+  // forever into app-private storage the OS never reclaims and the parent
+  // can't see or clean up.
+  it('also deletes the bytes when the reference points at a copy this app owns', async () => {
+    await addFileReferences('coloring', [APP_OWNED]);
+
+    const result = await removeGalleryItems('coloring', [APP_OWNED], new Set([APP_OWNED]));
+
+    expect(result).toEqual({ removedCount: 1, failedCount: 0 });
+    expect(await getFileReferences('coloring')).toEqual([]);
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(APP_OWNED, { idempotent: true });
+    // Never routed through SAF — this is a plain app-private file.
+    expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  // The delete is a tidy-up, not the thing the parent asked for: the
+  // reference is already gone, so the removal must still report success.
+  it('still reports success when deleting an app-owned copy fails', async () => {
+    (FileSystem.deleteAsync as jest.Mock).mockRejectedValue(new Error('read-only'));
+    await addFileReferences('coloring', [APP_OWNED]);
+
+    const result = await removeGalleryItems('coloring', [APP_OWNED], new Set([APP_OWNED]));
+
+    expect(result).toEqual({ removedCount: 1, failedCount: 0 });
+    expect(await getFileReferences('coloring')).toEqual([]);
   });
 
   it('removes a referenced uri as a reference only, never touching the real file', async () => {
@@ -25,6 +58,9 @@ describe('removeGalleryItems', () => {
     expect(result).toEqual({ removedCount: 1, failedCount: 0 });
     expect(await getFileReferences('coloring')).toEqual([]);
     expect(FileSystem.StorageAccessFramework.deleteAsync).not.toHaveBeenCalled();
+    // Not app-owned (it still lives wherever the parent picked it from), so
+    // the bytes themselves must be left completely alone.
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
   });
 
   it('deletes a folder-sourced uri as a real file, never touching the reference store', async () => {

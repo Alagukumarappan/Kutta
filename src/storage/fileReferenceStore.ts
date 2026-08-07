@@ -22,6 +22,59 @@ function keyFor(type: FileReferenceContentType): string {
   return `kutta.fileRefs.${type}.v1`;
 }
 
+// Where individually-added files this app copies for itself are kept.
+// DELIBERATELY the document directory, not the cache directory: Android
+// treats everything under getCacheDir() as reclaimable — the OS deletes it
+// whenever internal storage runs low, and both the system "Clear cache"
+// button and any third-party cleaner app wipe it on demand. A picture the
+// parent explicitly added is not a cache entry; leaving the only copy there
+// meant a coloring page added in March could silently be gone in April with
+// nothing to show for it. Files here survive until this app deletes them
+// (see removeGalleryItems) or the app itself is uninstalled.
+const ADDED_FILES_DIRNAME = 'kutta-added/';
+
+// Resolved lazily rather than at module load: `documentDirectory` is a
+// native constant, so reading it at import time would make this module's
+// import order matter (and is undefined under a bare test mock).
+function addedFilesDir(): string | null {
+  const base = FileSystem.documentDirectory;
+  return base ? `${base}${ADDED_FILES_DIRNAME}` : null;
+}
+
+// True for a file this app copied into its own storage (so removing the
+// reference should also delete the bytes — nobody else owns them), as
+// opposed to a uri that merely points at something of the parent's living
+// elsewhere on the device, which must never be deleted.
+export function isAppOwnedCopy(uri: string): boolean {
+  const dir = addedFilesDir();
+  return !!dir && uri.startsWith(dir);
+}
+
+// Strips anything that isn't safe in a file name while keeping the
+// extension, which some readers (Skia's image decoder, expo-video) still
+// sniff. Falls back to a generic name if nothing usable survives.
+function safeFileName(name: string | undefined): string {
+  const cleaned = (name ?? '').replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '');
+  return cleaned.length > 0 ? cleaned.slice(-64) : 'file';
+}
+
+// Copies a freshly-picked file into this app's own persistent storage and
+// returns the new uri. Best-effort by design: if anything about the copy
+// fails the ORIGINAL uri is returned unchanged, so the worst case is
+// exactly the old (cache-backed) behavior rather than a failed "+" tap.
+export async function persistPickedFile(uri: string, name?: string, index = 0): Promise<string> {
+  const dir = addedFilesDir();
+  if (!dir) return uri;
+  try {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    const destination = `${dir}${Date.now()}-${index}-${safeFileName(name)}`;
+    await FileSystem.copyAsync({ from: uri, to: destination });
+    return destination;
+  } catch {
+    return uri;
+  }
+}
+
 function isValidReference(value: unknown): value is FileReference {
   return (
     !!value &&

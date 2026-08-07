@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { AddFilesButton } from '../../src/components/AddFilesButton';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { getFileReferences } from '../../src/storage/fileReferenceStore';
@@ -9,6 +10,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('expo-document-picker');
 jest.mock('@react-native-async-storage/async-storage');
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///data/app/',
+  makeDirectoryAsync: jest.fn().mockResolvedValue(undefined),
+  copyAsync: jest.fn().mockResolvedValue(undefined),
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: true }),
+}));
 
 function renderButton(onAdded = jest.fn()) {
   return render(
@@ -45,7 +52,12 @@ describe('AddFilesButton', () => {
 
     await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
     const refs = await getFileReferences('coloring');
-    expect(refs.map((r) => r.uri)).toEqual(['content://tree/pic1.png', 'content://tree/pic2.png']);
+    // One reference per picked file, in pick order — each pointing at this
+    // app's own durable copy rather than the picker's temporary one (see
+    // "stores IMAGES as a durable app-owned copy" below).
+    expect(refs).toHaveLength(2);
+    expect(refs[0].uri).toContain('pic1.png');
+    expect(refs[1].uri).toContain('pic2.png');
   });
 
   it('calls the picker with multi-select enabled and the given mime type', async () => {
@@ -96,6 +108,49 @@ describe('AddFilesButton', () => {
     expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'video/*', copyToCacheDirectory: false })
     );
+  });
+
+  // Regression test for silent data loss: copyToCacheDirectory leaves the
+  // only copy of a picked image in the app's CACHE directory, which Android
+  // reclaims under storage pressure (and "Clear cache" wipes outright), so
+  // pictures a parent added weeks earlier could simply vanish. The stored
+  // reference must point at durable app storage instead.
+  it('stores IMAGES as a durable app-owned copy, not the evictable cache path', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///data/cache/DocumentPicker/tmp.png', name: 'dog.png', lastModified: 0 }],
+    });
+    const { findByTestId } = await renderButton();
+
+    await fireEvent.press(await findByTestId('add-files'));
+
+    await waitFor(async () => {
+      const refs = await getFileReferences('coloring');
+      expect(refs).toHaveLength(1);
+      expect(refs[0].uri.startsWith('file:///data/app/kutta-added/')).toBe(true);
+    });
+  });
+
+  // Videos are streamed in place and deliberately NOT copied: duplicating a
+  // multi-gigabyte file into app storage just to list it in a gallery would
+  // be a far worse bug than the cache eviction this avoids for images.
+  it('stores VIDEOS by reference, without copying them anywhere', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'content://media/video/42', name: 'party.mp4', lastModified: 0 }],
+    });
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <AddFilesButton testID="add-files" label="+ Add video" contentType="video" mimeType="video/*" onAdded={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(await findByTestId('add-files'));
+
+    await waitFor(async () => {
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://media/video/42']);
+    });
+    expect(FileSystem.copyAsync).not.toHaveBeenCalled();
   });
 
   it('does nothing and does not call onAdded when the picker is cancelled', async () => {

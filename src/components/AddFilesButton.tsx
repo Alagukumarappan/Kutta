@@ -2,7 +2,11 @@ import React, { useRef, useState } from 'react';
 import { Pressable, Text, StyleSheet, Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLanguage } from '../i18n/LanguageContext';
-import { addFileReferences, type FileReferenceContentType } from '../storage/fileReferenceStore';
+import {
+  addFileReferences,
+  persistPickedFile,
+  type FileReferenceContentType,
+} from '../storage/fileReferenceStore';
 import { radii, spacing, shadow } from '../theme/tokens';
 // Colors come from the NEW design-system palette, not `../theme/tokens`'s
 // old one: this button is rendered directly on the shared sky gradient
@@ -54,6 +58,10 @@ export function AddFilesButton({
     inFlightRef.current = true;
     setBusy(true);
     try {
+      // Images are handed to us as a copy in the app's CACHE directory (see
+      // copyToCacheDirectory below), which Android is free to delete at any
+      // time — so for images we take our own durable copy afterwards.
+      const copiesToCache = mimeType.startsWith('image/');
       const result = await DocumentPicker.getDocumentAsync({
         type: mimeType,
         multiple: true,
@@ -73,13 +81,22 @@ export function AddFilesButton({
         // quietly dropping the now-missing reference rather than erroring,
         // so this trades "picture never loads" for the much rarer "picture
         // disappears later," not a new failure mode.
-        copyToCacheDirectory: mimeType.startsWith('image/'),
+        copyToCacheDirectory: copiesToCache,
       });
       if (!result.canceled && result.assets.length > 0) {
-        await addFileReferences(
-          contentType,
-          result.assets.map((asset) => asset.uri)
-        );
+        // Move the cache copy somewhere the OS won't reclaim, so a picture
+        // added today is still there in a month (persistPickedFile falls
+        // back to the original uri if the copy fails, so this can only ever
+        // improve on the previous behavior). Videos are referenced in place
+        // and deliberately NOT copied — they're only ever streamed, and
+        // duplicating a multi-gigabyte file into app storage to add it to a
+        // gallery would be a far worse bug than the one this avoids.
+        const uris = copiesToCache
+          ? await Promise.all(
+              result.assets.map((asset, index) => persistPickedFile(asset.uri, asset.name, index))
+            )
+          : result.assets.map((asset) => asset.uri);
+        await addFileReferences(contentType, uris);
         onAdded();
       }
     } catch {
