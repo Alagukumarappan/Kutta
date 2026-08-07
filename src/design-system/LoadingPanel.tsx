@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from './tokens';
+import { colors, radii, spacing, typography } from './tokens';
 
 // Replaces the bare, totally blank `<View />` every gallery (Coloring,
 // Puzzle, Video) previously rendered while its folder listing loaded — on a
@@ -34,7 +34,19 @@ export function LoadingPanel({
 }) {
   return (
     <View testID={testID} style={styles.container}>
-      <ActivityIndicator size="large" color={color} />
+      {/* The spinner sits inside an opaque white disc rather than straight
+          on whatever is behind the panel. Every screen that renders this on
+          the app's sky gradient tints the spinner with its own activity
+          accent, and those accents are LIGHT: jade lands at ~1.06:1 and
+          marigold at ~1.09:1 against that gradient, i.e. a completely
+          invisible spinner — the exact "blank screen, nothing seems to be
+          happening" moment this panel exists to prevent. Against white,
+          every accent reads clearly, and on the light/white surfaces this
+          panel is also used on (ProfilePicturePicker's modal card) the disc
+          simply blends in and changes nothing. */}
+      <View style={styles.spinnerBacking}>
+        <ActivityIndicator size="large" color={color} />
+      </View>
       {message && <Text style={[styles.message, { color: messageColor }]}>{message}</Text>}
     </View>
   );
@@ -46,6 +58,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.md,
+  },
+  spinnerBacking: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    padding: spacing.sm,
   },
   message: {
     marginTop: spacing.sm,

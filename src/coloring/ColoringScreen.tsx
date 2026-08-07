@@ -736,7 +736,15 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         {!imageLoadFailed && image === null ? (
           <View testID="coloring-image-loading" style={{ width: canvasWidth, height: canvasHeight }}>
-            <LoadingPanel color={coloringAccent.accent} message={t('galleryLoading')} />
+            {/* messageColor={colors.ink} because this panel renders straight
+                on the sky gradient (no card behind it), exactly like every
+                gallery's own loading state — LoadingPanel's default
+                inkMuted only reaches ~2.9:1 there. */}
+            <LoadingPanel
+              color={coloringAccent.accent}
+              messageColor={colors.ink}
+              message={t('galleryLoading')}
+            />
           </View>
         ) : imageLoadFailed ? (
           <View testID="coloring-image-load-error">
