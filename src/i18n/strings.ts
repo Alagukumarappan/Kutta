@@ -234,14 +234,23 @@ export const UI_STRINGS = {
     de: 'Diese Quizdatei konnte nicht gelesen werden. Bitte questions.json im Quiz-Ordner prüfen.',
   },
   // Settings' small "accomplishments" summary — a purely local, offline
-  // count of finished quizzes/puzzles (see src/storage/activityLog.ts). No
-  // singular/plural grammar variants: a plain count reads fine for both "0
-  // quizzes completed" and "1 quiz completed" in both languages here, and
-  // adding pluralization branches for a decorative counter would be more
-  // complexity than the feature warrants.
+  // count of finished quizzes/puzzles (see src/storage/activityLog.ts).
+  //
+  // These DO need a singular form. The panel only appears once at least one
+  // activity has been finished, so "1" is the very first value a parent ever
+  // sees here — and English "1 quizzes completed" / "1 puzzles completed" is
+  // plainly ungrammatical. `settingsQuizzesCompletedOne`/
+  // `settingsPuzzlesCompletedOne` are used for exactly count === 1 (see
+  // SettingsScreen's accomplishmentsText); every other count, including 0,
+  // uses the plural forms above. German needs no distinct plural noun for
+  // either word here ("Quiz"/"Puzzle" are both used unchanged after a
+  // numeral in this phrasing), so its singular and plural strings are
+  // deliberately identical rather than invented.
   settingsAccomplishmentsTitle: { en: 'Accomplishments', de: 'Erfolge' },
   settingsQuizzesCompleted: { en: '{count} quizzes completed', de: '{count} Quiz abgeschlossen' },
+  settingsQuizzesCompletedOne: { en: '{count} quiz completed', de: '{count} Quiz abgeschlossen' },
   settingsPuzzlesCompleted: { en: '{count} puzzles completed', de: '{count} Puzzle gelöst' },
+  settingsPuzzlesCompletedOne: { en: '{count} puzzle completed', de: '{count} Puzzle gelöst' },
   galleryLoading: { en: 'Getting things ready...', de: 'Wird vorbereitet...' },
   // Generic Cancel label, deliberately separate from
   // clearDrawingConfirmCancel/migrationConfirmCancel (those two are scoped

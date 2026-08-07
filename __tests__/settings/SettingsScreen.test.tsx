@@ -1111,5 +1111,41 @@ describe('SettingsScreen', () => {
       expect(getByText(/3 quizzes completed/)).toBeTruthy();
       expect(getByText(/5 puzzles completed/)).toBeTruthy();
     });
+
+    // The panel is only shown once something has been finished, so "1" is the
+    // very first value a parent ever sees here — and it used to read
+    // "1 quizzes completed", which is simply not English.
+    it('uses the singular form for a count of exactly one', async () => {
+      (activityLogModule.getActivityLog as jest.Mock).mockResolvedValue({
+        quizzesCompleted: 1,
+        puzzlesCompleted: 1,
+      });
+
+      const { findByTestId, getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-accomplishments');
+      expect(getByText(/1 quiz completed/)).toBeTruthy();
+      expect(getByText(/1 puzzle completed/)).toBeTruthy();
+    });
+
+    it('keeps the plural form for zero', async () => {
+      (activityLogModule.getActivityLog as jest.Mock).mockResolvedValue({
+        quizzesCompleted: 2,
+        puzzlesCompleted: 0,
+      });
+
+      const { findByTestId, getByText } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-accomplishments');
+      expect(getByText(/0 puzzles completed/)).toBeTruthy();
+    });
   });
 });

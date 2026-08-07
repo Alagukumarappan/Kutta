@@ -472,9 +472,17 @@ export function SettingsScreen({
             <View testID="settings-accomplishments" style={styles.card}>
               <Text style={styles.label}>{t('settingsAccomplishmentsTitle')}</Text>
               <Text style={styles.accomplishmentsText}>
-                {tFormat('settingsQuizzesCompleted', language, { count: activityLog.quizzesCompleted })}
+                {tFormat(
+                  activityLog.quizzesCompleted === 1 ? 'settingsQuizzesCompletedOne' : 'settingsQuizzesCompleted',
+                  language,
+                  { count: activityLog.quizzesCompleted }
+                )}
                 {'  •  '}
-                {tFormat('settingsPuzzlesCompleted', language, { count: activityLog.puzzlesCompleted })}
+                {tFormat(
+                  activityLog.puzzlesCompleted === 1 ? 'settingsPuzzlesCompletedOne' : 'settingsPuzzlesCompleted',
+                  language,
+                  { count: activityLog.puzzlesCompleted }
+                )}
               </Text>
             </View>
           )}
