@@ -436,6 +436,18 @@ export function RootNavigator({
           // of leaving an unhandled rejection and a permanent blank screen.
           if (!cancelled) setFolderError(true);
         });
+    } else if (profile) {
+      // A saved profile with no content folder at all. `Profile.rootFolderUri`
+      // is typed `string | null` ("null until onboarding completes"), and
+      // nothing this app writes today leaves it unset — but a profile blob
+      // that parses yet is missing the field (an older/partial write, hand-
+      // edited storage) would otherwise satisfy `profile` here, never resolve
+      // any folder, and never error either: a DEAD END with no splash, no
+      // error card and no way back other than reinstalling. Route it to
+      // FolderErrorScreen instead, whose "Choose a different folder" writes a
+      // real rootFolderUri onto the existing profile and recovers.
+      setFolderUris(null);
+      setFolderError(true);
     } else {
       setFolderUris(null);
       setFolderError(false);
@@ -462,7 +474,19 @@ export function RootNavigator({
             <FolderErrorScreen profile={profile} onRetry={retryFolderResolution} onFolderChanged={refreshProfile} />
           ) : folderUris ? (
             <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} onReset={handleReset} />
-          ) : null
+          ) : (
+            // Still resolving the content subfolders. This used to render
+            // `null` — a completely BLANK screen, for as long as SAF takes,
+            // which is not instant: resolveSubfolderUris runs
+            // ensureContentStructure (a dozen sequential directory
+            // reads/creates, plus first-run sample seeding) and then four
+            // more listings. So every cold start showed splash -> blank ->
+            // Home, which is exactly the flash MINIMUM_SPLASH_DELAY_MS above
+            // exists to prevent, and a folder change from Settings blanked
+            // the whole app the same way mid-save. Holding the same splash up
+            // keeps one continuous, deliberate loading state instead.
+            <SplashScreen />
+          )
         ) : (
           <OnboardingScreen onComplete={refreshProfile} />
         )}

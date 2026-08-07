@@ -301,6 +301,64 @@ describe('Tic-Tac-Toe "Menu" navigation', () => {
   });
 });
 
+describe('RootNavigator content-folder resolution gate', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (profileStore.getProfile as jest.Mock).mockResolvedValue(profile);
+    (folderAccess.findChildUri as jest.Mock).mockImplementation(async (_root: string, name: string) => {
+      return `content://tree/root/${name}`;
+    });
+  });
+
+  // Regression test for a real bug: while the SAF subfolders were being
+  // resolved, RootNavigator rendered `null` — a completely blank screen. That
+  // window is not instant on a device (ensureContentStructure does a dozen
+  // sequential SAF directory reads/creates plus first-run sample seeding), so
+  // every cold start showed splash -> BLANK -> Home, which is exactly the
+  // flash the minimum splash delay exists to prevent, and a folder change
+  // from Settings blanked the whole app the same way.
+  it('keeps the splash up (never a blank screen) while the content folders are still resolving', async () => {
+    let finishResolution: () => void = () => {};
+    (folderAccess.ensureContentStructure as jest.Mock).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishResolution = () => resolve(undefined);
+        })
+    );
+
+    const { findByTestId, queryByTestId } = await render(<RootNavigator />);
+
+    // The profile itself has resolved by the time the orientation flips to
+    // landscape, so this is genuinely the post-splash-load window rather
+    // than the initial `profile === undefined` instant.
+    await waitFor(() => expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('LANDSCAPE'));
+    expect(queryByTestId('splash-screen')).not.toBeNull();
+    expect(queryByTestId('home-child-name')).toBeNull();
+
+    await act(async () => {
+      finishResolution();
+      await Promise.resolve();
+    });
+
+    await findByTestId('home-child-name');
+  });
+
+  // A saved profile that parses but carries no content folder at all
+  // (`Profile.rootFolderUri` is typed `string | null`) used to satisfy the
+  // `profile ?` branch, resolve no folders and never error either — a dead
+  // end showing nothing at all, with no way back short of a reinstall.
+  it('offers the recoverable folder-error screen for a profile with no content folder, not a dead end', async () => {
+    (profileStore.getProfile as jest.Mock).mockResolvedValue({ ...profile, rootFolderUri: null });
+    (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+
+    const { findByTestId, findByLabelText } = await render(<RootNavigator />);
+
+    await findByTestId('folder-resolve-error');
+    await findByLabelText('Choose a different folder');
+    expect(folderAccess.ensureContentStructure).not.toHaveBeenCalled();
+  });
+});
+
 describe('RootNavigator orientation lock', () => {
   beforeEach(() => {
     jest.clearAllMocks();
