@@ -1,7 +1,9 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { AgePicker } from '../../src/components/AgePicker';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import * as dsTokens from '../../src/design-system/tokens';
 
 // AgePicker previously had no dedicated test file of its own (only indirect
 // coverage via OnboardingScreen.test.tsx / SettingsScreen.test.tsx, which
@@ -103,5 +105,36 @@ describe('AgePicker accessibility', () => {
     const { getByTestId } = await renderPicker({ value: 4 }, 'de');
     expect(getByTestId('test-age-option-4').props.accessibilityLabel).toBe('4 Jahre alt');
     expect(getByTestId('test-age-modal-overlay').props.accessibilityLabel).toBe('Altersauswahl schließen');
+  });
+});
+
+// Token-drift regression: this shared component still styles its "default"
+// variant (the one Settings renders) from the OLD `src/theme/tokens` palette,
+// whose `disabledText` was chosen against that module's warm #FFF6E9
+// background. Settings' cards are opaque white, where that color scores
+// 3.71:1 — under the 4.5:1 WCAG AA floor for normal-weight 18px text, on the
+// only visible label the control has before an age is picked.
+describe('AgePicker placeholder contrast (default/Settings variant)', () => {
+  function relativeLuminance(hex: string): number {
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(1 + i, 3 + i), 16) / 255);
+    const linearize = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const [rl, gl, bl] = [r, g, b].map(linearize);
+    return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+  }
+  function contrastRatio(hexA: string, hexB: string): number {
+    const [lLight, lDark] = [relativeLuminance(hexA), relativeLuminance(hexB)].sort((a, b) => b - a);
+    return (lLight + 0.05) / (lDark + 0.05);
+  }
+
+  it('clears 4.5:1 against the white parent-surface card it is rendered on', async () => {
+    const { getByTestId } = await renderPicker();
+
+    const label = getByTestId('test-age-picker').props.children;
+    const style = StyleSheet.flatten(
+      (Array.isArray(label) ? label[0] : label).props.style
+    ) as { color: string; fontSize: number };
+
+    expect(style.fontSize).toBe(18);
+    expect(contrastRatio(style.color, dsTokens.colors.parent.surface)).toBeGreaterThanOrEqual(4.5);
   });
 });

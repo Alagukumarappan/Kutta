@@ -111,7 +111,18 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     fontSize: 18,
-    color: colors.disabledText,
+    // The only variant that actually renders this base color is "default",
+    // and the only screen using "default" is Settings — whose cards were
+    // re-themed to the opaque white `colors.parent.surface`. The old
+    // `theme/tokens` `disabledText` (#8A8478) was chosen against that
+    // module's warm #FFF6E9 background and scores just 3.71:1 on white,
+    // under the 4.5:1 WCAG AA minimum for normal-weight 18px text — and
+    // this placeholder ("Select age" / "Alter wählen") is the control's
+    // ONLY visible label until an age is picked. `parent.inkMuted` is the
+    // exact token every other muted label on that same white card already
+    // uses (4.61:1). Onboarding is unaffected: its "playful" variant
+    // overrides this color outright (see playfulStyles.placeholder).
+    color: dsColors.parent.inkMuted,
   },
   value: {
     fontSize: 22,
