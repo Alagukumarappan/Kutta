@@ -384,3 +384,91 @@ pieces each piece can end up only ~10px tall — technically correct, but far
 under a usable touch target for a small child. Capping the board's aspect
 ratio (letterboxing the source photo) would fix it but changes what the
 puzzle shows, which is a product decision rather than a correctness one.
+
+---
+
+## Iteration 6 — the Quiz feature
+
+Three genuine bugs found and fixed; 49 suites / 710 tests green and
+`npx tsc --noEmit` clean.
+
+1. **One broken picture poisoned every later question's image.**
+   `ImageWithFallback` remembered its failure in a plain boolean that nothing
+   ever reset, and every one of its instances in `QuestionRenderer` survives a
+   question change: the question image sits at a fixed position in the tree,
+   and the option cards are keyed by `option.id` — which the real
+   `questions.json` reuses as `'a'/'b'/'c'/'d'` on EVERY single question, so
+   React reconciles them as the same component. The first unresolvable image
+   therefore locked that slot into the grey 🖼️ placeholder for the rest of
+   the session, and `resolveQuestionImages` deliberately leaves an
+   unresolvable path in place for exactly this fallback to catch — so one
+   missing file in the parent's `quiz/images/` folder was enough. On an
+   image-category question (all of ages 2-4) that leaves a pre-reader being
+   asked to choose between pictures they cannot see. The flag now records
+   WHICH uri failed and is compared against the current one, so it clears
+   itself the moment the source changes — no effect, no extra render pass.
+   Two regression tests (question image and a repeated option id), both
+   confirmed failing before the fix.
+2. **An 8 year old — the app's own maximum age — got no quiz at all.**
+   `AgePicker` offers 2-8, but every band in the shipped sample content was
+   generated as a single year (`minAge === maxAge`, 2..7), and
+   `filterQuestionsByAge` is inclusive on both ends. So a parent who picked
+   the top age the app itself offers opened the Quiz tile and got the "no quiz
+   questions yet" empty state, permanently, with nothing on screen explaining
+   why — indistinguishable from missing content. The generator now leaves the
+   topmost authored band open to the supported ceiling. Notably the per-minAge
+   tally `validate-sample-quiz-content.js` printed looked perfectly healthy
+   the entire time this was broken, so it now also checks eligibility across
+   every SELECTABLE age using the real inclusive rule, and a test asserts the
+   same against `AGE_OPTIONS` — newly exported so the range has one source of
+   truth instead of two that can drift apart again.
+3. **The Android back button did nothing while the answer overlay was up.**
+   The feedback `Modal` was the only Modal in the app with no
+   `onRequestClose`. RN's Modal always registers a back-press callback
+   natively and dispatches the event to JS, so without the prop the press was
+   captured by the modal's window and silently dropped — and since every
+   activity screen is `headerShown: false`, back is the child's ONLY way out
+   of the quiz. It now routes to the non-destructive retry (never `onNext`),
+   which only clears the local selection on the same question and so can
+   neither score nor skip it; the overlay closes and a second back press
+   leaves the quiz normally.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **The batched-tap stale-closure class** that iterations 3, 4 and 5 each hit
+  independently is genuinely already closed here, in both places it could
+  land: `QuestionRenderer`'s `answerLockRef` (reset during RENDER, not in an
+  effect, so it can't swallow a legitimate first tap on a new question) covers
+  a double-tap on two different options, and `QuizScreen`'s `nextFiredRef`
+  plus a functional `setState(prev => answerCurrentQuestion(prev, ...))`
+  covers Next. Both have existing regression tests driving the batch inside
+  one `act()`.
+- **Score/progress correctness.** Advancing is only ever possible through
+  `handleNext`, which requires a non-null selection, so total-answered always
+  equals questions-passed; `answerCurrentQuestion` is a pure function that
+  scores exactly the question at `currentIndex` and no-ops once finished.
+  "Try Again" never scores — it only clears the local selection — so a child
+  replaying a question any number of times cannot inflate or deflate the score.
+- **Auto-advance timing.** There is no timer-driven advance at all: the child
+  must press Next. The celebration bubble and card/badge pop-ins are purely
+  decorative, each bounded and cleaned up on unmount, and none of them gate or
+  trigger navigation, so there is no window in which a tap can double-advance
+  or answer a not-yet-rendered question.
+- **Shuffle.** `shuffle.ts` is a genuine Fisher-Yates (descending `i`, `j`
+  uniform in `[0, i]`), not a sort-with-random-comparator, so it is unbiased
+  and cannot duplicate or drop an element; `buildSession` shuffles then slices,
+  so a session can never repeat a question, and the shipped content has no
+  duplicate question ids.
+- **End-of-quiz state.** The empty-session case is checked BEFORE
+  `isFinished`, so a zero-question session shows the empty state rather than a
+  0/0 score card, and `hasRecordedThisFinishRef` excludes it from the activity
+  log. Play Again calls a fresh `buildSession` (new shuffle and reselect from
+  the retained pool) through `initialSessionState`, clears the selection, and
+  re-arms its own double-press guard, so nothing survives into the new run.
+
+**Noted, not fixed:** `QuizScreen`'s load effect resets `state` and
+`errorKind` but not `selectedOptionId`. In principle a quiz folder or age
+change mid-question would carry a stale selection into the first question of
+the newly-loaded session; in practice both of those only change from Settings,
+which is reachable only by popping the quiz screen off the stack (it unmounts),
+so there is no path to it today.
