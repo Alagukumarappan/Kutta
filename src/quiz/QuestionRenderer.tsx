@@ -778,6 +778,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
+  // Every dot keeps the SAME dark ink ring in all three states, and only its
+  // fill changes. These dots sit directly on the sky gradient with nothing
+  // opaque behind them, and their old state-matched rings left them barely
+  // visible there: a finished jade dot was ~1.06:1 against the gradient and a
+  // not-yet-reached one ~1.6:1 — i.e. a child looking for "how far along am
+  // I?" saw almost nothing. An ink ring clears 5:1+ across the whole
+  // gradient, so each dot's shape always reads, while the jade/violet/grey
+  // fills still tell the three states apart from one another.
   progressDot: {
     width: 14,
     height: 14,
@@ -785,15 +793,13 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.xxs / 2,
     backgroundColor: colors.disabledBg,
     borderWidth: 2,
-    borderColor: colors.disabledBorder,
+    borderColor: colors.ink,
   },
   progressDotDone: {
     backgroundColor: colors.jade,
-    borderColor: colors.jadeDark,
   },
   progressDotCurrent: {
     backgroundColor: quizPalette.accent,
-    borderColor: quizPalette.accentDark,
     width: 18,
     height: 18,
     borderRadius: 9,
