@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 8 / 40**
+**Iteration count: 9 / 40**
 
 ---
 
@@ -646,3 +646,103 @@ surface (no `Portal`/`Dialog`, no `BackHandler` usage anywhere).
   unmount and resets defensively when a control becomes disabled;
   `GradientScreenBackground`'s decorative blobs are all `pointerEvents="none"`
   so they can't intercept a tap.
+
+---
+
+## Iteration 9 — the Video feature (player + gallery)
+
+Three genuine bugs found and fixed; 49 suites / 728 tests green and
+`npx tsc --noEmit` clean.
+
+1. **Every video that played to its end left the child staring at a spinner
+   forever — and the completion panel iteration 8 had just fixed never
+   appeared at all.** `VideoPlayerScreen` treated any status other than
+   `readyToPlay` as "still loading", and that branch is an EARLY RETURN, so
+   it tore the `VideoView` — and the `CelebrationOverlay` rendered after it —
+   straight out of the tree. But expo-video's `status` is not a "has this
+   file loaded yet" flag: it mirrors the LIVE native playback state.
+   Android's `playerStateToPlayerStatus` (VideoPlayer.kt) maps ExoPlayer's
+   `STATE_ENDED` to **`idle`**, and `setStatus` sends that `statusChange`
+   immediately after the `playToEnd` event — so at the end of every single
+   video the screen set `finished: true` and `loading: true` in the same
+   batch, `loading` won, and no further `statusChange` was ever coming to
+   clear it. Iteration 8's whole fix was dead on device. The same mapping
+   also sends `STATE_BUFFERING` -> `loading` (iOS reports `loading` whenever
+   the playback buffer empties), which is what **every seek/scrub on the
+   native controls passes through** — so a child dragging the scrubber
+   watched the video vanish behind a spinner and pop back. A status now
+   only counts as loading until the current source has reached
+   `readyToPlay` once, tracked in a ref so the very `statusChange` handler
+   that would re-raise the spinner sees it with no re-render in between;
+   Retry clears it, because `player.replace` really does reload the source.
+2. **"Watch Again" reloaded the whole file instead of replaying it.** It
+   shared `handleRetry` with the error-state Retry button, so it ran
+   `player.replace(videoUri)` on a source the player already held and
+   known-good: the child sat through the loading spinner a second time,
+   and on iOS `VideoPlayer.replace` loads the asset SYNCHRONOUSLY on the
+   main thread (expo-video's own JS wrapper `console.warn`s about exactly
+   that, unconditionally, on every call) — a UI freeze proportional to file
+   size, on the one button a 2-8 year old hits over and over. Replaying is
+   now `currentTime = 0` + `play()`: instant, and it deliberately leaves the
+   "loaded once" latch set so no spinner flashes over a player that never
+   stopped being ready.
+3. **A new video could inherit the previous one's error screen or completion
+   panel.** `useVideoPlayer` keys its player on the source uri, so a
+   `videoUri` change builds a fresh player and releases the old one — but
+   none of the per-source UI state was reset with it. A leftover `error`
+   showed "this video could not be played" over a perfectly good file, a
+   leftover `finished` left the old video's panel over one that had just
+   started, and the loaded-once latch suppressed the new video's first-load
+   spinner. Narrow but reachable: two quick taps on two DIFFERENT gallery
+   tiles both dispatch `navigate('video-detail', ...)`, and if the second
+   lands after the screen has mounted it updates the route params rather
+   than pushing a second copy. Same batched-double-tap family as iterations
+   3-8, here as state surviving a source swap rather than a stale closure.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **Play/pause icon desync — not possible here.** There is no custom
+  transport UI at all: `nativeControls` hands play/pause/scrub to the
+  platform's own player view, which reads its state from the player
+  directly. There is no JS-side "is playing" state to fall out of sync, so
+  the rapid-tap class this loop keeps finding has nothing to corrupt.
+- **`content://` sources.** Unlike the Skia `content://` bug on the image
+  side, expo-video needs no special handling: the uri is passed straight to
+  ExoPlayer, which reads `content://` through Android's own
+  `ContentDataSource`. Nothing in the path decodes or rewrites it.
+- **Offline.** Nothing streams: the only sources are SAF/file uris from the
+  gallery, `loop` defaults false (no repeat), there is no playlist so
+  nothing can auto-advance to a video the child did not choose, and expo-
+  video carries no ads/analytics. `staysActiveInBackground` and
+  `showNowPlayingNotification` both default to `false`, so backgrounding
+  the app stops playback and nothing is posted to the lock screen. (The
+  `INTERNET` permission in the merged manifest comes from expo-video's own
+  library manifest and is not something this app can drop.)
+- **Leaving mid-playback.** `useVideoPlayer` releases the player through
+  `useReleasingSharedObject`'s unmount cleanup, and Android's
+  `sharedObjectDidRelease` -> `close()` calls `ExoPlayer.release()`, tears
+  down the media session and unregisters from the playback service — so
+  back mid-video leaves no audio playing over the next screen and no
+  undisposed player. The gallery's own thumbnail players release the same
+  way as tiles are virtualized out.
+- **Gallery double-tap.** Two taps on the SAME tile re-`navigate` to a
+  route already on top (params update, not a second push), so it cannot
+  launch two players; two taps on two different tiles resolve to whichever
+  was touched last, now with a clean player (fix 3).
+- **Orientation.** The player is sized from live `useWindowDimensions()`
+  with `contentFit="contain"`, so under the app's landscape lock a
+  portrait-shot or oddly-sized home video letterboxes rather than being
+  squished or cropped, and a 180-degree flip re-lays-out from the same
+  hook.
+
+**Noted, not fixed (a risk I could not confirm without a device):** each
+gallery tile is a REAL `expo-video` player, so a large videos folder keeps
+roughly a dozen ExoPlayer instances (and their hardware decoders) alive
+while scrolling. Android caps concurrent `MediaCodec` instances per device,
+and on a cheap tablet that ceiling is low enough that the far tiles could
+start failing to decode (blank tiles rather than a crash), quite apart from
+the memory the decoders hold. The virtualization window is already
+deliberately tightened for this reason. The real fix is a one-off extracted
+thumbnail image per tile instead of a live player, which is a rewrite of
+the tile with its own design questions — not something to guess at inside a
+bug-hunt pass.
