@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 6 / 40**
+**Iteration count: 7 / 40**
 
 ---
 
@@ -472,3 +472,87 @@ change mid-question would carry a stale selection into the first question of
 the newly-loaded session; in practice both of those only change from Settings,
 which is reachable only by popping the quiz screen off the stack (it unmounts),
 so there is no path to it today.
+
+---
+
+## Iteration 7 — Settings, RootNavigator, Onboarding
+
+Three genuine bugs found and fixed; 49 suites / 716 tests green and
+`npx tsc --noEmit` clean.
+
+1. **A declined folder move silently threw away every other edit.**
+   Cancelling the "Move content?" confirmation `return`ed out of the whole
+   of `handleSave`, so a name/age/language/picture change staged in the same
+   visit was discarded with no toast, no error and no other sign that Save
+   had done nothing — the exact "partial mix" this screen's staged-save
+   design exists to avoid. Worse, `pendingFolderUri` was left set, so the
+   folder card kept showing the newly-picked folder with a green tick as
+   though the change HAD gone through: a parent who deliberately backed out
+   of the move was told the opposite. Declining the move now declines only
+   the move (pending pick cleared, card back in sync) and the rest of the
+   save continues against the unchanged root. The migration-FAILURE path
+   deliberately keeps its early return — finishing the save there would start
+   the 1.2s saved-toast timer and navigate away from the error banner before
+   a parent could read it.
+2. **A double-tap on "Reset everything" queued a second wipe dialog over
+   onboarding.** `handleReset`'s only guard was the `resetting` STATE, which
+   does not engage until the next render and is not even set until the
+   confirmation has been accepted — so two taps delivered in one touch batch
+   (the same batched-tap shape iterations 3-6 kept finding, here reaching a
+   destructive action) both got through and opened TWO confirmation dialogs.
+   Confirming the first wipes the profile and unmounts Settings, leaving the
+   second, still-live "Reset everything?" dialog sitting on top of the
+   freshly-shown Onboarding screen, its destructive button still bound to the
+   unmounted screen's `performReset`. A synchronous ref now allows at most one
+   dialog (released again on cancel/dismiss so Reset stays usable), plus a
+   second ref guarding the wipe itself against re-entrant clears.
+3. **A blank screen between the splash and Home.** RootNavigator rendered
+   `null` for the whole window between the profile resolving and the SAF
+   subfolders resolving. That window is not instant on a device:
+   `resolveSubfolderUris` runs `ensureContentStructure` (a dozen sequential
+   SAF directory reads/creates plus first-run sample seeding) and then four
+   more listings. So every cold start showed splash -> BLANK -> Home, which
+   is exactly the flash `MINIMUM_SPLASH_DELAY_MS` exists to prevent, and
+   saving a folder change from Settings blanked the entire app the same way
+   mid-save. The same splash is now held up instead. Fixing that branch also
+   closed a dead end sitting next to it: a saved profile whose
+   `rootFolderUri` is null (the type allows it — "null until onboarding
+   completes") satisfied the `profile ?` branch, resolved no folders and
+   raised no error either, showing nothing at all forever with no way back
+   short of a reinstall; it now lands on FolderErrorScreen, whose "Choose a
+   different folder" writes a real root onto the existing profile.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **Reset completeness.** The confirm dialog really is required (nothing
+  destructive happens on the first tap), and the wipe covers the SAF
+  `Kutta-games` folder, the profile, the activity log, the individually-added
+  file references INCLUDING the app's own copies on disk (iteration 2's
+  `clearAllFileReferences` deletes `documentDirectory/kutta-added/` too), and
+  the remembered puzzle difficulty. Every folder step is best-effort so a
+  revoked grant or an already-deleted folder can't strand a parent
+  mid-reset.
+- **Save double-tap.** `saveInFlightRef` is checked-and-set synchronously
+  before any await, so a batched second tap cannot start a second save,
+  duplicate a write, or orphan a second go-home timer; the freshest
+  name/age/language/picture are re-read from refs immediately before
+  persisting, so an edit made during a slow migration is not overwritten by
+  the pre-Save snapshot.
+- **Onboarding validation.** A blank or whitespace-only name is genuinely
+  enforced, not cosmetic: `name.trim().length > 0` gates both the disabled
+  Save button and `handleSave`'s own re-check, and age and folder are gated
+  the same way. Save and the folder picker each have a synchronous
+  re-entrancy ref. There is no back navigation out of onboarding (it renders
+  outside the stack), and a failure part-way through leaves nothing saved —
+  `ensureContentStructure` is idempotent, so retrying is clean.
+- **The onboarding gate.** A fresh install (no profile) shows Onboarding, a
+  returning profile skips it, a `getProfile()` REJECTION falls through to
+  Onboarding rather than hanging on the splash, and a folder-resolution
+  failure/rejection lands on the recoverable error screen rather than an
+  unhandled rejection.
+- **Migration safety.** `migrateContent` still copies, then verifies every
+  entry of all four subfolders (plus `quiz/images` and `questions.json`), and
+  only then deletes the old content; a concurrent second trigger is
+  impossible (the Save button is disabled while migrating AND guarded by the
+  in-flight ref), and an interrupted run leaves the old content fully intact
+  since the delete never happens without a passing verification.
