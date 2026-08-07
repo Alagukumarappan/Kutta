@@ -35,28 +35,37 @@ export function useSelectableGallery(folderUri: string, contentType: FileReferen
     setError(false);
     setItems(null);
 
-    Promise.all([
+    // The two sources are settled INDEPENDENTLY rather than through a
+    // Promise.all that either fulfils or rejects as one. They have nothing
+    // to do with each other: the whole point of the "+" button is that a
+    // parent can add a picture WITHOUT it being in the configured folder.
+    // Failing them together meant a revoked SAF grant (folder deleted, SD
+    // card pulled, permission dropped after a restart) replaced the entire
+    // gallery with an error screen — hiding perfectly reachable pictures the
+    // parent had added individually, and taking the "+" button, which only
+    // exists in the normal header, away with it. So the error screen is now
+    // only shown when there is genuinely nothing to show.
+    Promise.allSettled([
       FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri).then((entries: string[]) =>
         entries.filter(isValidFile)
       ),
-      // Files the parent added individually (outside the configured
-      // folder) via AddFilesButton — pruneMissingFileReferences silently
-      // drops any that have since become unreachable rather than throwing,
-      // so it never causes this Promise.all to reject on its own.
+      // Files the parent added individually via AddFilesButton.
       pruneMissingFileReferences(contentType),
-    ])
-      .then(([folderItems, extraItems]) => {
-        if (cancelled) return;
-        const merged = [...folderItems, ...extraItems.filter((uri) => !folderItems.includes(uri))];
-        setItems(merged);
-        setReferencedUris(new Set(extraItems));
-      })
-      .catch(() => {
-        // The SAF grant may have been revoked, the folder deleted externally,
-        // or an SD card unmounted — surface a retry state instead of leaving
-        // an unhandled rejection and a permanently blank loading screen.
-        if (!cancelled) setError(true);
-      });
+    ]).then(([folderResult, extraResult]) => {
+      if (cancelled) return;
+      const folderItems = folderResult.status === 'fulfilled' ? folderResult.value : [];
+      const extraItems = extraResult.status === 'fulfilled' ? extraResult.value : [];
+
+      if (folderResult.status === 'rejected' && extraItems.length === 0) {
+        setError(true);
+        return;
+      }
+
+      const folderSet = new Set(folderItems);
+      const merged = [...folderItems, ...extraItems.filter((uri) => !folderSet.has(uri))];
+      setItems(merged);
+      setReferencedUris(new Set(extraItems));
+    });
 
     return () => {
       cancelled = true;

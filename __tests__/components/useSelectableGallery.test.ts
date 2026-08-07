@@ -64,13 +64,44 @@ describe('useSelectableGallery', () => {
     expect(result.current.items).toEqual(['content://a.png']);
   });
 
-  it('sets error instead of throwing when the folder read fails', async () => {
+  it('sets error instead of throwing when the folder read fails and there is nothing else to show', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(new Error('revoked'));
 
     const { result } = await renderHook(() => useSelectableGallery('content://folder', 'video', isImageFile), { wrapper });
 
     await waitFor(() => expect(result.current.error).toBe(true));
     expect(result.current.items).toBeNull();
+  });
+
+  // Regression test: the two sources are unrelated — the whole point of the
+  // "+" button is adding a picture WITHOUT putting it in the configured
+  // folder. A revoked SAF grant used to fail them together, replacing the
+  // gallery with an error screen that hid perfectly reachable added pictures
+  // and took the "+" button (which only lives in the normal header) with it.
+  it('still shows individually-added files when the folder read fails', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockRejectedValue(new Error('revoked'));
+    (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockResolvedValue(['content://extra.png']);
+
+    const { result } = await renderHook(() => useSelectableGallery('content://folder', 'coloring', isImageFile), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.items).toEqual(['content://extra.png']));
+    expect(result.current.error).toBe(false);
+  });
+
+  // The mirror case: a failing AsyncStorage read must not blank out a
+  // perfectly healthy content folder either.
+  it('still shows folder content when the reference lookup fails', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue(['content://a.png']);
+    (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockRejectedValue(new Error('storage full'));
+
+    const { result } = await renderHook(() => useSelectableGallery('content://folder', 'coloring', isImageFile), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.items).toEqual(['content://a.png']));
+    expect(result.current.error).toBe(false);
   });
 
   it('retry() re-runs the load even when the folder uri is unchanged', async () => {
