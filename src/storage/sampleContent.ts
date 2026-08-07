@@ -13,12 +13,20 @@ interface SampleAsset {
   mimeType: string;
 }
 
+// Only images that actually WORK as a coloring page belong here. The
+// coloring canvas stretches each picture to fill a full landscape canvas
+// (~600x400 on a phone) and its main tool is a flood fill with a tolerance
+// of 10 (see floodFill.ts) — so a page needs (a) enough real resolution not
+// to turn to mush when scaled up, and (b) large FLAT regions the fill can
+// actually flood. Two previous entries failed exactly that and were
+// dropped: `car-icon.png` was a 72x72 emoji icon (a blurry blob at canvas
+// size), and `princess.png` was gradient-shaded clipart, where a tap fills
+// only a small speckle of the tapped shade instead of the whole dress —
+// which reads to a child as "the color button is broken".
 const SAMPLE_COLORING: SampleAsset[] = [
   { name: 'bunny.jpeg', module: require('../../sample-content/coloring/bunny.jpeg'), mimeType: 'image/jpeg' },
-  { name: 'car-icon.png', module: require('../../sample-content/coloring/car-icon.png'), mimeType: 'image/png' },
   { name: 'elephant.jpeg', module: require('../../sample-content/coloring/elephant.jpeg'), mimeType: 'image/jpeg' },
   { name: 'hero.png', module: require('../../sample-content/coloring/hero.png'), mimeType: 'image/png' },
-  { name: 'princess.png', module: require('../../sample-content/coloring/princess.png'), mimeType: 'image/png' },
 ];
 
 const SAMPLE_PICTURES: SampleAsset[] = [

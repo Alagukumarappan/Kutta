@@ -79,21 +79,21 @@ describe('sampleContent', () => {
 
       await seedSampleColoring('content://tree/coloring');
 
-      // 5 sample coloring images, per sampleContent.ts's SAMPLE_COLORING list.
+      // 3 sample coloring images, per sampleContent.ts's SAMPLE_COLORING list.
       // This deliberately does NOT use StorageAccessFramework.copyAsync — its
       // native Android implementation doesn't support a file:// source being
       // copied into a content:// SAF directory destination (verified against
       // FileSystemLegacyModule.kt), which silently failed every seed copy on
       // a real device despite passing here when that mock returned success.
-      expect(Image.resolveAssetSource).toHaveBeenCalledTimes(5);
-      expect(Asset.fromURI).toHaveBeenCalledTimes(5);
-      expect(mockDownloadAsync).toHaveBeenCalledTimes(5);
-      expect(FileSystem.readAsStringAsync).toHaveBeenCalledTimes(5);
+      expect(Image.resolveAssetSource).toHaveBeenCalledTimes(3);
+      expect(Asset.fromURI).toHaveBeenCalledTimes(3);
+      expect(mockDownloadAsync).toHaveBeenCalledTimes(3);
+      expect(FileSystem.readAsStringAsync).toHaveBeenCalledTimes(3);
       expect(FileSystem.readAsStringAsync).toHaveBeenCalledWith('file:///bundled/sample-asset.png', {
         encoding: 'base64',
       });
-      expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledTimes(5);
-      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(5);
+      expect(FileSystem.StorageAccessFramework.createFileAsync).toHaveBeenCalledTimes(3);
+      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(3);
       expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledWith(
         'content://tree/dest/created-file',
         'ZmFrZS1iYXNlNjQ=',
@@ -164,8 +164,8 @@ describe('sampleContent', () => {
 
       await expect(seedSampleColoring('content://tree/coloring')).resolves.toBeUndefined();
 
-      // All 5 were attempted despite the first one failing.
-      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(5);
+      // All 3 were attempted despite the first one failing.
+      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(3);
     });
 
     it('skips a sample whose bundled asset cannot be resolved to a local file, without throwing', async () => {
@@ -184,10 +184,10 @@ describe('sampleContent', () => {
 
       await expect(seedSampleColoring('content://tree/coloring')).resolves.toBeUndefined();
 
-      expect(Image.resolveAssetSource).toHaveBeenCalledTimes(5);
-      expect(Asset.fromURI).toHaveBeenCalledTimes(5);
-      // Only 4 of the 5 got past the failed download.
-      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(4);
+      expect(Image.resolveAssetSource).toHaveBeenCalledTimes(3);
+      expect(Asset.fromURI).toHaveBeenCalledTimes(3);
+      // Only 2 of the 3 got past the failed download.
+      expect(FileSystem.StorageAccessFramework.writeAsStringAsync).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -18,8 +18,8 @@ All from Wikimedia Commons, public domain / CC0 (no attribution legally required
 ## Coloring starter pages (`coloring/`)
 
 - **elephant.jpeg**, **bunny.jpeg** — generic line-art coloring pages, no visible third-party branding.
-- **hero.png** — same public-domain superhero clipart as `pictures/superhero.png` above (reused here); not any trademarked character.
-- **princess.png** — "DancingBlondPrincess", Wikimedia Commons / OpenClipartVectors, via Pixabay. CC0 (Public Domain Dedication). Generic clipart character, not Barbie or any other trademarked character/brand.
-- **car-icon.png** — same Twemoji car icon as `quiz/images/car.png` (reused here); CC-BY 4.0, see the Twemoji credit at the top of this file.
+- **hero.png** — same public-domain superhero clipart as `pictures/superhero.png` above (reused here); not any trademarked character. Flat, solid-colored regions, so the app's flood-fill tool recolors it cleanly.
+
+**Also removed (quality, not licensing):** `princess.png` (CC0 clipart) and `car-icon.png` (Twemoji) were briefly seeded here too. Both were properly licensed but did not work as coloring pages: the car was a 72x72 icon that turns to mush when stretched across the coloring canvas, and the princess was gradient-shaded, so the flood fill (tolerance 10, see `src/coloring/floodFill.ts`) filled only a small speckle of the tapped shade instead of a whole region. Anything added here should be line art or flat color at a real page resolution.
 
 **Note:** earlier versions of this folder briefly included files named `spiderman.png`, `barbie.png`, and `car.png` sourced from third-party "free printable coloring page" websites — those carried both a trademark risk (official-style Spider-Man/Marvel branding and logo) and a copyright risk (visible third-party site watermarks, unclear commercial-redistribution rights). They have been permanently removed and replaced with the properly-licensed, generic content listed above. If you're reviewing this repo's history: do not reintroduce branded/watermarked third-party coloring pages.
