@@ -1372,6 +1372,11 @@ describe('ColoringScreen', () => {
       mockPixelState.buffer = makeTwoRegionBuffer();
       const { StyleSheet } = require('react-native');
       const { Skia } = require('@shopify/react-native-skia');
+      // React logs "overlapping act() calls" for the deliberately-nested
+      // act below — that nesting IS the batch being reproduced, so the
+      // warning is expected noise here rather than a signal. Same
+      // spy-and-restore idiom as TicTacToeScreen's own batched-tap test.
+      jest.spyOn(console, 'error').mockImplementation(() => {});
 
       const { findByTestId, getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
@@ -1404,6 +1409,46 @@ describe('ColoringScreen', () => {
       const red = [230, 57, 70, 255]; // PALETTE[0], the default selection
       expect(pixelAt(lastBuffer, 7, 5)).toEqual(red); // the second tap's region
       expect(pixelAt(lastBuffer, 1, 5)).toEqual(red); // the first tap's region, NOT reverted
+    });
+
+    // Regression test: a 2-8 year old taps the same shape over and over.
+    // The second tap on an already-red region cannot change a single pixel,
+    // but it used to run the whole fill pipeline anyway — including
+    // replacing the undo snapshot with the POST-fill state. So a child who
+    // filled the wrong shape, tapped it again (seeing nothing happen) and
+    // then pressed Undo got nothing back.
+    it('ignores a repeat tap on a region already filled with the selected color, keeping the real undo point', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      mockPixelState.shouldReturnPixels = true;
+      mockPixelState.buffer = makeTwoRegionBuffer();
+      const { StyleSheet } = require('react-native');
+      const { Skia } = require('@shopify/react-native-skia');
+
+      const { findByTestId, getByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+      await findByTestId('coloring-canvas-touch-area');
+      await expandToolbar(getByTestId);
+
+      const canvas = StyleSheet.flatten(getByTestId('coloring-canvas-transform').props.style);
+      const x = canvas.width * 0.1; // pixel column 1, the white (left) region
+      const y = canvas.height * 0.5;
+
+      await fireFillTap(getByTestId, x, y);
+      expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
+      expect(queryByTestId('undo-fill')).not.toBeNull();
+
+      // Same spot again, same color — provably a no-op, so nothing at all
+      // should happen (no new image, no new undo snapshot).
+      await fireFillTap(getByTestId, x, y);
+      expect(Skia.Image.MakeImage).toHaveBeenCalledTimes(1);
+
+      // Undo still exists and still refers to the pre-fill state, so it
+      // hides itself again exactly as it would have without the repeat tap.
+      await fireEvent.press(getByTestId('undo-fill'));
+      expect(queryByTestId('undo-fill')).toBeNull();
     });
   });
 });

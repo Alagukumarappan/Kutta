@@ -1,4 +1,4 @@
-import { floodFill } from '../../src/coloring/floodFill';
+import { floodFill, pixelMatchesColorExactly } from '../../src/coloring/floodFill';
 
 // 3x3 image, all white (255,255,255,255) except a black (0,0,0,255) border pixel at (1,0)
 function makeTestImage(): Uint8ClampedArray {
@@ -124,5 +124,42 @@ describe('floodFill', () => {
     expect(getPixel(result, 1, 0, 0)).toEqual([255, 0, 0, 255]);
     expect(result).not.toBe(px);
     expect(px).toEqual(new Uint8ClampedArray([255, 255, 255, 255])); // input untouched
+  });
+});
+
+describe('pixelMatchesColorExactly', () => {
+  // This predicate exists so ColoringScreen can recognise a provably-empty
+  // re-tap BEFORE it spends its single undo snapshot on it, so it has to
+  // agree exactly with floodFill's own early-exit condition.
+  it('is true only for an exact match, not a within-tolerance one', () => {
+    const px = makeTestImage(); // (0,0) is white, (1,0) is black
+    expect(pixelMatchesColorExactly(px, 3, 0, 0, [255, 255, 255, 255])).toBe(true);
+    // 5 away on one channel — well inside floodFill's default tolerance of
+    // 10, but NOT an exact match, so a fill here still genuinely changes
+    // pixels and must not be skipped.
+    expect(pixelMatchesColorExactly(px, 3, 0, 0, [250, 255, 255, 255])).toBe(false);
+    expect(pixelMatchesColorExactly(px, 3, 1, 0, [0, 0, 0, 255])).toBe(true);
+    expect(pixelMatchesColorExactly(px, 3, 1, 0, [255, 255, 255, 255])).toBe(false);
+  });
+
+  it('agrees with floodFill: exactly the cases it reports true are the cases floodFill leaves unchanged', () => {
+    const px = makeTestImage();
+    const cases: Array<[number, number, [number, number, number, number]]> = [
+      [0, 0, [255, 255, 255, 255]],
+      [0, 0, [255, 0, 0, 255]],
+      [1, 0, [0, 0, 0, 255]],
+      [1, 0, [255, 0, 0, 255]],
+    ];
+    for (const [x, y, color] of cases) {
+      const unchanged = floodFill(px, 3, 3, x, y, color).every((value, i) => value === px[i]);
+      expect(pixelMatchesColorExactly(px, 3, x, y, color)).toBe(unchanged);
+    }
+  });
+
+  it('reports false (never a spurious match) for out-of-range coordinates', () => {
+    const px = makeTestImage();
+    expect(pixelMatchesColorExactly(px, 3, -1, 0, [255, 255, 255, 255])).toBe(false);
+    expect(pixelMatchesColorExactly(px, 3, 0, -1, [255, 255, 255, 255])).toBe(false);
+    expect(pixelMatchesColorExactly(px, 3, 3, 3, [255, 255, 255, 255])).toBe(false);
   });
 });

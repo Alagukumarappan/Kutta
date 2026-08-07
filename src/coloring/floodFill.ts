@@ -9,6 +9,29 @@ function colorsMatch(px: Uint8ClampedArray, index: number, target: RGBA, toleran
   );
 }
 
+// True when the pixel at (x, y) is EXACTLY `color` already — the same
+// condition `floodFill` below uses to recognise a re-tap that cannot change
+// anything. Exported so callers can recognise that no-op BEFORE spending a
+// full-buffer copy (and, more importantly, before spending their undo
+// snapshot) on a fill that provably has no effect. Out-of-range coordinates
+// read `undefined` and therefore never match, matching floodFill's own
+// tolerance of an out-of-range seed.
+export function pixelMatchesColorExactly(
+  pixels: Uint8ClampedArray,
+  width: number,
+  x: number,
+  y: number,
+  color: RGBA
+): boolean {
+  const index = (y * width + x) * 4;
+  return (
+    pixels[index] === color[0] &&
+    pixels[index + 1] === color[1] &&
+    pixels[index + 2] === color[2] &&
+    pixels[index + 3] === color[3]
+  );
+}
+
 export function floodFill(
   pixels: Uint8ClampedArray,
   width: number,
@@ -22,12 +45,7 @@ export function floodFill(
   const startIndex = (startY * width + startX) * 4;
   const targetColor: RGBA = [result[startIndex], result[startIndex + 1], result[startIndex + 2], result[startIndex + 3]];
 
-  const targetMatchesFill =
-    targetColor[0] === fillColor[0] &&
-    targetColor[1] === fillColor[1] &&
-    targetColor[2] === fillColor[2] &&
-    targetColor[3] === fillColor[3];
-  if (targetMatchesFill) return result;
+  if (pixelMatchesColorExactly(pixels, width, startX, startY, fillColor)) return result;
 
   const visited = new Uint8Array(width * height);
   const stack: [number, number][] = [[startX, startY]];

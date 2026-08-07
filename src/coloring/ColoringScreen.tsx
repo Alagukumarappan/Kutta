@@ -12,7 +12,7 @@ import {
   AlphaType,
   SkImage,
 } from '@shopify/react-native-skia';
-import { floodFill } from './floodFill';
+import { floodFill, pixelMatchesColorExactly } from './floodFill';
 import { base64ToUint8Array } from './base64';
 import {
   computeResponsiveRectSize,
@@ -330,6 +330,19 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     const pixelX = Math.floor((x / canvasWidthRef.current) * width);
     const pixelY = Math.floor((y / canvasHeightRef.current) * height);
     if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height) return;
+
+    // Re-tapping a region that is ALREADY exactly this color cannot change
+    // anything (floodFill's own early exit says so), and a 2-8 year old taps
+    // the same shape over and over. Bailing out here rather than after the
+    // fill matters because everything below is destructive to the undo
+    // point: without this, a child who filled the dog's body red by mistake
+    // and then tapped it again — seeing nothing happen — would find Undo
+    // silently doing nothing too, because that second, empty "fill" had
+    // already replaced the snapshot with the post-fill state. It also saves
+    // a pointless full-buffer copy plus a whole new SkImage on every repeat
+    // tap, which on a real photo is tens of megabytes of churn for no
+    // visible change.
+    if (pixelMatchesColorExactly(pixels, width, pixelX, pixelY, selectedColorRef.current)) return;
 
     const updated = floodFill(pixels, width, height, pixelX, pixelY, selectedColorRef.current);
 
