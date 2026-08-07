@@ -355,23 +355,37 @@ export function SettingsScreen({
 
       if (pendingFolderUri && pendingFolderUri !== profile.rootFolderUri) {
         const oldUri = profile.rootFolderUri;
+        const confirmed = oldUri ? await confirmMigration() : true;
 
-        if (oldUri) {
-          const confirmed = await confirmMigration();
-          if (!confirmed) return;
+        if (!confirmed) {
+          // Declining the MOVE declines only the folder change — this used
+          // to `return` out of the whole save, which silently threw away
+          // every other edit the parent had staged (name, age, language,
+          // picture) with no feedback whatsoever, while the folder card kept
+          // showing the newly-picked folder with a green tick as though the
+          // change had gone through. Clearing the pending pick puts that
+          // card back in sync with reality, and the rest of the save
+          // continues below against the UNCHANGED root folder.
+          setPendingFolderUri(null);
+        } else {
+          setMigrating(true);
+          const result = oldUri
+            ? await migrateContent(oldUri, pendingFolderUri)
+            : ({ success: true } as const);
+          setMigrating(false);
+
+          if (!result.success) {
+            // Deliberately NOT the same "save the rest anyway" treatment as
+            // the cancel path above: a failed migration has to leave the
+            // parent looking at the error banner with the pending folder
+            // still staged so they can retry, and finishing the save here
+            // would start the 1.2s toast timer that navigates away from that
+            // banner before it can even be read.
+            setMigrationError(t('migrationFailed'));
+            return;
+          }
+          migratedRootFolderUri = pendingFolderUri;
         }
-
-        setMigrating(true);
-        const result = oldUri
-          ? await migrateContent(oldUri, pendingFolderUri)
-          : ({ success: true } as const);
-        setMigrating(false);
-
-        if (!result.success) {
-          setMigrationError(t('migrationFailed'));
-          return;
-        }
-        migratedRootFolderUri = pendingFolderUri;
       }
 
       // Read the FRESHEST name/age/language/picture right before

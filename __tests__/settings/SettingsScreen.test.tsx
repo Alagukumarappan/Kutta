@@ -214,8 +214,71 @@ describe('SettingsScreen', () => {
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
     await confirmAlertWith('Cancel');
 
-    await waitFor(() => expect(profileStore.saveProfile).not.toHaveBeenCalled());
     expect(folderMigration.migrateContent).not.toHaveBeenCalled();
+    // Nothing may ever be persisted with the declined folder. (The rest of
+    // the save does still go through against the OLD folder — see the two
+    // tests below — so this asserts the folder specifically, not that no
+    // save happened at all.)
+    expect(profileStore.saveProfile).not.toHaveBeenCalledWith(
+      expect.objectContaining({ rootFolderUri: 'content://tree/new' })
+    );
+  });
+
+  // Regression test for a real bug: cancelling the migration confirmation
+  // used to `return` out of the ENTIRE save, silently discarding every other
+  // edit the parent had staged — a name fix typed seconds earlier was simply
+  // gone, with no toast, no error and no other sign that Save had done
+  // nothing. Declining the folder MOVE must decline only the folder move.
+  it('still saves the other staged edits when the parent declines the folder move', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, getByTestId, findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.changeText(getByTestId('settings-name-input'), 'Samuel');
+    await fireEvent.press(getByTestId('settings-age-picker'));
+    await fireEvent.press(getByTestId('settings-age-option-6'));
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+    fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await confirmAlertWith('Cancel');
+
+    await waitFor(() =>
+      expect(profileStore.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Samuel', age: 6, rootFolderUri: 'content://tree/old' })
+      )
+    );
+  });
+
+  // ...and the folder card must stop claiming the new folder is in use. It
+  // showed the pending pick with a green tick indefinitely after a cancel,
+  // so a parent who backed out of the move was told the opposite.
+  it('puts the folder display back to the real folder after the move is declined', async () => {
+    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/new');
+    (profileStore.saveProfile as jest.Mock).mockResolvedValue(undefined);
+
+    const { getByText, findByTestId, getByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <SettingsScreen />
+      </LanguageProvider>
+    );
+
+    await findByTestId('settings-loaded');
+    await fireEvent.press(getByText('Change content folder'));
+    await waitFor(() => expect(getByTestId('settings-folder-path').props.children).toContain('new'));
+    fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await confirmAlertWith('Cancel');
+
+    await waitFor(() => expect(getByTestId('settings-folder-path').props.children).toContain('old'));
   });
 
   it('lets the user edit name and age and saves them without touching the folder or asking for confirmation', async () => {
