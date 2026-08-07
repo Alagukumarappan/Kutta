@@ -145,6 +145,19 @@ export function PuzzleScreen({
   // ScrollView contentContainerStyle below — nothing else consumes it.
   const [order, setOrder] = useState<number[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  // Which slot is currently "picked up" is read by every tap handler, and a
+  // handler's closure only ever sees the `selectedSlot` of the render it was
+  // created in. React Native delivers a BATCH of queued touch events at once,
+  // so a 2-8 year old tapping two pieces in quick succession runs both
+  // handlers against the same pre-update snapshot — the same stale-snapshot
+  // shape already fixed in TicTacToeScreen and ColoringScreen. This ref
+  // advances SYNCHRONOUSLY alongside the state, so the second tap of a batch
+  // sees what the first one just did.
+  const selectedSlotRef = useRef<number | null>(null);
+  function updateSelectedSlot(next: number | null) {
+    selectedSlotRef.current = next;
+    setSelectedSlot(next);
+  }
   // The board's shape and crop rects depend on the ACTUAL picked photo's real
   // width/height (a portrait photo needs a tall board and tall piece shapes,
   // not a square one) - imageSize is null until Image.getSize resolves.
@@ -281,7 +294,10 @@ export function PuzzleScreen({
 
   function startPuzzle(count: PuzzleDifficulty) {
     setOrder(shufflePieceOrder(count));
-    setSelectedSlot(null);
+    // Via updateSelectedSlot (not setSelectedSlot) so the ref is cleared
+    // too: otherwise a tap batched behind Retry would swap against a slot
+    // "picked up" on the previous, now-discarded board.
+    updateSelectedSlot(null);
     // Fresh puzzle: clear the correctness baseline so the new shuffle's
     // starting layout (even if a slot happens to land correctly by chance)
     // never triggers the piece-snap pop — only real swaps made from here on
@@ -298,18 +314,27 @@ export function PuzzleScreen({
   }, []);
 
   function handleTapSlot(slotIndex: number) {
-    if (selectedSlot === null) {
-      setSelectedSlot(slotIndex);
+    const pickedUp = selectedSlotRef.current;
+    if (pickedUp === null) {
+      updateSelectedSlot(slotIndex);
       return;
     }
-    if (selectedSlot === slotIndex) {
-      setSelectedSlot(null);
+    if (pickedUp === slotIndex) {
+      updateSelectedSlot(null);
       return;
     }
-    const next = order.slice();
-    [next[selectedSlot], next[slotIndex]] = [next[slotIndex], next[selectedSlot]];
-    setOrder(next);
-    setSelectedSlot(null);
+    // Functional updater for the same batching reason as the ref above: two
+    // swaps queued from one batch must each apply on top of the previous
+    // one, not both rebuild the board from the same stale `order` (which
+    // silently threw the first swap away — the child taps four pieces and
+    // only the last pair moves).
+    setOrder((prev) => {
+      if (pickedUp >= prev.length || slotIndex >= prev.length) return prev;
+      const next = prev.slice();
+      [next[pickedUp], next[slotIndex]] = [next[slotIndex], next[pickedUp]];
+      return next;
+    });
+    updateSelectedSlot(null);
   }
 
   function handleRetryPuzzle() {

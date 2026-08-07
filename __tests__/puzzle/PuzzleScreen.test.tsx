@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image, AccessibilityInfo } from 'react-native';
-import { render, fireEvent, within, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, within, waitFor, act } from '@testing-library/react-native';
 import { PuzzleScreen } from '../../src/puzzle/PuzzleScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { computePuzzleBoardSize } from '../../src/puzzle/puzzleGrid';
@@ -110,6 +110,77 @@ describe('PuzzleScreen', () => {
     expect(after[1]).toBe(before[0]);
     expect(after[2]).toBe(before[2]);
     expect(after[3]).toBe(before[3]);
+  });
+
+  // Regression tests for the batched-tap class of bug already fixed in
+  // Tic-Tac-Toe (iteration 3) and Coloring (iteration 4): every tap handler
+  // here read `selectedSlot`/`order` out of the render its closure was
+  // created in, but React Native hands JS a BATCH of queued touch events at
+  // once. A 2-8 year old tapping two pieces in quick succession therefore
+  // ran both handlers against the same pre-update snapshot. Both taps are
+  // reproduced inside a single act(), which is exactly that batch.
+  describe('two taps delivered in a single batch (a child drumming on the board)', () => {
+    // React logs "overlapping act() calls" for the deliberately-nested act
+    // below — that nesting IS the batch being reproduced, so the warning is
+    // expected noise here rather than a signal.
+    function silenceOverlappingActWarning() {
+      return jest.spyOn(console, 'error').mockImplementation(() => {});
+    }
+
+    it('a batched pick-then-drop still performs the swap the child asked for', async () => {
+      const spy = silenceOverlappingActWarning();
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      const before = readOrder(getByTestId);
+      const slot0 = getByTestId('puzzle-slot-0');
+      const slot1 = getByTestId('puzzle-slot-1');
+      await act(async () => {
+        fireEvent.press(slot0);
+        fireEvent.press(slot1);
+      });
+
+      const after = readOrder(getByTestId);
+      expect(after[0]).toBe(before[1]);
+      expect(after[1]).toBe(before[0]);
+      expect(after[2]).toBe(before[2]);
+      expect(after[3]).toBe(before[3]);
+      // The pair completed, so nothing is left picked up.
+      expect(getByTestId('puzzle-slot-0').props.accessibilityState).toEqual({ selected: false });
+      spy.mockRestore();
+    });
+
+    it('a batched second swap does not silently undo the first one', async () => {
+      const spy = silenceOverlappingActWarning();
+      const utils = await renderPuzzleScreen();
+      await startFourPiecePuzzle(utils);
+      const { getByTestId } = utils;
+
+      const before = readOrder(getByTestId);
+
+      // Slot 0 is picked up first, on its own render. Then two further taps
+      // arrive in one batch: the first completes the 0<->1 swap, the second
+      // starts a brand new pick-up on slot 2.
+      await fireEvent.press(getByTestId('puzzle-slot-0'));
+      const slot1 = getByTestId('puzzle-slot-1');
+      const slot2 = getByTestId('puzzle-slot-2');
+      await act(async () => {
+        fireEvent.press(slot1);
+        fireEvent.press(slot2);
+      });
+
+      const after = readOrder(getByTestId);
+      // The 0<->1 swap must have survived...
+      expect(after[0]).toBe(before[1]);
+      expect(after[1]).toBe(before[0]);
+      expect(after[2]).toBe(before[2]);
+      expect(after[3]).toBe(before[3]);
+      // ...and the trailing tap is a fresh pick-up, not a second swap
+      // against the already-consumed selection.
+      expect(getByTestId('puzzle-slot-2').props.accessibilityState).toEqual({ selected: true });
+      spy.mockRestore();
+    });
   });
 
   // Selection-sorts the currently rendered order back to identity (0,1,2,3)
