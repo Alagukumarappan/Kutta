@@ -248,7 +248,11 @@ export function SettingsScreen({
       const uri = await requestFolderAccess();
       setPendingFolderUri(uri);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      // Translated, parent-readable message instead of the raw English
+      // exception text — same reasoning as OnboardingScreen's own copy of
+      // this handler.
+      console.warn('Folder picker failed', err);
+      Alert.alert(t('folderPickError'));
     } finally {
       pickingFolderRef.current = false;
     }

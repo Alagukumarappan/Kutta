@@ -104,7 +104,12 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
       const uri = await requestFolderAccess();
       setFolderUri(uri);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      // Never surface the raw exception: it is an English-only, technical
+      // SAF/Java message a German-speaking parent can neither read nor act
+      // on. `folderPickError` is the translated equivalent (it existed in
+      // strings.ts for exactly this and was simply never wired up).
+      console.warn('Folder picker failed', err);
+      Alert.alert(t('folderPickError'));
     } finally {
       pickingFolderRef.current = false;
     }
@@ -119,7 +124,8 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
       await saveProfile({ name: name.trim(), age, language, rootFolderUri: folderUri, pictureUri });
       onComplete();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      console.warn('Onboarding save failed', err);
+      Alert.alert(t('onboardingSaveError'));
     } finally {
       savingRef.current = false;
       setSaving(false);

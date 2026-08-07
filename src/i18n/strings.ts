@@ -69,6 +69,15 @@ export const UI_STRINGS = {
     en: 'Could not open the folder picker. Please try again.',
     de: 'Der Ordnerauswahldialog konnte nicht geöffnet werden. Bitte versuche es erneut.',
   },
+  // Onboarding's "Save" can fail on the folder-structure setup or the profile
+  // write itself (a revoked SAF grant, a full/unmounted volume). Like
+  // folderPickError above this replaces what used to be a raw, English-only
+  // `Alert.alert('Error', err.message)` — a technical exception string a
+  // German-speaking parent could neither read nor act on.
+  onboardingSaveError: {
+    en: "Setup couldn't be completed. Please try again.",
+    de: 'Die Einrichtung konnte nicht abgeschlossen werden. Bitte versuche es erneut.',
+  },
   emptyPictures: { en: 'No pictures yet — add some to the pictures folder!', de: 'Noch keine Bilder — füge welche zum Bilderordner hinzu!' },
   emptyVideos: { en: 'No videos yet — add some to the videos folder!', de: 'Noch keine Videos — füge welche zum Videoordner hinzu!' },
   emptyColoring: { en: 'No coloring pages yet — add some to the coloring folder!', de: 'Noch keine Malvorlagen — füge welche zum Malordner hinzu!' },

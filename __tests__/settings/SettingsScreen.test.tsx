@@ -421,19 +421,27 @@ describe('SettingsScreen', () => {
     );
   });
 
-  it('shows an error alert if picking a folder fails', async () => {
+  it('shows a TRANSLATED error alert if picking a folder fails, never the raw exception', async () => {
     (folderAccess.requestFolderAccess as jest.Mock).mockRejectedValue(new Error('picker unavailable'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     const { getByText, findByTestId } = await render(
-      <LanguageProvider initialLanguage="en">
+      <LanguageProvider initialLanguage="de">
         <SettingsScreen />
       </LanguageProvider>
     );
 
     await findByTestId('settings-loaded');
-    await fireEvent.press(getByText('Change content folder'));
+    await fireEvent.press(getByText('Inhaltsordner \u00e4ndern'));
 
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Error', 'picker unavailable'));
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Der Ordnerauswahldialog konnte nicht ge\u00f6ffnet werden. Bitte versuche es erneut.'
+      )
+    );
+    // The raw, English-only exception text must never reach a parent.
+    expect(Alert.alert).not.toHaveBeenCalledWith('Error', 'picker unavailable');
+    warnSpy.mockRestore();
   });
 
   // Regression test for a real bug fix: unlike OnboardingScreen's and

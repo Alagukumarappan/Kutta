@@ -155,7 +155,11 @@ function FolderErrorScreen({ profile, onRetry, onFolderChanged }: { profile: Pro
         onFolderChanged();
       }
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      // Translated, parent-readable message instead of the raw English
+      // exception text — same reasoning as Onboarding/Settings' own copies
+      // of this handler.
+      console.warn('Folder picker failed', err);
+      Alert.alert(t('folderPickError'));
     } finally {
       pickingRef.current = false;
       setPicking(false);

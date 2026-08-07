@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { OnboardingScreen } from '../../src/onboarding/OnboardingScreen';
@@ -36,6 +37,54 @@ async function selectAge(getByTestId: any, age: number) {
 describe('OnboardingScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  // Both failure paths on this screen used to show `Alert.alert('Error',
+  // err.message)` — an English-only heading plus a raw, technical SAF/Java
+  // exception string. A German-speaking parent could neither read nor act on
+  // it, on the very first screen of the app.
+  describe('failure alerts are translated, never the raw exception', () => {
+    it('uses the translated folder-picker message when the picker throws', async () => {
+      (folderAccess.requestFolderAccess as jest.Mock).mockRejectedValue(new Error('picker unavailable'));
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const { getByText } = await renderScreen(jest.fn(), 'de');
+      await fireEvent.press(getByText('Inhaltsordner w\u00e4hlen'));
+
+      await waitFor(() =>
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Der Ordnerauswahldialog konnte nicht ge\u00f6ffnet werden. Bitte versuche es erneut.'
+        )
+      );
+      expect(alertSpy).not.toHaveBeenCalledWith('Error', 'picker unavailable');
+      alertSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('uses the translated setup message when saving the profile throws', async () => {
+      (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
+      (folderAccess.ensureContentStructure as jest.Mock).mockResolvedValue(undefined);
+      (profileStore.saveProfile as jest.Mock).mockRejectedValue(new Error('disk full'));
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const { getByTestId, getByText } = await renderScreen(jest.fn(), 'de');
+      await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
+      await selectAge(getByTestId, 4);
+      await fireEvent.press(getByText('Inhaltsordner w\u00e4hlen'));
+      await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
+      await fireEvent.press(getByText('Speichern'));
+
+      await waitFor(() =>
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Die Einrichtung konnte nicht abgeschlossen werden. Bitte versuche es erneut.'
+        )
+      );
+      expect(alertSpy).not.toHaveBeenCalledWith('Error', 'disk full');
+      alertSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
   });
 
   // Regression test: this name is later rendered centered and unbounded on
