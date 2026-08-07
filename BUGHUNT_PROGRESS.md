@@ -20,7 +20,7 @@ architect and senior bug finder. make a clean way. max iterations of 40`.
    iterations find nothing substantive (diminishing returns — logged clearly
    rather than padded).
 
-**Iteration count: 2 / 40**
+**Iteration count: 3 / 40**
 
 ---
 
@@ -134,3 +134,72 @@ exposes no `takePersistableUriPermission` equivalent, and adding one would
 mean a new native dependency. After a reboot such a video may become
 unreadable; thanks to fix 2 the reference now survives rather than being
 destroyed, but the item will be hidden until access returns.
+
+---
+
+## Iteration 3 — the Tic-Tac-Toe activity end to end
+
+One genuine bug found and fixed; 49 suites / 686 tests green and
+`npx tsc --noEmit` clean.
+
+1. **A second tap could erase the child's first move.** Whose turn it was
+   lived in its own `currentPlayer` state, hand-updated next to every
+   `setBoard`, and each tap built the next board from the `board` of the
+   render its handler was created in. React Native hands JS a BATCH of
+   queued touch events at once, so two taps landing close together — a 2-8
+   year old drumming on the board, or a stray second finger — both ran
+   against that same pre-update render, and the second rebuilt the board
+   from the stale copy. The first tap's mark vanished completely: the child
+   tapped two squares and only the second one appeared, with the turn
+   indicator advancing as if only one move had happened. Whose turn it is
+   is not independent information (X always moves first and the players
+   strictly alternate), so it is now DERIVED from the board via a new pure
+   `playerToMove` in the engine, and both move paths apply inside a
+   functional `setBoard` updater that re-checks occupancy, game-over and
+   turn ownership against the very latest board. In computer mode that
+   ownership check also stops a batched second tap placing the COMPUTER's
+   mark for it (which would have let the child play both sides). Both cases
+   have regression tests that reproduce the batch inside a single `act()`
+   and were confirmed to fail without the fix.
+
+**Checked and found fine** (a real pass, not a shrug):
+
+- **Win/draw detection.** All 8 lines (3 rows, 3 columns, 2 diagonals) are
+  present and hand-verified in `WINNING_COMBINATIONS`; `checkWinner` /
+  `getWinningLine` use `some`+`every` over the full list, so no off-by-one
+  or missing line is possible. A full board with no line reports `draw` and
+  the overlay appears — no freeze, no crash.
+- **Computer AI.** `getComputerMove` can only ever return an index from
+  `getEmptyIndices`, so it can never target an occupied cell; it returns
+  `null` only on a full board (already game-over, so unreachable from the
+  turn effect). The three difficulties are genuinely different code paths
+  (random / 50-50 / full minimax), not cosmetic. The computer cannot move
+  twice or move after a win: its effect is gated on `!isGameOver` and on
+  the derived turn, and the pending timeout is cancelled on cleanup.
+  Timing: a worst-case first move on an empty board is ~550k minimax nodes,
+  which is milliseconds — not a UI freeze.
+- **Turn management.** `Math.random() < 0.5` is a genuine unseeded coin
+  flip, re-rolled on every Retry, and the chosen starter really does make
+  the first move — including the computer auto-opening the SECOND game
+  after Play Again (verified by driving it), which was the most plausible
+  "the game just sits there" stall.
+- **Friend mode names.** Both names are attributed through the single
+  `childMark` derivation, so they cannot swap mid-game or fall back to the
+  placeholder; the friend name is guaranteed non-empty and trimmed by the
+  setup screen, and the child name non-empty by onboarding.
+- **Navigation double-taps.** Start (`navLockRef` + re-arm), Play Again
+  (`retryFiredRef`) and Menu (`menuFiredRef`) are each guarded, and the
+  overlay unmounts synchronously on Retry so there is no fade-out window in
+  which a stray Menu tap could still fire.
+- **Board rendering.** Already uses the explicit 3-row pattern, not
+  `flexWrap` — immune to the column-count class of bug fixed in Puzzle and
+  Quiz, with a test asserting exactly 3 cells in each of 3 row containers.
+
+**Noted, not fixed (out of this iteration's scope):** the shared
+`CelebrationOverlay` renders a `Modal` with no `onRequestClose`, so the
+Android hardware back button does nothing while any activity's completion
+panel is up. Nobody is trapped (every use of it offers a Menu/exit action),
+but back silently doing nothing is inconsistent with the rest of the app.
+It affects Puzzle and Quiz identically, so it belongs to a design-system
+pass rather than a Tic-Tac-Toe one.
+
