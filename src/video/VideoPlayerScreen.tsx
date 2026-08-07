@@ -35,6 +35,29 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   // both count as still-loading, only 'readyToPlay' (or an error, which
   // takes over the screen entirely via the `error` branch below) clears it.
   const [loading, setLoading] = useState(true);
+  // ...but ONLY until the current source has genuinely loaded once.
+  // expo-video's `status` is not a "has this file loaded yet" flag — it
+  // mirrors the underlying native player's LIVE playback state, and both
+  // platforms routinely drop out of 'readyToPlay' during perfectly normal
+  // playback:
+  //   * Android maps ExoPlayer's STATE_BUFFERING to 'loading' — which is
+  //     what every seek/scrub on the native controls passes through — and,
+  //     critically, maps STATE_ENDED to 'idle'
+  //     (`playerStateToPlayerStatus` in expo-video's VideoPlayer.kt).
+  //   * iOS reports 'loading' whenever the playback buffer empties or a
+  //     rate change leaves it waiting (VideoPlayerObserver.swift).
+  // Because the `loading` branch below is an EARLY RETURN, treating those
+  // as "still loading" tore the VideoView — and the completion overlay,
+  // which is rendered after it — straight out of the tree. Two real,
+  // child-facing consequences: scrubbing blanked the video to a spinner
+  // mid-watch, and EVERY video that played to its end landed on a spinner
+  // that never went away (the end-of-playback 'idle' arrives right after
+  // `playToEnd`, so the celebration panel added earlier was never rendered
+  // at all, and no further statusChange was ever coming to clear it).
+  // A ref, not state: it must be readable by the very `statusChange`
+  // handler that would otherwise re-raise the spinner, with no re-render
+  // in between. Reset in handleRetry, which really does reload the source.
+  const hasLoadedRef = useRef(false);
   // Previously this screen gave a child NO feedback at all when a video
   // finished — it just sat on its last frame with native controls, unlike
   // every other activity (Quiz/Puzzle/Tic-Tac-Toe), which all celebrate a
@@ -54,14 +77,15 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   });
   // Same double-fire guard idiom as every other Retry/Next-style action in
   // this app (e.g. PuzzleScreen's retryFiredRef, QuizScreen's
-  // playAgainFiredRef): handleRetry backs BOTH the error-state Retry button
-  // and the celebration's "Watch Again" action, so without this a rapid
-  // double-tap could fire it twice in the same render before `error`/
-  // `finished` flip back to false. Both underlying calls (player.replace +
-  // player.play) are idempotent, so a double-fire was never destructive
-  // here — this is purely a consistency fix, matching the guarded shape
-  // every other Retry-style button in the app already has. Re-armed
-  // whenever a fresh error or a fresh finish makes the button reappear.
+  // playAgainFiredRef). Shared by the error-state Retry button and the
+  // celebration's "Watch Again" action — the two are never on screen at the
+  // same time — so without this a rapid double-tap could fire one twice in
+  // the same render before `error`/`finished` flip back to false. Every
+  // underlying call (player.replace / currentTime / play) is idempotent, so
+  // a double-fire was never destructive here — this is purely a consistency
+  // fix, matching the guarded shape every other Retry-style button in the
+  // app already has. Re-armed whenever a fresh error or a fresh finish
+  // makes the button reappear.
   const retryFiredRef = useRef(false);
 
   useEffect(() => {
@@ -83,7 +107,15 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
         setLoading(false);
         return;
       }
-      setLoading(status !== 'readyToPlay');
+      if (status === 'readyToPlay') {
+        hasLoadedRef.current = true;
+        setLoading(false);
+        return;
+      }
+      // 'idle' / 'loading': only a first-load signal. Once this source has
+      // been ready once, these are ordinary mid-playback transitions
+      // (seek, re-buffer, reached the end) and must NOT blank the screen.
+      setLoading(!hasLoadedRef.current);
     }
     applyStatus(player.status);
     const subscription = player.addListener('statusChange', ({ status }) => applyStatus(status));
@@ -115,10 +147,33 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     // mount, so the loading spinner should reappear until a new
     // `statusChange` reports the result — otherwise a stale `loading:false`
     // from before the retry could briefly show the (now-invalid) old frame.
+    // Clearing the latch alongside it is what re-arms the spinner for the
+    // genuinely-fresh load this is about to start (see hasLoadedRef above).
+    hasLoadedRef.current = false;
     setLoading(true);
     player.replace(videoUri);
     player.play();
   }, [player, videoUri]);
+
+  // "Watch Again" is NOT the same operation as the error-state Retry, and
+  // used to share it. Re-running `replace` re-loads the whole file from
+  // scratch even though the player already holds it: the child sat through
+  // the loading spinner a second time, and on iOS `VideoPlayer.replace` is
+  // explicitly documented (and warned about, on every single call, in
+  // expo-video's own JS wrapper) as loading the asset SYNCHRONOUSLY on the
+  // main thread — a UI freeze proportional to the file size, on the one
+  // button a 2-8 year old is most likely to hit over and over. The source
+  // is already loaded and known-good here (this action only exists once the
+  // video played through to its end), so replaying is just a seek back to
+  // the start plus play — instant, and it deliberately leaves hasLoadedRef
+  // set so no spinner flashes over a video that never stopped being ready.
+  const handleWatchAgain = useCallback(() => {
+    if (retryFiredRef.current) return;
+    retryFiredRef.current = true;
+    setFinished(false);
+    player.currentTime = 0;
+    player.play();
+  }, [player]);
 
   // Dismisses the completion panel without touching playback — see the
   // onRequestClose comment on <CelebrationOverlay> below for why back needs
@@ -218,7 +273,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
         // overlay, don't do anything destructive, second press exits"
         // convention QuestionRenderer's feedback modal follows.
         onRequestClose={handleDismissFinished}
-        actions={[{ label: t('videoWatchAgain'), onPress: handleRetry, testID: 'video-watch-again' }]}
+        actions={[{ label: t('videoWatchAgain'), onPress: handleWatchAgain, testID: 'video-watch-again' }]}
       />
     </View>
   );

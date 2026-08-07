@@ -20,6 +20,10 @@ interface MockVideoPlayer {
   play: jest.Mock;
   replace: jest.Mock;
   addListener: jest.Mock;
+  // Real expo-video players expose `currentTime` as a settable property —
+  // assigning to it seeks. "Watch Again" uses it to replay an already-loaded
+  // video instead of reloading the whole source.
+  currentTime: number;
   // Real expo-video players expose this as a synchronous, readable getter —
   // the screen now reads it once up front (see VideoPlayerScreen.tsx's own
   // comment on why) to avoid missing a status that already settled before
@@ -38,6 +42,7 @@ jest.mock('expo-video', () => {
   const mockPlayer: MockVideoPlayer = {
     play: jest.fn(),
     replace: jest.fn(),
+    currentTime: 0,
     status: 'idle',
     addListener: jest.fn((event: string, cb: Listener) => {
       if (!listenersByEvent.has(event)) listenersByEvent.set(event, new Set());
@@ -84,6 +89,7 @@ describe('VideoPlayerScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     __mockPlayer.status = 'idle';
+    __mockPlayer.currentTime = 0;
   });
 
   it('renders the video view when playback is healthy', async () => {
@@ -221,6 +227,31 @@ describe('VideoPlayerScreen', () => {
     expect(queryByTestId('video-player-loading')).toBeNull();
   });
 
+  // Companion to the "idle" test above: expo-video's status mirrors the
+  // LIVE native playback state, so it also drops back to 'loading' for
+  // ordinary mid-playback events — Android maps ExoPlayer's STATE_BUFFERING
+  // to 'loading' (which every seek/scrub on the native controls passes
+  // through) and iOS reports it whenever the playback buffer empties.
+  // Because the loading branch is an early return, a child dragging the
+  // native scrubber used to watch the whole video vanish behind a spinner.
+  it('keeps the video on screen when playback re-buffers (or the child scrubs) after it has already loaded once', async () => {
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await emitReady();
+    await findByTestId('video-view');
+
+    await act(async () => {
+      __mockPlayer.emit('statusChange', { status: 'loading' });
+    });
+
+    await findByTestId('video-view');
+    expect(queryByTestId('video-player-loading')).toBeNull();
+  });
+
   it('shows a friendly localized message (never a raw technical error) when the player reports a status error', async () => {
     const { findByText, findByTestId, queryByText } = await render(
       <LanguageProvider initialLanguage="en">
@@ -263,6 +294,35 @@ describe('VideoPlayerScreen', () => {
     await emitReady();
     await findByTestId('video-view');
     expect(queryByTestId('video-player-error')).toBeNull();
+  });
+
+  // The "already loaded once" latch that keeps a mid-playback re-buffer from
+  // blanking the screen must NOT survive a real reload: Retry calls
+  // `player.replace`, which starts the source over from nothing, so the
+  // spinner has to come back rather than leaving the child looking at a
+  // frame from the source that just failed.
+  it('shows the spinner again after Retry, even though the video had already loaded once before it failed', async () => {
+    const { findByTestId, findByLabelText, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await emitReady();
+    await findByTestId('video-view');
+
+    await act(async () => {
+      __mockPlayer.emit('statusChange', { status: 'error' });
+    });
+    await findByTestId('video-player-error');
+
+    await fireEvent.press(await findByLabelText('Retry'));
+
+    await findByTestId('video-player-loading');
+    expect(queryByTestId('video-view')).toBeNull();
+
+    await emitReady();
+    await findByTestId('video-view');
   });
 
   // Regression test for the premium-polish consistency pass: handleRetry
@@ -325,7 +385,43 @@ describe('VideoPlayerScreen', () => {
       await findByText('Watch Again');
     });
 
-    it('"Watch Again" replays the same video and dismisses the celebration', async () => {
+    // Regression test for iteration 9, the worst bug in this feature: on
+    // Android the END of playback is reported as status 'idle'
+    // (ExoPlayer's STATE_ENDED -> IDLE in expo-video's own
+    // playerStateToPlayerStatus), delivered right after `playToEnd`. The
+    // screen treated any non-'readyToPlay' status as "still loading" and
+    // the loading branch is an EARLY RETURN, so every video that ran to its
+    // end swapped itself for a spinner that never went away — and the
+    // celebration panel, which is rendered AFTER that early return, never
+    // appeared at all. No "Watch Again", no celebration, and no further
+    // statusChange ever coming to clear the spinner.
+    it('shows the celebration (not a stuck spinner) when the end of playback is reported as an "idle" status', async () => {
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <VideoPlayerScreen videoUri={VIDEO_URI} />
+        </LanguageProvider>
+      );
+
+      await emitReady();
+      await findByTestId('video-view');
+
+      await act(async () => {
+        __mockPlayer.emit('playToEnd');
+        __mockPlayer.emit('statusChange', { status: 'idle' });
+      });
+
+      await findByTestId('video-finished');
+      await findByTestId('video-view');
+      expect(queryByTestId('video-player-loading')).toBeNull();
+    });
+
+    // "Watch Again" deliberately does NOT go through `player.replace`: the
+    // source is already loaded and known-good at this point, so reloading it
+    // made the child sit through the loading spinner a second time and, on
+    // iOS, blocked the main thread while the asset was re-read (expo-video's
+    // own JS wrapper warns about exactly that on every `replace` call).
+    // Replaying is a seek back to the start plus play.
+    it('"Watch Again" replays the same video from the start (without reloading the source) and dismisses the celebration', async () => {
       const { findByTestId, findByLabelText, queryByTestId } = await render(
         <LanguageProvider initialLanguage="en">
           <VideoPlayerScreen videoUri={VIDEO_URI} />
@@ -337,12 +433,18 @@ describe('VideoPlayerScreen', () => {
         __mockPlayer.emit('playToEnd');
       });
       await findByTestId('video-finished');
+      __mockPlayer.currentTime = 42;
 
       await fireEvent.press(await findByLabelText('Watch Again'));
 
-      expect(__mockPlayer.replace).toHaveBeenCalledWith(VIDEO_URI);
+      expect(__mockPlayer.currentTime).toBe(0);
       expect(__mockPlayer.play).toHaveBeenCalled();
+      expect(__mockPlayer.replace).not.toHaveBeenCalled();
       expect(queryByTestId('video-finished')).toBeNull();
+      // ...and no spinner flashes over a player that never stopped being
+      // ready — the video view stays on screen throughout.
+      await findByTestId('video-view');
+      expect(queryByTestId('video-player-loading')).toBeNull();
     });
 
     // Regression test for iteration 8: the shared CelebrationOverlay's Modal
