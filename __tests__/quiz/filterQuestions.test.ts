@@ -1,4 +1,7 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { filterQuestionsByAge } from '../../src/quiz/filterQuestions';
+import { AGE_OPTIONS } from '../../src/components/AgePicker';
 import type { Question } from '../../src/types/quiz';
 
 function q(id: string, minAge: number, maxAge: number): Question {
@@ -31,5 +34,23 @@ describe('filterQuestionsByAge', () => {
 
   it('returns an empty array when nothing matches', () => {
     expect(filterQuestionsByAge([q('too-old', 6, 8)], 3)).toEqual([]);
+  });
+
+  // Regression test for iteration 6: every band in the shipped sample content
+  // was authored as a single year (minAge === maxAge === 2..7), but
+  // AgePicker offers 2..8 — so a parent who chose the app's OWN maximum age
+  // got zero eligible questions and the Quiz activity sat on its "no quiz
+  // questions yet" empty state forever, with nothing on screen explaining
+  // why. The per-minAge tally scripts/validate-sample-quiz-content.js printed
+  // looked perfectly healthy the whole time, which is why this asserts the
+  // real inclusive eligibility rule instead.
+  describe('shipped sample content', () => {
+    const sampleQuestions: Question[] = JSON.parse(
+      readFileSync(join(__dirname, '../../sample-content/quiz/questions.json'), 'utf8')
+    ).questions;
+
+    it.each(AGE_OPTIONS)('has eligible questions for a %i year old', (age) => {
+      expect(filterQuestionsByAge(sampleQuestions, age).length).toBeGreaterThan(0);
+    });
   });
 });

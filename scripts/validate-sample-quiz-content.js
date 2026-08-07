@@ -6,6 +6,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Inclusive [min, max] age range src/components/AgePicker.tsx offers.
+const SELECTABLE_AGES = [2, 8];
+
 function isBilingualText(v) {
   return typeof v === 'object' && v !== null && typeof v.en === 'string' && typeof v.de === 'string';
 }
@@ -95,6 +98,23 @@ function main() {
   console.log(`\nChecked ${parsed.questions.length} questions.`);
   console.log('Per age (minAge):', perAgeCount);
   console.log(`Unique ids: ${ids.size} / ${parsed.questions.length}`);
+
+  // Coverage across every age a parent can actually SELECT, using the same
+  // inclusive minAge<=age<=maxAge rule src/quiz/filterQuestions.ts applies —
+  // not the per-minAge tally above, which looked healthy while age 8 (the
+  // AgePicker's own maximum) matched nothing at all and the Quiz activity
+  // was permanently stuck on its "no quiz questions yet" empty state.
+  console.log('\nEligible per selectable age (minAge <= age <= maxAge):');
+  let uncovered = 0;
+  for (let age = SELECTABLE_AGES[0]; age <= SELECTABLE_AGES[1]; age++) {
+    const eligible = parsed.questions.filter((q) => age >= q.minAge && age <= q.maxAge).length;
+    console.log(`  age ${age}: ${eligible}`);
+    if (eligible === 0) {
+      uncovered++;
+      console.error(`FAIL: age ${age} is selectable in AgePicker but has no eligible questions`);
+    }
+  }
+  if (uncovered > 0) failCount += uncovered;
 
   if (failCount > 0) {
     console.error(`\n${failCount} question(s) FAILED validation.`);

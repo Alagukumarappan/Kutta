@@ -5,7 +5,11 @@ import { colors as dsColors, radii as dsRadii, elevation as dsElevation } from '
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 
-const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
+// Exported so content checks can assert against the ages a parent can
+// actually pick, rather than re-declaring the range and drifting from it —
+// exactly how the shipped quiz content came to cover only 2-7 while this
+// picker offered 8 (see __tests__/quiz/filterQuestions.test.ts).
+export const AGE_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 
 // Shared age-selection control used by both Onboarding and Settings, so a
 // parent sees the exact same picker interaction wherever a child's age is

@@ -1,13 +1,29 @@
 #!/usr/bin/env node
 // Generates sample-content/quiz/questions.json: 120 starter quiz questions
-// (20 per age, ages 2-7) for the Kutta app. Ages 2-4 are image-only
-// "match the picture" questions using bundled Twemoji icons (CC-BY 4.0).
-// Ages 5-7 are bilingual (en/de) text questions: simple math + general
-// knowledge, scaled in difficulty by age. This is starter/example content —
-// parents can edit, add to, or delete any of it once copied onto the device.
+// (20 per authored age band, ages 2-7) for the Kutta app. Ages 2-4 are
+// image-only "match the picture" questions using bundled Twemoji icons
+// (CC-BY 4.0). Ages 5-7 are bilingual (en/de) text questions: simple math +
+// general knowledge, scaled in difficulty by age. This is starter/example
+// content — parents can edit, add to, or delete any of it once copied onto
+// the device.
 
 const fs = require('fs');
 const path = require('path');
+
+// The oldest age src/components/AgePicker.tsx lets a parent choose. Every
+// band below is authored for exactly one year (minAge === maxAge === age)
+// EXCEPT the topmost one, which has to stay open to the ceiling: without
+// that, a parent who picked the app's own maximum age got zero eligible
+// questions out of filterQuestionsByAge and the Quiz activity showed the
+// "no quiz questions yet" empty state forever, with nothing on screen
+// explaining why. scripts/validate-sample-quiz-content.js now asserts every
+// selectable age has content so this can't silently come back.
+const OLDEST_SUPPORTED_AGE = 8;
+const OLDEST_AUTHORED_AGE = 7;
+
+function maxAgeFor(age) {
+  return age === OLDEST_AUTHORED_AGE ? OLDEST_SUPPORTED_AGE : age;
+}
 
 // Every image question/option combines the picture with its bilingual name —
 // this doubles as early word-recognition (pairing the shape of a word with
@@ -87,7 +103,7 @@ function buildImageQuestions(age, rng) {
       id: `age${age}-img-${String(i + 1).padStart(2, '0')}`,
       category: 'image',
       minAge: age,
-      maxAge: age,
+      maxAge: maxAgeFor(age),
       question: {
         image: imagePath(target.key),
         text: { en: `What is this?`, de: `Was ist das?` },
@@ -109,7 +125,7 @@ function textQuestion(idPrefix, index, age, questionText, options, correctIndex)
     id: `${idPrefix}-${String(index).padStart(2, '0')}`,
     category: 'text',
     minAge: age,
-    maxAge: age,
+    maxAge: maxAgeFor(age),
     question: { text: questionText },
     options: options.map((text, i) => ({ id: optionIds[i], text })),
     correctOptionId: optionIds[correctIndex],

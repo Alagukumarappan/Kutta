@@ -4604,7 +4604,7 @@
       "id": "age7-math-01",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 4 x 5?",
@@ -4647,7 +4647,7 @@
       "id": "age7-math-02",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 8 - 2?",
@@ -4690,7 +4690,7 @@
       "id": "age7-math-03",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 11 + 10?",
@@ -4733,7 +4733,7 @@
       "id": "age7-math-04",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 7 - 6?",
@@ -4776,7 +4776,7 @@
       "id": "age7-math-05",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 9 + 11?",
@@ -4819,7 +4819,7 @@
       "id": "age7-math-06",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 11 - 4?",
@@ -4862,7 +4862,7 @@
       "id": "age7-math-07",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 2 + 1?",
@@ -4905,7 +4905,7 @@
       "id": "age7-math-08",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 2 + 11?",
@@ -4948,7 +4948,7 @@
       "id": "age7-math-09",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 10 + 10?",
@@ -4991,7 +4991,7 @@
       "id": "age7-math-10",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is 9 - 6?",
@@ -5034,7 +5034,7 @@
       "id": "age7-gk-01",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is the capital of Germany?",
@@ -5077,7 +5077,7 @@
       "id": "age7-gk-02",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "How many continents are there?",
@@ -5120,7 +5120,7 @@
       "id": "age7-gk-03",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What gas do humans breathe in to live?",
@@ -5163,7 +5163,7 @@
       "id": "age7-gk-04",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "Which organ pumps blood through your body?",
@@ -5206,7 +5206,7 @@
       "id": "age7-gk-05",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What do caterpillars turn into?",
@@ -5249,7 +5249,7 @@
       "id": "age7-gk-06",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "How many hours are in a day?",
@@ -5292,7 +5292,7 @@
       "id": "age7-gk-07",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What is the tallest animal in the world?",
@@ -5335,7 +5335,7 @@
       "id": "age7-gk-08",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "Which shape has no corners?",
@@ -5378,7 +5378,7 @@
       "id": "age7-gk-09",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "What do we call water falling from the sky?",
@@ -5421,7 +5421,7 @@
       "id": "age7-gk-10",
       "category": "text",
       "minAge": 7,
-      "maxAge": 7,
+      "maxAge": 8,
       "question": {
         "text": {
           "en": "Which meal do you usually eat in the morning?",
