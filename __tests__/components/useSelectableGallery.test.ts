@@ -52,6 +52,35 @@ describe('useSelectableGallery', () => {
     expect(result.current.error).toBe(false);
   });
 
+  // 'camera' content has no whole-folder SAF counterpart -- every camera
+  // photo is an individually-added reference, so there's nothing to list.
+  it('skips the SAF folder listing entirely and uses only references when no folderUri is given', async () => {
+    (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockResolvedValue(['file:///data/app/kutta-added/1.jpg']);
+
+    const { result } = await renderHook(() => useSelectableGallery(undefined, 'camera', isImageFile), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+
+    expect(result.current.items).toEqual(['file:///data/app/kutta-added/1.jpg']);
+    expect(result.current.error).toBe(false);
+    expect(FileSystem.StorageAccessFramework.readDirectoryAsync).not.toHaveBeenCalled();
+  });
+
+  it('never shows an error screen just because there is no folder, even if references fail to load too', async () => {
+    (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockRejectedValue(new Error('storage unavailable'));
+
+    const { result } = await renderHook(() => useSelectableGallery(undefined, 'camera', isImageFile), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+
+    expect(result.current.items).toEqual([]);
+    expect(result.current.error).toBe(false);
+  });
+
   it('calls onItemsLoaded with the merged item list once loading succeeds', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue(['content://a.png']);
     (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockResolvedValue([]);

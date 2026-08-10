@@ -14,7 +14,12 @@ import { removeGalleryItems } from '../storage/galleryRemoval';
 // copy, and state transition below is identical to what each gallery's own
 // pre-extraction copy did.
 export function useSelectableGallery(
-  folderUri: string,
+  // Optional: 'camera' content has no whole-folder SAF counterpart at all
+  // (there's nothing for a parent to pre-populate) — every camera photo is
+  // an individually-added reference, so there's no folder to list. When
+  // omitted, the folder-listing half below is skipped entirely and the
+  // gallery is just whatever the reference side returns.
+  folderUri: string | undefined,
   contentType: FileReferenceContentType,
   isValidFile: (uri: string) => boolean,
   onItemsLoaded?: (uris: string[]) => void
@@ -51,9 +56,11 @@ export function useSelectableGallery(
     // exists in the normal header, away with it. So the error screen is now
     // only shown when there is genuinely nothing to show.
     Promise.allSettled([
-      FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri).then((entries: string[]) =>
-        entries.filter(isValidFile)
-      ),
+      folderUri
+        ? FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri).then((entries: string[]) =>
+            entries.filter(isValidFile)
+          )
+        : Promise.resolve([] as string[]),
       // Files the parent added individually via AddFilesButton.
       pruneMissingFileReferences(contentType),
     ]).then(([folderResult, extraResult]) => {
