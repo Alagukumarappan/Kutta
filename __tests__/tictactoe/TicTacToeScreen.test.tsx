@@ -177,6 +177,30 @@ describe('TicTacToeScreen', () => {
       expect(onMenu).toHaveBeenCalledTimes(1);
     });
 
+    // Regression test: the game-over panel's 'X' used to reuse the same
+    // onRequestClose wiring as Android back, so tapping it silently
+    // navigated back to the setup screen instead of just closing the panel.
+    it("closes the game-over panel via its 'X' without calling onMenu or resetting the board", async () => {
+      const onMenu = jest.fn();
+      const { getByTestId, findByTestId, queryByTestId } = await renderGame({ mode: 'friend', onMenu });
+
+      await fireEvent.press(getByTestId('tictactoe-cell-0'));
+      await fireEvent.press(getByTestId('tictactoe-cell-3'));
+      await fireEvent.press(getByTestId('tictactoe-cell-1'));
+      await fireEvent.press(getByTestId('tictactoe-cell-4'));
+      await fireEvent.press(getByTestId('tictactoe-cell-2'));
+
+      await findByTestId('tictactoe-complete');
+      await fireEvent.press(getByTestId('celebration-overlay-close'));
+
+      expect(queryByTestId('tictactoe-complete')).toBeNull();
+      expect(onMenu).not.toHaveBeenCalled();
+      // The finished board underneath is untouched.
+      expect(cellValue(queryByTestId, 0)).toBe('X');
+      expect(cellValue(queryByTestId, 1)).toBe('X');
+      expect(cellValue(queryByTestId, 2)).toBe('X');
+    });
+
     it('declares a draw when the board fills with no winner', async () => {
       const { getByTestId, findByTestId } = await renderGame({ mode: 'friend' });
 

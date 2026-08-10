@@ -213,11 +213,18 @@ export function PuzzleScreen({
   // (re)solved, so Retry/Next still work the next time the overlay appears.
   const retryFiredRef = useRef(false);
   const nextFiredRef = useRef(false);
+  // Tracks whether the parent dismissed the completion panel with its 'X'
+  // (not Retry/Next) — that's a "just close this, stay right here" action,
+  // never a navigation, so it must NOT re-run onNext/onRetry's real
+  // side effects. Re-arms whenever the puzzle is freshly (re)solved, same
+  // as the two refs above.
+  const [overlayDismissed, setOverlayDismissed] = useState(false);
 
   useEffect(() => {
     if (isSolved) {
       retryFiredRef.current = false;
       nextFiredRef.current = false;
+      setOverlayDismissed(false);
     }
   }, [isSolved]);
 
@@ -499,7 +506,7 @@ export function PuzzleScreen({
           are completely unchanged — only which component renders the
           message/buttons has moved. */}
       <CelebrationOverlay
-        visible={isSolved}
+        visible={isSolved && !overlayDismissed}
         tone="success"
         emoji="🎉"
         title={t('puzzleComplete')}
@@ -512,6 +519,12 @@ export function PuzzleScreen({
         // Deliberately NOT Retry, which would reshuffle the solved board and
         // make back read as "undo what I just did".
         onRequestClose={handleNextPuzzle}
+        // The visible 'X' does something DIFFERENT from back: it only hides
+        // this panel and leaves the child looking at their solved puzzle —
+        // no navigation to the gallery, no reshuffle. `visible` above
+        // already ANDs in `!overlayDismissed`, so setting it true is the
+        // entire behavior.
+        onClose={() => setOverlayDismissed(true)}
         closeLabel={t('close')}
         actions={[
           { label: t('retry'), onPress: handleRetryPuzzle, variant: 'secondary', testID: 'puzzle-retry' },

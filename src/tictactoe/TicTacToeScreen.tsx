@@ -89,10 +89,16 @@ export function TicTacToeScreen({
   // idiom as PuzzleScreen's retryFiredRef/nextFiredRef.
   const retryFiredRef = useRef(false);
   const menuFiredRef = useRef(false);
+  // Tracks whether the parent dismissed the game-over panel with its 'X'
+  // (not Play Again/Change Setup) — that's a "just close this, stay right
+  // here" action, never a navigation back to setup. Re-arms whenever the
+  // game is freshly over, same as the two refs above.
+  const [overlayDismissed, setOverlayDismissed] = useState(false);
   useEffect(() => {
     if (isGameOver) {
       retryFiredRef.current = false;
       menuFiredRef.current = false;
+      setOverlayDismissed(false);
     }
   }, [isGameOver]);
 
@@ -312,7 +318,7 @@ export function TicTacToeScreen({
       </View>
 
       <CelebrationOverlay
-        visible={isGameOver}
+        visible={isGameOver && !overlayDismissed}
         tone={isCelebratoryWin ? 'success' : 'neutral'}
         emoji={isCelebratoryWin ? '🎉' : undefined}
         title={statusText()}
@@ -324,6 +330,11 @@ export function TicTacToeScreen({
         // headerShown:false screen with no Modal covering it. The game is
         // already over, so nothing is lost by leaving.
         onRequestClose={handleMenu}
+        // The visible 'X' does something DIFFERENT from back: it only hides
+        // this panel and leaves the child looking at their finished board —
+        // no navigation back to setup. `visible` above already ANDs in
+        // `!overlayDismissed`, so setting it true is the entire behavior.
+        onClose={() => setOverlayDismissed(true)}
         closeLabel={t('close')}
         actions={[
           { label: t('tictactoePlayAgain'), onPress: handleRetry, testID: 'tictactoe-retry' },

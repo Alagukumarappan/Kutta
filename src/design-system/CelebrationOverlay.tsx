@@ -37,6 +37,7 @@ export function CelebrationOverlay({
   message,
   actions = [],
   onRequestClose,
+  onClose,
   closeLabel = 'Close',
   testID = 'celebration-overlay',
 }: {
@@ -63,6 +64,16 @@ export function CelebrationOverlay({
   // "leave this panel" action is — the same convention QuestionRenderer's
   // feedback modal already follows.
   onRequestClose: () => void;
+  // The visible 'X' button's own action -- deliberately NOT the same thing
+  // as onRequestClose above. onRequestClose is "the non-destructive leave-
+  // this-panel action" for hosts where back genuinely leaving is correct
+  // (Puzzle -> next puzzle, Tic-Tac-Toe -> back to setup) — but a visible
+  // close icon reads to anyone as "just dismiss this," not "and also
+  // navigate somewhere." Required for the same reason onRequestClose is:
+  // a future host must decide deliberately what "just close" means for it
+  // (usually toggling a local `visible` flag), not inherit onRequestClose's
+  // navigation by omission.
+  onClose: () => void;
   // This component never imports i18n itself (every other piece of text
   // here — title/message/action labels — arrives already translated from
   // the caller); this follows the same contract. Callers should pass
@@ -198,7 +209,7 @@ export function CelebrationOverlay({
 
             <Pressable
               testID="celebration-overlay-close"
-              onPress={() => fireExit(onRequestClose)}
+              onPress={() => fireExit(onClose)}
               accessibilityRole="button"
               accessibilityLabel={closeLabel}
               style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}

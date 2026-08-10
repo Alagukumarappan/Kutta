@@ -5,13 +5,13 @@ import { CelebrationOverlay } from '../../src/design-system/CelebrationOverlay';
 
 describe('CelebrationOverlay', () => {
   it('renders nothing when not visible', async () => {
-    const { queryByTestId } = await render(<CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Nice!" />);
+    const { queryByTestId } = await render(<CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible={false} title="Nice!" />);
     expect(queryByTestId('celebration-overlay')).toBeNull();
   });
 
   it('shows the title, message, and celebration bubble when visible with tone="success"', async () => {
     const { getByText, getByTestId } = await render(
-      <CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
     );
     expect(getByText('Great job!')).toBeTruthy();
     expect(getByText('You finished the puzzle')).toBeTruthy();
@@ -21,7 +21,7 @@ describe('CelebrationOverlay', () => {
 
   it('does not render the celebration bubble for tone="neutral"', async () => {
     const { queryByTestId } = await render(
-      <CelebrationOverlay onRequestClose={jest.fn()} visible title="No pictures yet" emoji="🖼️" tone="neutral" />
+      <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="No pictures yet" emoji="🖼️" tone="neutral" />
     );
     expect(queryByTestId('celebration-bubble')).toBeNull();
   });
@@ -35,7 +35,7 @@ describe('CelebrationOverlay', () => {
   // dialog appeared at all.
   it('marks the card as a modal and gives the title an announcing role', async () => {
     const { getByText, getByTestId } = await render(
-      <CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
     );
 
     const titleNode = getByText('Great job!');
@@ -55,7 +55,7 @@ describe('CelebrationOverlay', () => {
     const announceSpy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
 
     const { rerender } = await render(
-      <CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+      <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible={false} title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
     );
     // Other tests in this file mount visible celebration overlays whose
     // effects can still be flushing async work when this test starts, so
@@ -65,7 +65,7 @@ describe('CelebrationOverlay', () => {
 
     await act(async () => {
       rerender(
-        <CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
+        <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="Great job!" message="You finished the puzzle" emoji="🎉" tone="success" />
       );
     });
 
@@ -78,7 +78,7 @@ describe('CelebrationOverlay', () => {
     const onSecondary = jest.fn();
     const { getByText } = await render(
       <CelebrationOverlay
-        onRequestClose={jest.fn()}
+        onRequestClose={jest.fn()} onClose={jest.fn()}
         visible
         title="All done"
         actions={[
@@ -97,7 +97,7 @@ describe('CelebrationOverlay', () => {
     const onSecondary = jest.fn();
     const { getByText } = await render(
       <CelebrationOverlay
-        onRequestClose={jest.fn()}
+        onRequestClose={jest.fn()} onClose={jest.fn()}
         visible
         title="All done"
         actions={[
@@ -129,7 +129,7 @@ describe('CelebrationOverlay', () => {
     const onSecondary = jest.fn();
     const { getByText } = await render(
       <CelebrationOverlay
-        onRequestClose={jest.fn()}
+        onRequestClose={jest.fn()} onClose={jest.fn()}
         visible
         title="All done"
         actions={[
@@ -152,20 +152,27 @@ describe('CelebrationOverlay', () => {
   });
 
   describe('close (X) button', () => {
-    it('calls onRequestClose when pressed', async () => {
+    // Regression test: the X used to call onRequestClose, the SAME
+    // navigating action Android back/the actions use — on Puzzle/Tic-Tac-Toe
+    // that meant tapping the visible close icon silently navigated away
+    // (next puzzle / back to setup) instead of just dismissing the panel.
+    // It must call ONLY onClose, never onRequestClose.
+    it('calls onClose (not onRequestClose) when pressed', async () => {
       const onRequestClose = jest.fn();
+      const onClose = jest.fn();
       const { getByTestId } = await render(
-        <CelebrationOverlay onRequestClose={onRequestClose} visible title="All done" />
+        <CelebrationOverlay onRequestClose={onRequestClose} onClose={onClose} visible title="All done" />
       );
 
       await fireEvent.press(getByTestId('celebration-overlay-close'));
 
-      expect(onRequestClose).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onRequestClose).not.toHaveBeenCalled();
     });
 
     it('has an accessible label', async () => {
       const { getByTestId } = await render(
-        <CelebrationOverlay onRequestClose={jest.fn()} visible title="All done" closeLabel="Close" />
+        <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="All done" closeLabel="Close" />
       );
 
       const closeButton = getByTestId('celebration-overlay-close');
@@ -174,11 +181,11 @@ describe('CelebrationOverlay', () => {
     });
 
     it('shares the same one-exit-only latch as the action buttons', async () => {
-      const onRequestClose = jest.fn();
+      const onClose = jest.fn();
       const onPrimary = jest.fn();
       const { getByTestId, getByText } = await render(
         <CelebrationOverlay
-          onRequestClose={onRequestClose}
+          onRequestClose={jest.fn()} onClose={onClose}
           visible
           title="All done"
           actions={[{ label: 'Play Again', onPress: onPrimary }]}
@@ -190,7 +197,7 @@ describe('CelebrationOverlay', () => {
         fireEvent.press(getByText('Play Again'));
       });
 
-      expect(onRequestClose).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
       expect(onPrimary).not.toHaveBeenCalled();
     });
   });
@@ -205,7 +212,7 @@ describe('CelebrationOverlay', () => {
     const onPrimary = jest.fn();
     const { getByTestId, getByText } = await render(
       <CelebrationOverlay
-        onRequestClose={onRequestClose}
+        onRequestClose={onRequestClose} onClose={jest.fn()}
         visible
         title="All done"
         testID="celebration-overlay"
@@ -235,7 +242,7 @@ describe('CelebrationOverlay', () => {
     const onPrimary = jest.fn();
     const overlay = (visible: boolean) => (
       <CelebrationOverlay
-        onRequestClose={jest.fn()}
+        onRequestClose={jest.fn()} onClose={jest.fn()}
         visible={visible}
         title="All done"
         actions={[{ label: 'Play Again', onPress: onPrimary }]}
@@ -261,7 +268,7 @@ describe('CelebrationOverlay', () => {
 
   it('stops its animations and unmounts cleanly', async () => {
     jest.useFakeTimers();
-    const { unmount } = await render(<CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
+    const { unmount } = await render(<CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
 
     await act(async () => {
       jest.advanceTimersByTime(300);
@@ -293,10 +300,10 @@ describe('CelebrationOverlay', () => {
       const timingSpy = jest.spyOn(Animated, 'timing');
 
       const { rerender } = await render(
-        <CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Great job!" emoji="🎉" tone="success" />
+        <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible={false} title="Great job!" emoji="🎉" tone="success" />
       );
       await act(async () => {
-        rerender(<CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
+        rerender(<CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
       });
 
       expect(springSpy).not.toHaveBeenCalled();
@@ -308,10 +315,10 @@ describe('CelebrationOverlay', () => {
       const springSpy = jest.spyOn(Animated, 'spring');
 
       const { rerender } = await render(
-        <CelebrationOverlay onRequestClose={jest.fn()} visible={false} title="Great job!" emoji="🎉" tone="success" />
+        <CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible={false} title="Great job!" emoji="🎉" tone="success" />
       );
       await act(async () => {
-        rerender(<CelebrationOverlay onRequestClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
+        rerender(<CelebrationOverlay onRequestClose={jest.fn()} onClose={jest.fn()} visible title="Great job!" emoji="🎉" tone="success" />);
       });
 
       expect(springSpy).toHaveBeenCalled();

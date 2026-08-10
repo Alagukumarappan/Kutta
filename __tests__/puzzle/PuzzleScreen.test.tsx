@@ -346,6 +346,29 @@ describe('PuzzleScreen', () => {
       expect(onNext).toHaveBeenCalledTimes(1);
     });
 
+    // Regression test: the completion panel's 'X' used to reuse the same
+    // onRequestClose wiring as Android back, so tapping it silently
+    // navigated to the next puzzle instead of just closing the panel.
+    it("closes the completion panel via its 'X' without calling onNext or reshuffling", async () => {
+      const onNext = jest.fn();
+      const utils = await render(
+        <LanguageProvider initialLanguage="en">
+          <PuzzleScreen imageUri={IMAGE_URI} pieceCount={4} onNext={onNext} />
+        </LanguageProvider>
+      );
+      await startFourPiecePuzzle(utils);
+      await solveFourPiecePuzzle(utils);
+
+      const solvedOrder = readOrder(utils.getByTestId);
+      await fireEvent.press(utils.getByTestId('celebration-overlay-close'));
+
+      expect(utils.queryByTestId('puzzle-complete')).toBeNull();
+      expect(onNext).not.toHaveBeenCalled();
+      // The board underneath is untouched -- still the same solved order,
+      // not reshuffled.
+      expect(readOrder(utils.getByTestId)).toEqual(solvedOrder);
+    });
+
     it('guards Next against a rapid double-press, only calling onNext once', async () => {
       const onNext = jest.fn();
       const utils = await render(

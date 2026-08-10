@@ -292,6 +292,9 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
         // overlay, don't do anything destructive, second press exits"
         // convention QuestionRenderer's feedback modal follows.
         onRequestClose={handleDismissFinished}
+        // Already exactly "just close this panel, do nothing else" -- the
+        // same function back already uses, reused as-is for the 'X'.
+        onClose={handleDismissFinished}
         closeLabel={t('close')}
         actions={[{ label: t('videoWatchAgain'), onPress: handleWatchAgain, testID: 'video-watch-again' }]}
       />
