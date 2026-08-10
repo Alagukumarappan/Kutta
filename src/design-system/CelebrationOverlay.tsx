@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   Animated,
   Modal,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -36,6 +37,7 @@ export function CelebrationOverlay({
   message,
   actions = [],
   onRequestClose,
+  closeLabel = 'Close',
   testID = 'celebration-overlay',
 }: {
   visible: boolean;
@@ -61,6 +63,12 @@ export function CelebrationOverlay({
   // "leave this panel" action is — the same convention QuestionRenderer's
   // feedback modal already follows.
   onRequestClose: () => void;
+  // This component never imports i18n itself (every other piece of text
+  // here — title/message/action labels — arrives already translated from
+  // the caller); this follows the same contract. Callers should pass
+  // `t('close')` for a bilingual label. Defaults to a plain English string
+  // only so existing untranslated call sites/tests keep working.
+  closeLabel?: string;
   testID?: string;
 }) {
   const reducedMotion = useReducedMotion();
@@ -188,6 +196,17 @@ export function CelebrationOverlay({
           <View style={styles.cardClip}>
             <SurfaceWash tint={washTint} shade={washShade} />
 
+            <Pressable
+              testID="celebration-overlay-close"
+              onPress={() => fireExit(onRequestClose)}
+              accessibilityRole="button"
+              accessibilityLabel={closeLabel}
+              style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </Pressable>
+
             {tone === 'success' && emoji && (
               <Animated.View
                 testID="celebration-bubble"
@@ -251,6 +270,27 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     maxWidth: 440,
     width: '100%',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...elevation.level1,
+  },
+  closeButtonPressed: {
+    opacity: 0.7,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.inkMuted,
   },
   cardClip: {
     backgroundColor: colors.surface,

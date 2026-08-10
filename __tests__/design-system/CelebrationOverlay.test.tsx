@@ -151,6 +151,50 @@ describe('CelebrationOverlay', () => {
     expect(onSecondary).not.toHaveBeenCalled();
   });
 
+  describe('close (X) button', () => {
+    it('calls onRequestClose when pressed', async () => {
+      const onRequestClose = jest.fn();
+      const { getByTestId } = await render(
+        <CelebrationOverlay onRequestClose={onRequestClose} visible title="All done" />
+      );
+
+      await fireEvent.press(getByTestId('celebration-overlay-close'));
+
+      expect(onRequestClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('has an accessible label', async () => {
+      const { getByTestId } = await render(
+        <CelebrationOverlay onRequestClose={jest.fn()} visible title="All done" closeLabel="Close" />
+      );
+
+      const closeButton = getByTestId('celebration-overlay-close');
+      expect(closeButton.props.accessibilityRole).toBe('button');
+      expect(closeButton.props.accessibilityLabel).toBe('Close');
+    });
+
+    it('shares the same one-exit-only latch as the action buttons', async () => {
+      const onRequestClose = jest.fn();
+      const onPrimary = jest.fn();
+      const { getByTestId, getByText } = await render(
+        <CelebrationOverlay
+          onRequestClose={onRequestClose}
+          visible
+          title="All done"
+          actions={[{ label: 'Play Again', onPress: onPrimary }]}
+        />
+      );
+
+      await act(async () => {
+        fireEvent.press(getByTestId('celebration-overlay-close'));
+        fireEvent.press(getByText('Play Again'));
+      });
+
+      expect(onRequestClose).toHaveBeenCalledTimes(1);
+      expect(onPrimary).not.toHaveBeenCalled();
+    });
+  });
+
   // Regression test for iteration 8: this Modal had no onRequestClose at
   // all, so Android's hardware/gesture back was captured by the modal's own
   // window and silently dropped on EVERY activity's completion panel

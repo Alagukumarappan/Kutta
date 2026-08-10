@@ -510,6 +510,7 @@ export function PuzzleScreen({
         // Deliberately NOT Retry, which would reshuffle the solved board and
         // make back read as "undo what I just did".
         onRequestClose={handleNextPuzzle}
+        closeLabel={t('close')}
         actions={[
           { label: t('retry'), onPress: handleRetryPuzzle, variant: 'secondary', testID: 'puzzle-retry' },
           { label: t('quizNext'), onPress: handleNextPuzzle, testID: 'puzzle-next' },

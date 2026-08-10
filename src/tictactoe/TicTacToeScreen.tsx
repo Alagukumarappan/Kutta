@@ -302,6 +302,7 @@ export function TicTacToeScreen({
         // headerShown:false screen with no Modal covering it. The game is
         // already over, so nothing is lost by leaving.
         onRequestClose={handleMenu}
+        closeLabel={t('close')}
         actions={[
           { label: t('tictactoePlayAgain'), onPress: handleRetry, testID: 'tictactoe-retry' },
           { label: t('tictactoeChangeSetup'), onPress: handleMenu, variant: 'secondary', testID: 'tictactoe-menu' },
