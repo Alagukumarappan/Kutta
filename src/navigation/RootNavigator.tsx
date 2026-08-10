@@ -22,6 +22,7 @@ import { PuzzleGallery } from '../puzzle/PuzzleGallery';
 import { PuzzleScreen } from '../puzzle/PuzzleScreen';
 import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { VideoGallery } from '../video/VideoGallery';
+import { CameraGallery } from '../camera/CameraGallery';
 import { VideoPlayerScreen } from '../video/VideoPlayerScreen';
 import { SplashScreen } from '../splash/SplashScreen';
 import { TicTacToeSetupScreen, type TicTacToeMode } from '../tictactoe/TicTacToeSetupScreen';
@@ -72,6 +73,7 @@ export type RootStackParamList = {
   'video-detail': { videoUri: string };
   tictactoe: undefined;
   'tictactoe-game': { mode: TicTacToeMode; difficulty: TicTacToeDifficulty | null; friendName?: string };
+  camera: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -342,6 +344,9 @@ function AppStack({
             onMenu={() => navigation.goBack()}
           />
         )}
+      </Stack.Screen>
+      <Stack.Screen name="camera" options={{ headerShown: false, title: titleFor('homeCamera') }}>
+        {() => <CameraGallery />}
       </Stack.Screen>
     </Stack.Navigator>
   );
