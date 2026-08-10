@@ -226,54 +226,58 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
             </View>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>{t('settingsProfilePicture')}</Text>
-            <View style={styles.pictureRow}>
-              {pictureUri && !previewFailed ? (
-                <Image
-                  testID="onboarding-picture-preview"
-                  source={{ uri: pictureUri }}
-                  style={styles.picturePreview}
-                  accessibilityLabel={t('settingsProfilePicture')}
-                  onError={() => setPreviewFailed(true)}
-                />
-              ) : (
-                <View testID="onboarding-picture-placeholder" style={styles.picturePlaceholder}>
-                  <Text style={styles.picturePlaceholderText}>{(name.trim().charAt(0) || '?').toUpperCase()}</Text>
-                </View>
-              )}
+          <View style={styles.row}>
+            <View style={[styles.card, styles.halfCard]}>
+              <Text style={styles.label}>{t('settingsProfilePicture')}</Text>
+              <View style={styles.pictureRow}>
+                {pictureUri && !previewFailed ? (
+                  <Image
+                    testID="onboarding-picture-preview"
+                    source={{ uri: pictureUri }}
+                    style={styles.picturePreview}
+                    accessibilityLabel={t('settingsProfilePicture')}
+                    onError={() => setPreviewFailed(true)}
+                  />
+                ) : (
+                  <View testID="onboarding-picture-placeholder" style={styles.picturePlaceholder}>
+                    <Text style={styles.picturePlaceholderText}>{(name.trim().charAt(0) || '?').toUpperCase()}</Text>
+                  </View>
+                )}
 
-              <View style={styles.pictureButtons}>
-                <Pressable
-                  testID="onboarding-picture-picker"
-                  onPress={() => {
-                    setPreviewFailed(false);
-                    setPictureModalVisible(true);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('profilePictureChoose')}
-                  style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
-                  hitSlop={{ top: 6, bottom: 6 }}
-                >
-                  <Text style={styles.choosePictureButtonText}>{t('profilePictureChoose')}</Text>
-                </Pressable>
-                {pictureUri && (
+                <View style={styles.pictureButtons}>
                   <Pressable
-                    testID="onboarding-picture-remove"
-                    onPress={() => setPictureUri(undefined)}
+                    testID="onboarding-picture-picker"
+                    onPress={() => {
+                      setPreviewFailed(false);
+                      setPictureModalVisible(true);
+                    }}
                     accessibilityRole="button"
-                    accessibilityLabel={t('profilePictureRemove')}
-                    style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
+                    accessibilityLabel={t('profilePictureChoose')}
+                    style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
                     hitSlop={{ top: 6, bottom: 6 }}
                   >
-                    <Text style={styles.removePictureButtonText}>{t('profilePictureRemove')}</Text>
+                    <Text style={styles.choosePictureButtonText}>{t('profilePictureChoose')}</Text>
                   </Pressable>
-                )}
+                  {pictureUri && (
+                    <Pressable
+                      testID="onboarding-picture-remove"
+                      onPress={() => setPictureUri(undefined)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profilePictureRemove')}
+                      style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                    >
+                      <Text style={styles.removePictureButtonText}>{t('profilePictureRemove')}</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             </View>
-          </View>
 
-          <MusicSettingsSection />
+            <View style={styles.halfCard}>
+              <MusicSettingsSection />
+            </View>
+          </View>
 
           <Pressable
             testID="onboarding-save-button"

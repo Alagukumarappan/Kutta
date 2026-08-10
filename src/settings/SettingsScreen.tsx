@@ -563,51 +563,55 @@ export function SettingsScreen({
             </View>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>{t('settingsProfilePicture')}</Text>
-            <View style={styles.pictureRow}>
-              {profile.pictureUri && !previewFailed ? (
-                <Image
-                  testID="settings-picture-preview"
-                  source={{ uri: profile.pictureUri }}
-                  style={styles.picturePreview}
-                  accessibilityLabel={t('settingsProfilePicture')}
-                  onError={() => setPreviewFailed(true)}
-                />
-              ) : (
-                <View testID="settings-picture-placeholder" style={styles.picturePlaceholder} />
-              )}
+          <View style={styles.row}>
+            <View style={[styles.card, styles.halfCard]}>
+              <Text style={styles.label}>{t('settingsProfilePicture')}</Text>
+              <View style={styles.pictureRow}>
+                {profile.pictureUri && !previewFailed ? (
+                  <Image
+                    testID="settings-picture-preview"
+                    source={{ uri: profile.pictureUri }}
+                    style={styles.picturePreview}
+                    accessibilityLabel={t('settingsProfilePicture')}
+                    onError={() => setPreviewFailed(true)}
+                  />
+                ) : (
+                  <View testID="settings-picture-placeholder" style={styles.picturePlaceholder} />
+                )}
 
-              <View style={styles.pictureButtons}>
-                {picturesFolderUri && (
-                  <Pressable
-                    testID="settings-picture-choose"
-                    onPress={handleChoosePicture}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('profilePictureChoose')}
-                    style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
-                    hitSlop={{ top: 6, bottom: 6 }}
-                  >
-                    <Text style={styles.choosePictureButtonText}>{t('profilePictureChoose')}</Text>
-                  </Pressable>
-                )}
-                {profile.pictureUri && (
-                  <Pressable
-                    testID="settings-picture-remove"
-                    onPress={handleRemovePicture}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('profilePictureRemove')}
-                    style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
-                    hitSlop={{ top: 6, bottom: 6 }}
-                  >
-                    <Text style={styles.removePictureButtonText}>{t('profilePictureRemove')}</Text>
-                  </Pressable>
-                )}
+                <View style={styles.pictureButtons}>
+                  {picturesFolderUri && (
+                    <Pressable
+                      testID="settings-picture-choose"
+                      onPress={handleChoosePicture}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profilePictureChoose')}
+                      style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                    >
+                      <Text style={styles.choosePictureButtonText}>{t('profilePictureChoose')}</Text>
+                    </Pressable>
+                  )}
+                  {profile.pictureUri && (
+                    <Pressable
+                      testID="settings-picture-remove"
+                      onPress={handleRemovePicture}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profilePictureRemove')}
+                      style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                    >
+                      <Text style={styles.removePictureButtonText}>{t('profilePictureRemove')}</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             </View>
-          </View>
 
-          <MusicSettingsSection />
+            <View style={styles.halfCard}>
+              <MusicSettingsSection />
+            </View>
+          </View>
 
           {migrating && (
             <FadeInBanner style={styles.infoBanner}>
