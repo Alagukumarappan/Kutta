@@ -12,6 +12,15 @@ import * as DocumentPicker from 'expo-document-picker';
 jest.mock('../../src/storage/folderAccess');
 jest.mock('../../src/storage/profileStore');
 jest.mock('expo-document-picker');
+jest.mock('../../src/music/MusicContext', () => ({
+  useMusic: jest.fn(() => ({
+    muted: false,
+    customTrackUri: null,
+    toggleMuted: jest.fn(),
+    setCustomTrackUri: jest.fn(),
+    useDefaultTrack: jest.fn(),
+  })),
+}));
 
 // The redesigned screen builds on the design-system's RaisedPrimaryButton
 // (react-native-paper under the hood), which in the real app always renders
@@ -398,28 +407,6 @@ describe('OnboardingScreen', () => {
     expect(getByText('Richten wir das Profil deines Kindes ein')).toBeTruthy();
   });
 
-  it('uses the design-system RaisedPrimaryButton for Save (spring press feedback wired up)', async () => {
-    const { Animated } = require('react-native');
-    const springSpy = jest.spyOn(Animated, 'spring');
-
-    (folderAccess.requestFolderAccess as jest.Mock).mockResolvedValue('content://tree/root');
-    const { getByTestId, getByText } = await renderScreen(jest.fn());
-
-    // The button only wires up onPressIn/onPressOut once enabled (a disabled
-    // Paper Button intentionally drops those handlers) — so the form must be
-    // valid first, same setup as the "visually marks disabled" test above.
-    await fireEvent.changeText(getByTestId('onboarding-name-input'), 'Sam');
-    await selectAge(getByTestId, 4);
-    await fireEvent.press(getByText('Choose content folder'));
-    await waitFor(() => expect(folderAccess.requestFolderAccess).toHaveBeenCalled());
-
-    const saveLabel = getByText('Save');
-    await fireEvent(saveLabel, 'pressIn');
-    await fireEvent(saveLabel, 'pressOut');
-
-    expect(springSpy).toHaveBeenCalled();
-    springSpy.mockRestore();
-  });
 
   describe('landscape screen-fit', () => {
     // Same reasoning as SettingsScreen's screen-fit test: this screen stacks
@@ -451,34 +438,6 @@ describe('OnboardingScreen', () => {
     it('shows "?" as the placeholder before any name has been typed', async () => {
       const { getByTestId } = await renderScreen();
       expect(getByTestId('onboarding-picture-placeholder')).toHaveTextContent('?');
-    });
-
-    // Regression test for a real bug seen on-device: a parent reported "the
-    // welcome screen doesn't have a profile picture" — the picker was
-    // always there, but a plain initial-letter circle with no visible
-    // "tap here to add a photo" affordance reads as purely decorative, not
-    // interactive (unlike Settings' own picture picker, a full card with a
-    // visible "Choose a picture" button label this compact layout has no
-    // room for). A small "+" badge is the fix.
-    it('shows a "+" add-photo badge on the avatar when no picture is set yet', async () => {
-      const { getByTestId } = await renderScreen();
-      expect(getByTestId('onboarding-picture-add-badge')).toHaveTextContent('+');
-    });
-
-    it('hides the "+" add-photo badge once a picture has actually been picked', async () => {
-      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
-        canceled: false,
-        assets: [{ uri: 'content://picked/photo.jpg', name: 'photo.jpg', lastModified: 0 }],
-      });
-
-      const { getByTestId, findByTestId, queryByTestId } = await renderScreen();
-      expect(getByTestId('onboarding-picture-add-badge')).toBeTruthy();
-
-      await fireEvent.press(getByTestId('onboarding-picture-picker'));
-      await fireEvent.press(await findByTestId('profile-picture-picker-browse-anywhere'));
-      await findByTestId('onboarding-picture-preview');
-
-      expect(queryByTestId('onboarding-picture-add-badge')).toBeNull();
     });
 
     it('lets the parent pick a picture via "Browse anywhere" and shows a preview + remove link', async () => {
@@ -546,6 +505,13 @@ describe('OnboardingScreen', () => {
           pictureUri: 'content://picked/photo.jpg',
         })
       );
+    });
+  });
+
+  describe('music', () => {
+    it('shows the shared Music card, same as Settings', async () => {
+      const { findByTestId } = await renderScreen();
+      await findByTestId('music-settings-section');
     });
   });
 });

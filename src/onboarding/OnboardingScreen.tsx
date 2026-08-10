@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, Image, Alert, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { TextInput } from 'react-native-paper';
+import { View, Text, Image, Alert, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import { PaperProvider, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestFolderAccess, ensureContentStructure } from '../storage/folderAccess';
@@ -9,50 +9,36 @@ import { toReadableFolderPath } from '../storage/folderPathDisplay';
 import { AgePicker } from '../components/AgePicker';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { ProfilePicturePicker } from '../settings/ProfilePicturePicker';
+import { MusicSettingsSection } from '../settings/MusicSettingsSection';
 import {
   colors,
   radii,
   spacing,
+  elevation,
   typography,
-  RaisedCard,
-  RaisedPrimaryButton,
-  AnimatedPressable,
+  parentPaperTheme,
   withAlpha,
   GradientScreenBackground,
 } from '../design-system';
 
-// This first-launch screen is where a parent sets a child's profile up —
-// redesigned onto the new design-system (RaisedCard/RaisedPrimaryButton/
-// AnimatedPressable) per REDESIGN_PROGRESS.md's iteration for Onboarding.
-// All behavior (validation, folder picker invocation, language switching,
-// save flow, error alerts) is unchanged from the original screen — only the
-// visual presentation moved from flat bordered boxes to layered, "lifted
-// paper" cards with the new candy/aurora palette.
-//
-// The language pills and the folder-picker button deliberately stay as
-// AnimatedPressable (not the Paper-backed RaisedPrimaryButton/
-// RaisedSecondaryButton) rather than converting every control to a Paper
-// button: AnimatedPressable exposes a raw `hitSlop` prop, which these two
-// controls need to comfortably clear the 48dp touch-target guideline given
-// their compact chip sizing, matching the touch-target-audit precedent
-// already established for these two controls (and SettingsScreen's
-// identically-styled pair). The Save button, this screen's single biggest
-// and most consequential action, uses the full RaisedPrimaryButton instead —
-// its size='large' preset already clears touchTarget.primaryCTA (64dp) on
-// its own, no hitSlop trick required.
-// Same length-cap idiom as TicTacToeSetupScreen's friend-name field
-// (quality-evolution iteration 18): this name is later rendered centered
-// and unbounded on TicTacToeScreen's statusText and the shared
-// CelebrationOverlay's completion title, neither of which truncates or
-// scrolls — an arbitrarily long name could push those layouts off-screen.
+// Full visual match with SettingsScreen (per an explicit design decision,
+// not just matching field order): same PaperProvider/parentPaperTheme, same
+// plain card/label/button styling, same field grouping (Name+Age row,
+// Language+Folder row, a full-width Profile Picture card, then Save) —
+// Onboarding no longer carries its own separate playful RaisedCard/
+// AnimatedPressable presentation. All BEHAVIOR (validation, folder-picker
+// invocation, language switching, the save flow, error alerts) is
+// unchanged from the previous version — only the presentation and field
+// grouping moved. The inline avatar-in-the-name-row is gone entirely — the
+// profile picture is now its own full-width card, exactly like Settings'.
 const CHILD_NAME_MAX_LENGTH = 20;
 
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { t, language, setLanguage } = useLanguage();
   // Rendered directly (not inside a Stack.Screen), so there's no native
-  // header ever — this screen has to reserve its own safe-area insets, same
-  // as every other landscape screen (Home, Settings), so a side notch or
-  // gesture-nav bar never covers content.
+  // header ever — this screen has to reserve its own safe-area insets
+  // (including insets.top, unlike Settings' headerShown:true screen) so a
+  // side notch or gesture-nav bar never covers content.
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [age, setAge] = useState<number | null>(null);
@@ -69,6 +55,10 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [pictureUri, setPictureUri] = useState<string | undefined>(undefined);
   const [pictureModalVisible, setPictureModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  // Same stale-preview guard as SettingsScreen's own previewFailed — a
+  // failure recorded against an OLD uri must never keep hiding a preview
+  // for a newly-picked one.
+  const [previewFailed, setPreviewFailed] = useState(false);
 
   function handleNameChange(text: string) {
     setName(text.slice(0, CHILD_NAME_MAX_LENGTH));
@@ -133,211 +123,200 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <GradientScreenBackground style={styles.outer}>
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={[
-        styles.screen,
-        {
-          paddingTop: spacing.sm + insets.top,
-          paddingLeft: spacing.sm + insets.left,
-          paddingRight: spacing.sm + insets.right,
-          paddingBottom: spacing.sm + insets.bottom,
-        },
-      ]}
-      /* Without this, the first tap on Save (or on the age/language/folder
-         controls) while the name keyboard is still up is swallowed purely to
-         dismiss the keyboard, so a parent has to tap twice and the first tap
-         looks like the app ignored them. */
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.brandBadge}>🐾</Text>
-      <Text style={styles.title}>{t('onboardingTitle')}</Text>
-      <Text style={styles.subtitle}>{t('onboardingSubtitle')}</Text>
+    <PaperProvider theme={parentPaperTheme}>
+      <GradientScreenBackground style={styles.outer}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.screen,
+            {
+              paddingTop: spacing.sm + insets.top,
+              paddingLeft: spacing.sm + insets.left,
+              paddingRight: spacing.sm + insets.right,
+              paddingBottom: spacing.sm + insets.bottom,
+            },
+          ]}
+          /* Without this, the first tap on Save (or on the age/language/folder
+             controls) while the name keyboard is still up is swallowed purely to
+             dismiss the keyboard, so a parent has to tap twice and the first tap
+             looks like the app ignored them. */
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.title}>{t('onboardingTitle')}</Text>
+          <Text style={styles.subtitle}>{t('onboardingSubtitle')}</Text>
 
-      <View style={styles.row}>
-        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
-          <View style={styles.cardContent}>
-            <Text style={styles.label}>{t('onboardingName')}</Text>
-            <View style={styles.nameRow}>
-              <AnimatedPressable
-                testID="onboarding-picture-picker"
-                onPress={() => setPictureModalVisible(true)}
-                tilt="compact"
-                style={styles.avatarOuter}
-                innerStyle={styles.avatarButton}
-                accessibilityLabel={t('profilePictureChoose')}
-              >
-                {pictureUri ? (
-                  <Image
-                    testID="onboarding-picture-preview"
-                    source={{ uri: pictureUri }}
-                    style={styles.avatarImage}
-                    onError={() => setPictureUri(undefined)}
-                  />
-                ) : (
-                  <Text testID="onboarding-picture-placeholder" style={styles.avatarPlaceholderText}>
-                    {(name.trim().charAt(0) || '?').toUpperCase()}
+          <View style={styles.row}>
+            <View style={[styles.card, styles.halfCard]}>
+              <TextInput
+                mode="outlined"
+                dense
+                label={t('onboardingName')}
+                testID="onboarding-name-input"
+                value={name}
+                onChangeText={handleNameChange}
+                maxLength={CHILD_NAME_MAX_LENGTH}
+                style={styles.textInput}
+              />
+              {!nameValid && (
+                <Text testID="onboarding-name-error" style={styles.fieldError}>
+                  ⚠ {t('onboardingNameMissing')}
+                </Text>
+              )}
+            </View>
+
+            <View style={[styles.card, styles.halfCard]}>
+              <Text style={styles.label}>{t('onboardingAge')}</Text>
+              <AgePicker
+                value={age}
+                onChange={setAge}
+                visible={ageModalVisible}
+                onOpen={() => setAgeModalVisible(true)}
+                onClose={() => setAgeModalVisible(false)}
+                placeholder={t('onboardingSelectAge')}
+                testIDPrefix="onboarding-age"
+              />
+              {!ageValid && (
+                <Text testID="onboarding-age-error" style={styles.fieldError}>
+                  ⚠ {t('onboardingAgeMissing')}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={[styles.card, styles.halfCard]}>
+              <Text style={styles.label}>{t('onboardingLanguage')}</Text>
+              <LanguageSelector
+                value={language}
+                onChange={(next) => setLanguage(next)}
+                visible={languageModalVisible}
+                onOpen={() => setLanguageModalVisible(true)}
+                onClose={() => setLanguageModalVisible(false)}
+                testIDPrefix="onboarding-lang"
+                variant="parent"
+              />
+            </View>
+
+            <View style={[styles.card, styles.halfCard]}>
+              <Text style={styles.label}>{t('settingsFolder')}</Text>
+              {folderUri && (
+                <View style={styles.folderStatus}>
+                  <Text style={styles.folderStatusMark}>{'✓'}</Text>
+                  <Text testID="onboarding-folder-picked" style={styles.folderStatusText} numberOfLines={1}>
+                    {toReadableFolderPath(folderUri)}
                   </Text>
-                )}
-                {/* A plain initial-letter circle reads as decorative, not
-                    tappable — unlike Settings' own picture picker (a full
-                    card with a visible "Choose a picture" button label),
-                    this one has no room for a text label at this compact
-                    size. A small "+" badge is the same minimal, widely
-                    understood affordance most apps use for "tap to add a
-                    photo", without needing extra layout space. */}
-                {!pictureUri && (
-                  <View testID="onboarding-picture-add-badge" style={styles.avatarAddBadge}>
-                    <Text style={styles.avatarAddBadgeText}>+</Text>
-                  </View>
-                )}
-              </AnimatedPressable>
-              <View style={styles.nameInputColumn}>
-                {/* No `label` prop here (unlike Settings' equivalent name
-                    field): the styles.label Text above this whole row
-                    already serves as this card's heading for BOTH the
-                    avatar picker and this input together, matching the
-                    Age/Language cards' own external-label pattern in the
-                    same row — giving this TextInput its own duplicate
-                    floating label would double up on that heading without
-                    covering the avatar it also labels. mode="outlined" +
-                    dense still gets the polished animated border and
-                    correctly themed focus state from the nice
-                    outlined style, just keyed off the existing
-                    placeholder instead of a label. */}
-                <TextInput
-                  mode="outlined"
-                  dense
-                  testID="onboarding-name-input"
-                  value={name}
-                  onChangeText={handleNameChange}
-                  maxLength={CHILD_NAME_MAX_LENGTH}
-                  placeholder="Name"
-                  outlineColor={nameValid ? colors.bubblegumDark : colors.line}
-                  activeOutlineColor={colors.bubblegumDark}
-                  style={[styles.textInput, nameValid && styles.textInputFilled]}
+                </View>
+              )}
+              <Pressable
+                testID="onboarding-folder-picker"
+                onPress={handlePickFolder}
+                accessibilityRole="button"
+                accessibilityLabel={t('onboardingPickFolder')}
+                style={({ pressed }) => [styles.folderButton, pressed && styles.pressedSubtle]}
+                hitSlop={{ top: 8, bottom: 8 }}
+              >
+                <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
+              </Pressable>
+              {!folderValid && (
+                <Text testID="onboarding-folder-error" style={styles.fieldError}>
+                  ⚠ {t('onboardingFolderMissing')}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.label}>{t('settingsProfilePicture')}</Text>
+            <View style={styles.pictureRow}>
+              {pictureUri && !previewFailed ? (
+                <Image
+                  testID="onboarding-picture-preview"
+                  source={{ uri: pictureUri }}
+                  style={styles.picturePreview}
+                  accessibilityLabel={t('settingsProfilePicture')}
+                  onError={() => setPreviewFailed(true)}
                 />
+              ) : (
+                <View testID="onboarding-picture-placeholder" style={styles.picturePlaceholder}>
+                  <Text style={styles.picturePlaceholderText}>{(name.trim().charAt(0) || '?').toUpperCase()}</Text>
+                </View>
+              )}
+
+              <View style={styles.pictureButtons}>
+                <Pressable
+                  testID="onboarding-picture-picker"
+                  onPress={() => {
+                    setPreviewFailed(false);
+                    setPictureModalVisible(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profilePictureChoose')}
+                  style={({ pressed }) => [styles.choosePictureButton, pressed && styles.pressedSubtle]}
+                  hitSlop={{ top: 6, bottom: 6 }}
+                >
+                  <Text style={styles.choosePictureButtonText}>{t('profilePictureChoose')}</Text>
+                </Pressable>
                 {pictureUri && (
-                  <Text
+                  <Pressable
                     testID="onboarding-picture-remove"
                     onPress={() => setPictureUri(undefined)}
-                    style={styles.removePictureLink}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profilePictureRemove')}
+                    style={({ pressed }) => [styles.removePictureButton, pressed && styles.pressedSubtle]}
+                    hitSlop={{ top: 6, bottom: 6 }}
                   >
-                    {t('profilePictureRemove')}
-                  </Text>
+                    <Text style={styles.removePictureButtonText}>{t('profilePictureRemove')}</Text>
+                  </Pressable>
                 )}
               </View>
             </View>
-            {!nameValid && (
-              <Text testID="onboarding-name-error" style={styles.fieldError}>
-                ⚠ {t('onboardingNameMissing')}
-              </Text>
-            )}
           </View>
-        </RaisedCard>
 
-        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
-          <View style={styles.cardContent}>
-            <Text style={styles.label}>{t('onboardingAge')}</Text>
-            <AgePicker
-              value={age}
-              onChange={setAge}
-              visible={ageModalVisible}
-              onOpen={() => setAgeModalVisible(true)}
-              onClose={() => setAgeModalVisible(false)}
-              placeholder={t('onboardingSelectAge')}
-              testIDPrefix="onboarding-age"
-              variant="playful"
-            />
-            {!ageValid && (
-              <Text testID="onboarding-age-error" style={styles.fieldError}>
-                ⚠ {t('onboardingAgeMissing')}
-              </Text>
-            )}
-          </View>
-        </RaisedCard>
-      </View>
+          <MusicSettingsSection />
 
-      <View style={styles.row}>
-        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
-          <View style={styles.cardContent}>
-            <Text style={styles.label}>{t('onboardingLanguage')}</Text>
-            <LanguageSelector
-              value={language}
-              onChange={(next) => setLanguage(next)}
-              visible={languageModalVisible}
-              onOpen={() => setLanguageModalVisible(true)}
-              onClose={() => setLanguageModalVisible(false)}
-              testIDPrefix="onboarding-lang"
-              variant="playful"
-            />
-          </View>
-        </RaisedCard>
-
-        <RaisedCard color={colors.surface} borderColor={colors.line} style={styles.halfCard} elevationLevel="level2">
-          <View style={styles.cardContent}>
-            <AnimatedPressable
-              testID="onboarding-folder-picker"
-              onPress={handlePickFolder}
-              tilt="compact"
-              hitSlop={{ top: 6, bottom: 6 }}
-              style={styles.folderButtonOuter}
-              innerStyle={styles.folderButton}
+          <Pressable
+            testID="onboarding-save-button"
+            onPress={handleSave}
+            disabled={saveDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={t('onboardingSave')}
+            style={({ pressed }) => [
+              styles.saveButton,
+              saveDisabled ? styles.saveButtonDisabled : styles.saveButtonEnabled,
+              pressed && !saveDisabled && styles.pressedSubtle,
+            ]}
+          >
+            <Text
+              style={[styles.saveButtonText, saveDisabled ? styles.saveButtonTextDisabled : styles.saveButtonTextEnabled]}
             >
-              <Text style={styles.folderButtonText}>{t('onboardingPickFolder')}</Text>
-            </AnimatedPressable>
-            {folderUri && (
-              <View style={styles.folderConfirm}>
-                <Text style={styles.folderConfirmCheck}>✓</Text>
-                <Text testID="onboarding-folder-picked" style={styles.folderConfirmText}>
-                  {toReadableFolderPath(folderUri)}
-                </Text>
-              </View>
-            )}
-            {!folderValid && (
-              <Text testID="onboarding-folder-error" style={styles.fieldError}>
-                ⚠ {t('onboardingFolderMissing')}
-              </Text>
-            )}
+              {t('onboardingSave')}
+            </Text>
+          </Pressable>
+
+          <ProfilePicturePicker
+            visible={pictureModalVisible}
+            onSelect={(uri) => {
+              setPictureUri(uri);
+              setPictureModalVisible(false);
+            }}
+            onClose={() => setPictureModalVisible(false)}
+          />
+        </ScrollView>
+
+        {saving && (
+          // First save ever can take a few real seconds (creating the
+          // Kutta-games folder structure and copying in the bundled sample
+          // content, see folderAccess.ts's ensureContentStructure) — without
+          // this, the screen just sits there with a disabled button and no
+          // explanation, which reads as broken/frozen rather than working.
+          <View testID="onboarding-saving-overlay" style={styles.savingOverlay}>
+            <ActivityIndicator size="large" color={colors.white} />
+            <Text style={styles.savingText}>{t('onboardingSavingMessage')}</Text>
           </View>
-        </RaisedCard>
-      </View>
-
-      <View style={styles.saveWrapper}>
-        <RaisedPrimaryButton
-          testID="onboarding-save-button"
-          label={t('onboardingSave')}
-          onPress={handleSave}
-          disabled={saveDisabled}
-          size="large"
-          style={styles.saveButton}
-        />
-      </View>
-
-      <ProfilePicturePicker
-        visible={pictureModalVisible}
-        onSelect={(uri) => {
-          setPictureUri(uri);
-          setPictureModalVisible(false);
-        }}
-        onClose={() => setPictureModalVisible(false)}
-      />
-    </ScrollView>
-
-      {saving && (
-        // First save ever can take a few real seconds (creating the
-        // Kutta-games folder structure and copying in the bundled sample
-        // content, see folderAccess.ts's ensureContentStructure) — without
-        // this, the screen just sits there with a disabled button and no
-        // explanation, which reads as broken/frozen rather than working.
-        <View testID="onboarding-saving-overlay" style={styles.savingOverlay}>
-          <ActivityIndicator size="large" color={colors.white} />
-          <Text style={styles.savingText}>{t('onboardingSavingMessage')}</Text>
-        </View>
-      )}
-    </GradientScreenBackground>
+        )}
+      </GradientScreenBackground>
+    </PaperProvider>
   );
 }
 
@@ -369,30 +348,12 @@ const styles = StyleSheet.create({
   screen: {
     flexGrow: 1,
     padding: spacing.sm,
-    alignItems: 'stretch',
-    // Centered rather than top-anchored, matching this screen's short, wide
-    // landscape viewport (see RootNavigator.tsx's orientation lock) —
-    // flexGrow:1 already handles the reverse case too: a smaller screen or
-    // more content still scrolls normally, since a ScrollView never clips
-    // content shorter than justifyContent would otherwise want to show.
     justifyContent: 'center',
   },
-  brandBadge: {
-    fontSize: 22,
-    textAlign: 'center',
-    marginTop: spacing.xxs,
-    marginBottom: 0,
-  },
-  // title/subtitle sit directly on the sky gradient background (not a
-  // card). `colors.ink` is used rather than `colors.white`: white only
-  // clears ~2:1-3.1:1 against sky/skyDark, well under what this text needs,
-  // while `colors.ink` clears comfortably higher across the same range —
-  // subtitle uses a 0.9 (not the old 0.85) alpha fade so its still-smaller
-  // text keeps a 4.5:1 minimum even at the skyDark end.
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: colors.ink,
+    color: colors.parent.ink,
     textAlign: 'center',
     marginTop: spacing.xxs,
     marginBottom: spacing.xxs,
@@ -400,147 +361,175 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: typography.bodySmall.fontSize,
     fontWeight: typography.bodySmall.fontWeight,
-    color: withAlpha(colors.ink, 0.9),
+    color: colors.parent.inkMuted,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
   },
   halfCard: {
     flex: 1,
     marginBottom: 0,
   },
-  cardContent: {
-    padding: spacing.sm,
+  card: {
+    backgroundColor: colors.parent.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.parent.border,
+    padding: spacing.xs,
+    marginBottom: spacing.xs,
+    ...elevation.level1,
   },
   label: {
-    fontSize: typography.bodySmall.fontSize,
-    fontWeight: '800',
-    color: colors.ink,
-    marginBottom: spacing.xs,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.xs,
-  },
-  avatarOuter: {
-    width: 44,
-    height: 44,
-  },
-  avatarButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.violetSoft,
-    borderWidth: 2,
-    borderColor: colors.violetDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholderText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.violetDark,
-  },
-  // Sits fully INSIDE the circle's own bounds (not overlapping its edge) —
-  // avatarButton's overflow:'hidden' (needed to clip a chosen picture into
-  // a circle) would otherwise clip off anything positioned past its border.
-  avatarAddBadge: {
-    position: 'absolute',
-    // Flush bottom:0/right:0 would put this badge's own outer corner
-    // ~31px from the 44x44 circle's center — outside its 22px radius, so
-    // avatarButton's circular overflow:'hidden' would clip a real chunk of
-    // it into a lens shape. Insetting by 8 on both edges keeps the badge's
-    // own farthest corner within the circle's radius (~21px from center),
-    // so the full circular badge renders uncropped.
-    bottom: 8,
-    right: 8,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.violetDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarAddBadgeText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.white,
-    lineHeight: 12,
-  },
-  nameInputColumn: {
-    flex: 1,
-  },
-  removePictureLink: {
-    marginTop: spacing.xxs,
-    fontSize: 12,
+    fontSize: typography.caption.fontSize,
     fontWeight: '700',
-    color: colors.berryDark,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: colors.parent.inkMuted,
+    marginBottom: spacing.xxs,
   },
   textInput: {
-    backgroundColor: colors.surfaceSunk,
-    fontSize: 17,
+    backgroundColor: colors.parent.background,
   },
-  textInputFilled: {
-    backgroundColor: colors.bubblegumSoft,
-  },
-  folderButtonOuter: {
+  folderStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.parent.accentSoft,
+    borderRadius: radii.md,
+    paddingVertical: spacing.xxs,
+    paddingHorizontal: spacing.xs,
     alignSelf: 'stretch',
   },
+  folderStatusMark: {
+    color: colors.parent.accentDark,
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  folderStatusText: {
+    flex: 1,
+    color: colors.parent.accentDark,
+    fontWeight: '700',
+    fontSize: 14,
+  },
   folderButton: {
-    backgroundColor: colors.marigold,
-    borderWidth: 2,
-    borderColor: colors.marigoldDark,
+    minHeight: 44,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.parent.accent,
     borderRadius: radii.pill,
     paddingVertical: spacing.xs,
     alignItems: 'center',
   },
   folderButtonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '800',
+    color: colors.parent.accent,
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: '700',
   },
-  folderConfirm: {
-    marginTop: spacing.xs,
-    backgroundColor: colors.jadeSoft,
-    borderRadius: radii.md,
-    paddingVertical: spacing.xxs,
-    paddingHorizontal: spacing.xs,
-    alignSelf: 'flex-start',
+  pictureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xxs,
+    gap: spacing.sm,
   },
-  folderConfirmCheck: {
-    color: colors.jadeDark,
+  picturePreview: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.disabledBg,
+    borderWidth: 1,
+    borderColor: colors.parent.border,
+  },
+  picturePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.parent.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.parent.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  picturePlaceholderText: {
+    fontSize: 18,
     fontWeight: '800',
-    fontSize: 14,
+    color: colors.parent.accentDark,
   },
-  folderConfirmText: {
-    color: colors.jadeDark,
+  pictureButtons: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  choosePictureButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    backgroundColor: colors.parent.accent,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+  },
+  choosePictureButtonText: {
+    color: colors.white,
+    fontSize: typography.bodySmall.fontSize,
     fontWeight: '700',
-    fontSize: 13,
+  },
+  removePictureButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    backgroundColor: colors.berrySoft,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.berry,
+  },
+  removePictureButtonText: {
+    color: colors.berryDark,
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: '700',
   },
   fieldError: {
-    marginTop: spacing.xs,
+    marginTop: spacing.xxs,
     color: colors.berryDark,
     fontSize: 13,
     fontWeight: '700',
   },
-  saveWrapper: {
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
   saveButton: {
-    minWidth: 220,
+    minHeight: 48,
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    marginTop: spacing.xxs,
+    borderWidth: 1,
+  },
+  saveButtonEnabled: {
+    backgroundColor: colors.parent.accent,
+    borderColor: colors.parent.accentDark,
+    ...elevation.level2,
+  },
+  saveButtonDisabled: {
+    backgroundColor: colors.disabledBg,
+    borderColor: colors.disabledBorder,
+  },
+  saveButtonText: {
+    fontSize: typography.body.fontSize,
+    fontWeight: '800',
+  },
+  saveButtonTextEnabled: {
+    color: colors.white,
+  },
+  saveButtonTextDisabled: {
+    color: colors.disabledText,
+  },
+  pressedSubtle: {
+    opacity: 0.75,
   },
 });
