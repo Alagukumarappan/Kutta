@@ -17,6 +17,7 @@ jest.mock('expo-screen-orientation', () => ({
 // so requiring RootNavigator doesn't drag that native module in for a test
 // that only needs the Home/Settings header titles.
 jest.mock('../../src/coloring/ColoringScreen', () => ({ ColoringScreen: () => null }));
+jest.mock('../../src/coloring/lineArtCache', () => ({ clearLineArtCache: jest.fn() }));
 // expo-video isn't mockable/transformable under this project's jest config
 // either (it touches real native prototypes at import time) — stub it out
 // for the same reason as ColoringScreen above. VideoGallery now also
