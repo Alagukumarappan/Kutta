@@ -4,6 +4,11 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { ColoringScreen } from '../../src/coloring/ColoringScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getDisplayImage } from '../../src/coloring/lineArtCache';
+
+jest.mock('../../src/coloring/lineArtCache', () => ({
+  getDisplayImage: jest.fn((uri: string) => Promise.resolve({ uri, isConverted: false })),
+}));
 
 // This screen never renders actual pixels/canvas content in Jest (no native
 // Skia engine available), so the Skia module is mocked at the boundary the
@@ -87,6 +92,8 @@ describe('ColoringScreen', () => {
     // previous test that failed before consuming it (e.g. an assertion
     // throwing mid-test) can never leak into the next test's call count.
     (FileSystem.readAsStringAsync as jest.Mock).mockReset();
+    (getDisplayImage as jest.Mock).mockReset();
+    (getDisplayImage as jest.Mock).mockImplementation((uri: string) => Promise.resolve({ uri, isConverted: false }));
     mockDecodeState.shouldSucceed = true;
     mockPixelState.shouldReturnPixels = false;
     mockPixelState.buffer = null;
@@ -195,6 +202,26 @@ describe('ColoringScreen', () => {
 
     await findByTestId('coloring-canvas-touch-area');
     expect(queryByTestId('coloring-image-load-error')).toBeNull();
+  });
+
+  it('loads through getDisplayImage instead of reading the raw source uri directly', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+    (getDisplayImage as jest.Mock).mockResolvedValue({
+      uri: 'file:///docs/kutta-line-art/converted.png',
+      isConverted: true,
+    });
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringScreen imageUri={IMAGE_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('coloring-canvas-touch-area');
+    expect(getDisplayImage).toHaveBeenCalledWith(IMAGE_URI);
+    expect(FileSystem.readAsStringAsync).toHaveBeenCalledWith('file:///docs/kutta-line-art/converted.png', {
+      encoding: 'base64',
+    });
   });
 
   // Regression test: while the photo is still being read/decoded, `image`

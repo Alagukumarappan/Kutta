@@ -16,6 +16,7 @@ import {
 } from '@shopify/react-native-skia';
 import { floodFill, pixelMatchesColorExactly } from './floodFill';
 import { base64ToUint8Array } from './base64';
+import { getDisplayImage } from './lineArtCache';
 import {
   computeResponsiveRectSize,
   colors,
@@ -359,7 +360,9 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 
     (async () => {
       try {
-        const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        const { uri: displayUri } = await getDisplayImage(imageUri);
+        if (cancelled) return;
+        const base64 = await FileSystem.readAsStringAsync(displayUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
         const bytes = base64ToUint8Array(base64);
