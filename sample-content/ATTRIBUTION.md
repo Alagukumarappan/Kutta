@@ -30,5 +30,5 @@ All from Wikimedia Commons, public domain / CC0 (no attribution legally required
 
 ## Sound effects (`sfx/`)
 
-- **correct.ogg** — "Win Jingle" by Fupi, via OpenGameArt.org (https://opengameart.org/content/win-jingle). **CC0** (public domain, no attribution legally required, credited here anyway).
+- **correct.mp3** — "Win Jingle" by Fupi, via OpenGameArt.org (https://opengameart.org/content/win-jingle), re-encoded from the source `.ogg` to `.mp3` (same audio, container swap only — Jest's asset transform only recognizes `.mp3`/`.wav`, not `.ogg`). **CC0** (public domain, no attribution legally required, credited here anyway).
 - **wrong.mp3** — "Game Over Trumpet SFX" by 0new4y, via OpenGameArt.org (https://opengameart.org/content/game-over-trumpet-sfx). **CC0** (public domain; the author notes "No attribution required," credited here anyway).

@@ -21,7 +21,7 @@ Three related gaps found while testing the music feature:
 
 Two CC0 (public domain) sounds from OpenGameArt.org, both verified as real
 audio files:
-- **"Win Jingle" by Fupi** → bundled as `sample-content/sfx/correct.ogg`
+- **"Win Jingle" by Fupi** → bundled as `sample-content/sfx/correct.mp3` (re-encoded from the source `.ogg`: Jest's asset transform only recognizes `.mp3`/`.wav`, not `.ogg`)
   (a short, cheerful jingle — a genuine "yay!" moment, not a subtle UI blip).
 - **"Game Over Trumpet SFX" by 0new4y** → bundled as
   `sample-content/sfx/wrong.mp3` (a comedic descending trumpet — the same
