@@ -9,6 +9,10 @@ import type { Question } from '../../src/types/quiz';
 
 jest.mock('../../src/quiz/loadQuestions');
 jest.mock('../../src/storage/activityLog');
+jest.mock('../../src/audio/soundEffects', () => ({
+  playCorrectSound: jest.fn(),
+  playWrongSound: jest.fn(),
+}));
 
 const twoQuestions: Question[] = [
   {

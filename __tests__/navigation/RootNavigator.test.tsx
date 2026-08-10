@@ -22,6 +22,13 @@ jest.mock('../../src/coloring/lineArtCache', () => ({ clearLineArtCache: jest.fn
 // reason ColoringScreen/expo-video are stubbed above — this test only needs
 // Home/Settings header titles, not real audio playback.
 jest.mock('../../src/music/BackgroundMusicPlayer', () => ({ BackgroundMusicPlayer: () => null }));
+// QuizScreen (rendered for real in this file) transitively imports
+// soundEffects.ts -> expo-audio, the same untransformable-in-Jest issue as
+// ColoringScreen/expo-video above.
+jest.mock('../../src/audio/soundEffects', () => ({
+  playCorrectSound: jest.fn(),
+  playWrongSound: jest.fn(),
+}));
 // expo-video isn't mockable/transformable under this project's jest config
 // either (it touches real native prototypes at import time) — stub it out
 // for the same reason as ColoringScreen above. VideoGallery now also
