@@ -18,6 +18,10 @@ jest.mock('expo-screen-orientation', () => ({
 // that only needs the Home/Settings header titles.
 jest.mock('../../src/coloring/ColoringScreen', () => ({ ColoringScreen: () => null }));
 jest.mock('../../src/coloring/lineArtCache', () => ({ clearLineArtCache: jest.fn() }));
+// expo-audio touches real native module internals at import time, same
+// reason ColoringScreen/expo-video are stubbed above — this test only needs
+// Home/Settings header titles, not real audio playback.
+jest.mock('../../src/music/BackgroundMusicPlayer', () => ({ BackgroundMusicPlayer: () => null }));
 // expo-video isn't mockable/transformable under this project's jest config
 // either (it touches real native prototypes at import time) — stub it out
 // for the same reason as ColoringScreen above. VideoGallery now also

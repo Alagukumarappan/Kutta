@@ -8,6 +8,8 @@ import { getProfile, saveProfile } from '../storage/profileStore';
 import { findChildUri, ensureContentStructure, requestFolderAccess } from '../storage/folderAccess';
 import type { Profile } from '../types/profile';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
+import { MusicProvider } from '../music/MusicContext';
+import { BackgroundMusicPlayer } from '../music/BackgroundMusicPlayer';
 import type { StringKey } from '../i18n/strings';
 import { colors, spacing, typography, RaisedCard, RaisedPrimaryButton, RaisedSecondaryButton } from '../design-system';
 import { OnboardingScreen } from '../onboarding/OnboardingScreen';
@@ -472,29 +474,38 @@ export function RootNavigator({
 
   return (
     <LanguageProvider initialLanguage={profile?.language ?? 'en'}>
-      <NavigationContainer ref={navigationRef}>
-        {profile ? (
-          folderError ? (
-            <FolderErrorScreen profile={profile} onRetry={retryFolderResolution} onFolderChanged={refreshProfile} />
-          ) : folderUris ? (
-            <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} onReset={handleReset} />
+      {/* MusicProvider/BackgroundMusicPlayer are mounted here — a stable
+          sibling to the Onboarding/AppStack switch below, not nested inside
+          either branch — so switching from Onboarding to the app stack (or
+          between folder-resolution states) never remounts the player or
+          restarts the track. Music intentionally plays during Onboarding
+          too (default ON, per the Music card living on both screens). */}
+      <MusicProvider>
+        <BackgroundMusicPlayer />
+        <NavigationContainer ref={navigationRef}>
+          {profile ? (
+            folderError ? (
+              <FolderErrorScreen profile={profile} onRetry={retryFolderResolution} onFolderChanged={refreshProfile} />
+            ) : folderUris ? (
+              <AppStack profile={profile} folderUris={folderUris} onProfileChanged={refreshProfile} onReset={handleReset} />
+            ) : (
+              // Still resolving the content subfolders. This used to render
+              // `null` — a completely BLANK screen, for as long as SAF takes,
+              // which is not instant: resolveSubfolderUris runs
+              // ensureContentStructure (a dozen sequential directory
+              // reads/creates, plus first-run sample seeding) and then four
+              // more listings. So every cold start showed splash -> blank ->
+              // Home, which is exactly the flash MINIMUM_SPLASH_DELAY_MS above
+              // exists to prevent, and a folder change from Settings blanked
+              // the whole app the same way mid-save. Holding the same splash up
+              // keeps one continuous, deliberate loading state instead.
+              <SplashScreen />
+            )
           ) : (
-            // Still resolving the content subfolders. This used to render
-            // `null` — a completely BLANK screen, for as long as SAF takes,
-            // which is not instant: resolveSubfolderUris runs
-            // ensureContentStructure (a dozen sequential directory
-            // reads/creates, plus first-run sample seeding) and then four
-            // more listings. So every cold start showed splash -> blank ->
-            // Home, which is exactly the flash MINIMUM_SPLASH_DELAY_MS above
-            // exists to prevent, and a folder change from Settings blanked
-            // the whole app the same way mid-save. Holding the same splash up
-            // keeps one continuous, deliberate loading state instead.
-            <SplashScreen />
-          )
-        ) : (
-          <OnboardingScreen onComplete={refreshProfile} />
-        )}
-      </NavigationContainer>
+            <OnboardingScreen onComplete={refreshProfile} />
+          )}
+        </NavigationContainer>
+      </MusicProvider>
     </LanguageProvider>
   );
 }
