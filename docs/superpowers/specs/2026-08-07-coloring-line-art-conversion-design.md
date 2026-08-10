@@ -81,7 +81,9 @@ screen opens. `src/coloring/lineArtCache.ts` owns this:
   `looksPhotographic`. If not photographic, maps `sourceUri` straight to
   itself (no derived file, no wasted storage or work). If photographic, runs
   `convertToLineArt`, encodes the result as PNG, writes it to
-  `documentDirectory/kutta-line-art/<derived-name>`, and records the mapping.
+  `documentDirectory/kutta-line-art/<hash-of-sourceUri>.png` (a stable hash
+  of the source URI, so the same source always maps to the same derived
+  filename), and records the mapping.
 - The mapping (`sourceUri` → derived file path or "use original") is kept in
   AsyncStorage, mirroring the existing `fileReferenceStore.ts` pattern, so
   every later call is a cache hit with no reprocessing.
