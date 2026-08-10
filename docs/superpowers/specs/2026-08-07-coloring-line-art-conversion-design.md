@@ -114,12 +114,29 @@ screen opens. `src/coloring/lineArtCache.ts` owns this:
 
 ### Cleanup
 
-When a source picture is removed — pruned from `fileReferenceStore`
-(`pruneMissingFileReferences`), explicitly removed via a gallery's multi-select
-delete, or its folder-scan entry disappears — its derived file (if one
-exists) and cache mapping are deleted too, following the same
-no-storage-leak discipline already established for individually-added file
-copies (`clearAllFileReferences`, `removeGalleryItems`).
+Rather than threading a cleanup call through each of the several existing
+places a coloring picture can disappear (multi-select removal, a folder-scan
+entry vanishing, a pruned individually-added reference), `lineArtCache.ts`
+owns a single reconciliation sweep:
+`pruneStaleDerivedImages(currentSourceUris: string[]): Promise<void>` —
+given the full, current set of valid coloring URIs (folder content + file
+references merged, exactly what `ColoringGallery` already computes each
+load), it deletes any cached derived file/mapping whose source URI is NOT in
+that set. `ColoringGallery` calls this once per successful load, after its
+existing folder+reference merge — the same place it already has that full
+list on hand. This keeps `lineArtCache.ts` self-contained (no changes needed
+to `fileReferenceStore.ts` or `galleryRemoval.ts`) and handles every removal
+path uniformly, at the cost of a one-load delay between a picture
+disappearing and its derived file being cleaned up (never a privacy issue —
+the derived file contains strictly less information than the original, which
+by definition is already gone by the time this runs).
+
+Additionally, `clearAllFileReferences`'s "Reset everything" flow must also
+wipe the entire derived-cache directory and its AsyncStorage mapping —
+`lineArtCache.ts` exports `clearLineArtCache(): Promise<void>` for this,
+called from Settings' reset flow alongside the existing
+`clearAllFileReferences()` call, mirroring how that flow already deletes
+`kutta-added/`.
 
 ## Gallery & coloring-screen integration
 
