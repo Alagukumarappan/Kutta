@@ -62,8 +62,9 @@ export const colors = {
   berry: '#FF5A5F', // errors / "incorrect" feedback
   berryDark: '#D93C41',
   berrySoft: '#FFE3E4',
-  lemon: '#FFE066', // small highlight accents (badges, sparkles)
+  lemon: '#FFE066', // small highlight accents (badges, sparkles); also Camera's activity accent
   lemonDark: '#E0BE3D',
+  lemonSoft: '#FFF6D9',
 
   // Neutrals
   line: '#E4DCF5',
@@ -93,7 +94,7 @@ export const colors = {
 // Per-activity identity: one accent family per major activity so each card,
 // gallery header, and in-activity chrome can carry a consistent, recognizable
 // color without every screen re-picking hues by hand.
-export type ActivityId = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'tictactoe';
+export type ActivityId = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'tictactoe' | 'camera';
 
 export interface ActivityPalette {
   accent: string;
@@ -145,6 +146,15 @@ const ACTIVITY_PALETTES: Record<ActivityId, ActivityPalette> = {
     accent: colors.sky,
     accentDark: colors.skyDark,
     accentSoft: colors.skySoft,
+    onAccentText: colors.ink,
+  },
+  // `lemon` was previously only a small highlight-accent color (badges,
+  // sparkles) — the one brand hue left unclaimed by any activity, and a
+  // natural, cheerful fit for Camera.
+  camera: {
+    accent: colors.lemon,
+    accentDark: colors.lemonDark,
+    accentSoft: colors.lemonSoft,
     onAccentText: colors.ink,
   },
 };
