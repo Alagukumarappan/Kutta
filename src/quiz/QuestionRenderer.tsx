@@ -225,14 +225,6 @@ export function QuestionRenderer({
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
   const [showCelebration, setShowCelebration] = React.useState(false);
-  const isMountedRef = React.useRef(true);
-
-  React.useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
 
   React.useEffect(() => {
     if (!isCorrect) {
@@ -244,30 +236,22 @@ export function QuestionRenderer({
     scaleAnim.setValue(0);
     opacityAnim.setValue(0);
 
-    // Bounded, non-flashing sequence: pop in (~160ms), hold briefly
-    // (900ms), then fade out (320ms) — well under a couple of seconds
-    // total, so it always auto-resolves on its own. Uses the shared
-    // `motion` tokens (the same celebrate spring + fast/celebration/slow
-    // durations `CelebrationOverlay`'s own tone="success" bubble uses for
-    // this identical effect) rather than separately hand-tuned literals —
-    // this is also the exact "900ms hold, 320ms fade-out" pairing
-    // REDESIGN_PROGRESS.md's Animation Inventory documents for this bubble.
-    const animation = Animated.sequence([
-      Animated.parallel([
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.celebrate }),
-        Animated.timing(opacityAnim, { toValue: 1, duration: motion.duration.fast, useNativeDriver: true }),
-      ]),
-      Animated.delay(motion.duration.celebration),
-      Animated.timing(opacityAnim, { toValue: 0, duration: motion.duration.slow, useNativeDriver: true }),
+    // Pop in (~160ms) and STAY up — deliberately no fade-out/auto-hide.
+    // This used to also hold briefly then fade after ~1.2s total, but that
+    // read as the celebration vanishing on its own before the child was
+    // done looking at it. It now only ever disappears via the early-return
+    // branch above (`isCorrect` going false — a new question, or "Try
+    // Again" clearing the answer on the same question), never on a timer.
+    const animation = Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, ...motion.spring.celebrate }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: motion.duration.fast, useNativeDriver: true }),
     ]);
 
-    animation.start(({ finished }) => {
-      if (finished && isMountedRef.current) setShowCelebration(false);
-    });
+    animation.start();
 
-    // Stop the animation (cancelling any pending step/callback) if the
-    // question changes, the child navigates away, or this component
-    // unmounts mid-celebration — no leaked timers/handles.
+    // Stop the animation (cancelling any pending step) if the question
+    // changes, the child navigates away, or this component unmounts
+    // mid-celebration — no leaked timers/handles.
     return () => {
       animation.stop();
     };

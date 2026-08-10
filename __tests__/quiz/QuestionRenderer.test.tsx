@@ -994,6 +994,58 @@ describe('QuestionRenderer', () => {
       // Still exactly one celebration node, not one appended per re-render.
       expect(getAllByTestId('quiz-celebration', { includeHiddenElements: true })).toHaveLength(1);
     });
+
+    // Regression test: this bubble used to pop in, hold for ~900ms, then
+    // fade out over ~320ms on its own timer -- disappearing well before a
+    // child was necessarily done looking at it. It must now stay up
+    // indefinitely, only ever disappearing when the question actually
+    // changes (a real elapsed wait here, past the old ~1.2s total sequence,
+    // is the only way to prove no hidden timer is still ticking).
+    it('stays visible well past the old auto-fade timing, with no fade-out timer running', async () => {
+      const { getByTestId } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(getByTestId('quiz-celebration', { includeHiddenElements: true })).toBeTruthy();
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      });
+
+      expect(getByTestId('quiz-celebration', { includeHiddenElements: true })).toBeTruthy();
+    });
+
+    it('still disappears once the question actually changes, even though it no longer auto-fades', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(getByTestId('quiz-celebration', { includeHiddenElements: true })).toBeTruthy();
+
+      await rerender(
+        <QuestionRenderer
+          question={combinedQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(queryByTestId('quiz-celebration', { includeHiddenElements: true })).toBeNull();
+    });
   });
 
   describe('feedback card pop-in + wash', () => {
