@@ -233,26 +233,16 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     <View style={styles.fullScreen}>
       <VideoView
         player={player}
-        // Fills the real screen size (see fullScreen's own black
-        // background for the immersive look), but still reserves the
-        // safe-area insets as padding rather than going fully edge-to-edge
-        // behind a notch/gesture-nav bar: expo-video's nativeControls is
-        // an all-or-nothing boolean (no way to inset just the controls
-        // layer on its own), so going truly edge-to-edge risks the native
-        // scrubber/play/fullscreen buttons landing under a cutout and
-        // becoming unreachable — a real regression risk not worth trading
-        // for a few extra pixels of "immersive" video.
-        style={[
-          styles.videoView,
-          {
-            width,
-            height,
-            paddingTop: insets.top,
-            paddingLeft: insets.left,
-            paddingRight: insets.right,
-            paddingBottom: insets.bottom,
-          },
-        ]}
+        // Fills the real screen size, genuinely edge-to-edge (see
+        // fullScreen's own black background for the immersive look) — no
+        // inset padding shrinking the video content area. This used to pad
+        // in the safe-area insets to keep the native scrubber/play/
+        // fullscreen buttons clear of a notch/gesture-nav bar, but that
+        // padding was shrinking the video itself on every device, not just
+        // ones with a real cutout, per an explicit "just remove the extra
+        // padding" ask. Trade-off: on a device with a real notch/punch-hole,
+        // the native controls bar could land partially under it.
+        style={[styles.videoView, { width, height }]}
         nativeControls
         contentFit="contain"
         // A small RaisedCard frame (this screen's previous look) only ever

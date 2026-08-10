@@ -173,6 +173,14 @@ describe('VideoPlayerScreen', () => {
     const flattened = StyleSheet.flatten(videoView.props.style);
     expect(flattened.width).toBe(812);
     expect(flattened.height).toBe(375);
+    // Regression test: this used to also pad in the safe-area insets,
+    // shrinking the video's own content area on every device (not just
+    // notched ones) — per an explicit "just remove the extra padding" ask,
+    // none of that padding should be applied anymore.
+    expect(flattened.paddingTop).toBeUndefined();
+    expect(flattened.paddingLeft).toBeUndefined();
+    expect(flattened.paddingRight).toBeUndefined();
+    expect(flattened.paddingBottom).toBeUndefined();
 
     jest.restoreAllMocks();
   });
