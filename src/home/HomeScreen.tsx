@@ -53,12 +53,6 @@ type CardSpec = {
 // Material's minimum) rather than the old theme's 44px.
 const SETTINGS_BUTTON_SIZE = touchTarget.iconButton;
 
-// Fixed width for the settings pill (icon + "Settings" label). A generous
-// fixed value rather than shrink-to-fit content, so the German label
-// ("Einstellungen", noticeably longer than "Settings") never forces a
-// last-minute layout jump between languages.
-const SETTINGS_PILL_WIDTH = 148;
-
 // A horizontally-scrolling row (not a fixed 4-up grid) so more activity
 // cards can be added later without ever needing to shrink existing ones to
 // make room — each card keeps a comfortable, constant size regardless of
@@ -285,7 +279,6 @@ export function HomeScreen({
           accessibilityLabel={t('settingsTitle')}
         >
           <Text style={styles.settingsIcon}>⚙️</Text>
-          <Text style={styles.settingsLabel}>{t('settingsTitle')}</Text>
         </AnimatedPressable>
       </View>
 
@@ -454,36 +447,27 @@ const styles = StyleSheet.create({
   },
   // AnimatedPressable's outer Pressable (layout/hit-area only, matching the
   // "outer never animates" convention every design-system pressable shares)
-  // — sized to a fixed pill (SETTINGS_PILL_WIDTH x SETTINGS_BUTTON_SIZE) so
-  // the tappable area itself never shrinks or shifts as the inner face
-  // tilts.
+  // — a fixed square (SETTINGS_BUTTON_SIZE) so the tappable area never
+  // shrinks or shifts as the inner face tilts.
   settingsHitArea: {
-    width: SETTINGS_PILL_WIDTH,
+    width: SETTINGS_BUTTON_SIZE,
     height: SETTINGS_BUTTON_SIZE,
   },
-  // Restyled as a white pill (icon + label), matching this redesign's
-  // reference "For parents" button, rather than the previous small circular
-  // icon-only button — same handleSettingsPress/double-tap-guard logic
-  // above, this only changes the visual container.
+  // Icon-only circular button — no visible label, per an explicit design
+  // decision (the gear glyph alone is a widely understood "settings"
+  // affordance, and t('settingsTitle') is still exposed via
+  // accessibilityLabel above for screen-reader users).
   settingsButton: {
-    width: SETTINGS_PILL_WIDTH,
+    width: SETTINGS_BUTTON_SIZE,
     height: SETTINGS_BUTTON_SIZE,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
     ...elevation.level3,
   },
   settingsIcon: {
-    fontSize: 18,
-    marginRight: spacing.xxs,
-  },
-  settingsLabel: {
-    fontSize: typography.buttonSmall.fontSize,
-    fontWeight: typography.buttonSmall.fontWeight,
-    color: colors.ink,
+    fontSize: 20,
   },
   grid: {
     flex: 1,
