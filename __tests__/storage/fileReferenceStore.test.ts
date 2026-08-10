@@ -264,12 +264,14 @@ describe('fileReferenceStore', () => {
       await addFileReferences('coloring', ['content://tree/a.jpg']);
       await addFileReferences('puzzle', ['content://tree/b.jpg']);
       await addFileReferences('video', ['content://tree/c.mp4']);
+      await addFileReferences('camera', ['file:///data/app/kutta-added/1-0-photo.jpg']);
 
       await clearAllFileReferences();
 
       expect(await getFileReferences('coloring')).toEqual([]);
       expect(await getFileReferences('puzzle')).toEqual([]);
       expect(await getFileReferences('video')).toEqual([]);
+      expect(await getFileReferences('camera')).toEqual([]);
     });
 
     // Dropping the references alone would leave every picture the previous

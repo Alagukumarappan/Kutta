@@ -25,7 +25,14 @@
     },
     "plugins": [
       "expo-video",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

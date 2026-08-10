@@ -6,12 +6,15 @@ import * as FileSystem from 'expo-file-system/legacy';
 // coloring page from outside the configured folder. Kept as small local
 // references, separate from folder content, so a gallery can show
 // "folder content + individually-added files" together.
-export type FileReferenceContentType = 'coloring' | 'puzzle' | 'video';
+// 'camera' has no whole-folder SAF counterpart at all (unlike the other
+// three, which merge folder content + individually-added references) —
+// every camera photo starts life, and stays, as a reference.
+export type FileReferenceContentType = 'coloring' | 'puzzle' | 'video' | 'camera';
 
 // Every content type a reference can exist for — used by clearAllFileReferences
 // below so a caller doesn't have to remember to list all three itself (and
 // risk missing one if a new content type is ever added here).
-const ALL_CONTENT_TYPES: readonly FileReferenceContentType[] = ['coloring', 'puzzle', 'video'];
+const ALL_CONTENT_TYPES: readonly FileReferenceContentType[] = ['coloring', 'puzzle', 'video', 'camera'];
 
 export interface FileReference {
   uri: string;
