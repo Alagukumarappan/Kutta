@@ -10,6 +10,7 @@ import * as activityLogModule from '../../src/storage/activityLog';
 import * as fileReferenceStore from '../../src/storage/fileReferenceStore';
 import * as puzzleDifficultyStore from '../../src/storage/puzzleDifficultyStore';
 import * as lineArtCache from '../../src/coloring/lineArtCache';
+import * as musicSettingsStore from '../../src/storage/musicSettingsStore';
 import * as FileSystem from 'expo-file-system/legacy';
 import { colors as dsColors } from '../../src/design-system';
 
@@ -21,6 +22,18 @@ jest.mock('../../src/storage/fileReferenceStore');
 jest.mock('../../src/storage/puzzleDifficultyStore');
 jest.mock('../../src/coloring/lineArtCache', () => ({
   clearLineArtCache: jest.fn(),
+}));
+jest.mock('../../src/storage/musicSettingsStore', () => ({
+  clearMusicSettings: jest.fn(),
+}));
+jest.mock('../../src/music/MusicContext', () => ({
+  useMusic: jest.fn(() => ({
+    muted: false,
+    customTrackUri: null,
+    toggleMuted: jest.fn(),
+    setCustomTrackUri: jest.fn(),
+    useDefaultTrack: jest.fn(),
+  })),
 }));
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
@@ -898,6 +911,7 @@ describe('SettingsScreen', () => {
 
       await waitFor(() => expect(fileReferenceStore.clearAllFileReferences).toHaveBeenCalledTimes(1));
       expect(lineArtCache.clearLineArtCache).toHaveBeenCalledTimes(1);
+      expect(musicSettingsStore.clearMusicSettings).toHaveBeenCalledTimes(1);
       expect(puzzleDifficultyStore.clearPuzzleDifficulty).toHaveBeenCalledTimes(1);
     });
 
@@ -1151,6 +1165,19 @@ describe('SettingsScreen', () => {
 
       await findByTestId('settings-accomplishments');
       expect(getByText(/0 puzzles completed/)).toBeTruthy();
+    });
+  });
+
+  describe('music', () => {
+    it('shows the shared Music card', async () => {
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <SettingsScreen />
+        </LanguageProvider>
+      );
+
+      await findByTestId('settings-loaded');
+      await findByTestId('music-settings-section');
     });
   });
 });

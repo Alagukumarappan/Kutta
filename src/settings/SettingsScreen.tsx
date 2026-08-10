@@ -10,6 +10,8 @@ import { getActivityLog, clearActivityLog, type ActivityLog } from '../storage/a
 import { clearAllFileReferences } from '../storage/fileReferenceStore';
 import { clearLineArtCache } from '../coloring/lineArtCache';
 import { clearPuzzleDifficulty } from '../storage/puzzleDifficultyStore';
+import { clearMusicSettings } from '../storage/musicSettingsStore';
+import { MusicSettingsSection } from './MusicSettingsSection';
 import { requestFolderAccess, findChildUri, KUTTA_GAMES_FOLDER_NAME } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
 import { toReadableFolderPath } from '../storage/folderPathDisplay';
@@ -325,6 +327,7 @@ export function SettingsScreen({
       // genuine fresh start.
       await clearAllFileReferences();
       await clearLineArtCache();
+      await clearMusicSettings();
       await clearPuzzleDifficulty();
       onReset?.();
     } finally {
@@ -603,6 +606,8 @@ export function SettingsScreen({
               </View>
             </View>
           </View>
+
+          <MusicSettingsSection />
 
           {migrating && (
             <FadeInBanner style={styles.infoBanner}>
