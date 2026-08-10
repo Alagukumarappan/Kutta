@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAudioPlayer } from 'expo-audio';
 import { useMusic } from './MusicContext';
+import { registerMusicPlaybackControls } from './musicPlaybackControl';
 
 // The single bundled default track, played whenever the parent hasn't
 // picked their own (see MusicContext's customTrackUri). require() must be a
@@ -28,6 +29,24 @@ export function BackgroundMusicPlayer() {
     } else {
       player.play();
     }
+  }, [muted, player]);
+
+  // Lets soundEffects.ts duck this exact running player around a one-shot
+  // correct/wrong sound, without soundEffects.ts needing to know anything
+  // about expo-audio or which player instance is "the" background music.
+  // Re-registered whenever `muted`/`player` change so `resume`'s closure is
+  // always current -- resuming must never un-mute a player the parent had
+  // deliberately silenced before the sound effect played.
+  useEffect(() => {
+    registerMusicPlaybackControls({
+      pause: () => player.pause(),
+      resume: () => {
+        if (!muted) player.play();
+      },
+    });
+    return () => {
+      registerMusicPlaybackControls(null);
+    };
   }, [muted, player]);
 
   return null;
