@@ -3,6 +3,7 @@ import { View, Text, Image, StyleSheet, ScrollView, Animated, Modal } from 'reac
 import type { Question } from '../types/quiz';
 import type { Language } from '../types/profile';
 import { t, tFormat } from '../i18n/strings';
+import { playCorrectSound, playWrongSound } from '../audio/soundEffects';
 import {
   colors,
   radii,
@@ -262,6 +263,23 @@ export function QuestionRenderer({
     // means this can't silently start replaying a stale celebration even if
     // that reset contract ever changes elsewhere.
   }, [isCorrect, question.id, scaleAnim, opacityAnim]);
+
+  // Plays a correct/wrong sound exactly once per answered question -- a
+  // ref-based rising-edge guard (keyed on question.id, the same shape as
+  // answerLockRef above) rather than a plain `[hasAnswered]` dependency,
+  // since re-renders while still answered (e.g. the double-fire-guard
+  // re-render test) must not replay the sound.
+  const soundPlayedForQuestionRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!hasAnswered) return;
+    if (soundPlayedForQuestionRef.current === question.id) return;
+    soundPlayedForQuestionRef.current = question.id;
+    if (isCorrect) {
+      playCorrectSound();
+    } else {
+      playWrongSound();
+    }
+  }, [hasAnswered, isCorrect, question.id]);
 
   // Brief pop-in entrance for the feedback CARD ITSELF (the whole overlay
   // "arriving"), kept entirely separate from scaleAnim/opacityAnim above

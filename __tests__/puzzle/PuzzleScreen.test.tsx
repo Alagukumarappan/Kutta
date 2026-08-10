@@ -5,8 +5,12 @@ import { PuzzleScreen } from '../../src/puzzle/PuzzleScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { computePuzzleBoardSize } from '../../src/puzzle/puzzleGrid';
 import * as activityLogModule from '../../src/storage/activityLog';
+import { playCorrectSound } from '../../src/audio/soundEffects';
 
 jest.mock('../../src/storage/activityLog');
+jest.mock('../../src/audio/soundEffects', () => ({
+  playCorrectSound: jest.fn(),
+}));
 
 const IMAGE_URI = 'content://tree/pictures/beach.jpg';
 
@@ -77,6 +81,7 @@ describe('PuzzleScreen', () => {
       quizzesCompleted: 0,
       puzzlesCompleted: 1,
     });
+    (playCorrectSound as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -230,6 +235,16 @@ describe('PuzzleScreen', () => {
     expect(utils.getByTestId('puzzle-complete')).toBeTruthy();
 
     expect(activityLogModule.recordPuzzleCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays the correct sound exactly once when the puzzle is first solved', async () => {
+    const utils = await renderPuzzleScreen();
+    await startFourPiecePuzzle(utils);
+
+    await solveFourPiecePuzzle(utils);
+    expect(utils.getByTestId('puzzle-complete')).toBeTruthy();
+
+    expect(playCorrectSound).toHaveBeenCalledTimes(1);
   });
 
   it('records a second completed puzzle after Retry is solved again', async () => {

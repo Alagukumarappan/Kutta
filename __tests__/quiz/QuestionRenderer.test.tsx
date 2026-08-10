@@ -4,6 +4,12 @@ import { render, fireEvent, within, act } from '@testing-library/react-native';
 import { QuestionRenderer } from '../../src/quiz/QuestionRenderer';
 import type { Question } from '../../src/types/quiz';
 import { colors } from '../../src/design-system';
+import { playCorrectSound, playWrongSound } from '../../src/audio/soundEffects';
+
+jest.mock('../../src/audio/soundEffects', () => ({
+  playCorrectSound: jest.fn(),
+  playWrongSound: jest.fn(),
+}));
 
 const imageQuestion: Question = {
   id: 'q1',
@@ -1045,6 +1051,77 @@ describe('QuestionRenderer', () => {
       );
 
       expect(queryByTestId('quiz-celebration', { includeHiddenElements: true })).toBeNull();
+    });
+  });
+
+  describe('correct/wrong sound effect', () => {
+    it('plays the correct sound exactly once when the answer is right', async () => {
+      await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(playCorrectSound).toHaveBeenCalledTimes(1);
+      expect(playWrongSound).not.toHaveBeenCalled();
+    });
+
+    it('plays the wrong sound exactly once when the answer is incorrect', async () => {
+      await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="a"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(playWrongSound).toHaveBeenCalledTimes(1);
+      expect(playCorrectSound).not.toHaveBeenCalled();
+    });
+
+    it('plays no sound before any option has been selected', async () => {
+      await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId={null}
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(playCorrectSound).not.toHaveBeenCalled();
+      expect(playWrongSound).not.toHaveBeenCalled();
+    });
+
+    it('does not replay the sound on a re-render with the same answered question (double-fire guard)', async () => {
+      const { rerender } = await render(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      await rerender(
+        <QuestionRenderer
+          question={imageQuestion}
+          language="en"
+          selectedOptionId="b"
+          onSelect={jest.fn()}
+          onNext={jest.fn()}
+        />
+      );
+
+      expect(playCorrectSound).toHaveBeenCalledTimes(1);
     });
   });
 

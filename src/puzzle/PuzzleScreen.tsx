@@ -14,6 +14,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import type { PuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { recordPuzzleCompleted } from '../storage/activityLog';
+import { playCorrectSound } from '../audio/soundEffects';
 import {
   colors,
   radii,
@@ -236,6 +237,7 @@ export function PuzzleScreen({
       // Best-effort: a purely decorative counter must never block or crash
       // the completion overlay over an AsyncStorage write failure.
     });
+    playCorrectSound();
   }, [isSolved]);
 
   const reducedMotion = useReducedMotion();
