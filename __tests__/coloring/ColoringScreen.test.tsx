@@ -224,6 +224,61 @@ describe('ColoringScreen', () => {
     });
   });
 
+  describe('color reference thumbnail', () => {
+    it('shows a reference thumbnail of the ORIGINAL photo when the picture was converted to line art', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      (getDisplayImage as jest.Mock).mockResolvedValue({
+        uri: 'file:///docs/kutta-line-art/converted.png',
+        isConverted: true,
+      });
+
+      const { findByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+
+      const thumbnail = await findByTestId('coloring-color-reference');
+      expect(thumbnail.props.source.uri).toBe(IMAGE_URI);
+    });
+
+    it('does not show a reference thumbnail when the picture was not converted (already suitable)', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      (getDisplayImage as jest.Mock).mockResolvedValue({ uri: IMAGE_URI, isConverted: false });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+
+      await findByTestId('coloring-canvas-touch-area');
+      expect(queryByTestId('coloring-color-reference')).toBeNull();
+    });
+
+    it('hides the reference thumbnail if it fails to load, without affecting the main canvas', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      (getDisplayImage as jest.Mock).mockResolvedValue({
+        uri: 'file:///docs/kutta-line-art/converted.png',
+        isConverted: true,
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+
+      const thumbnail = await findByTestId('coloring-color-reference');
+      await act(async () => {
+        thumbnail.props.onError();
+      });
+
+      expect(queryByTestId('coloring-color-reference')).toBeNull();
+      await findByTestId('coloring-canvas-touch-area');
+    });
+  });
+
   // Regression test: while the photo is still being read/decoded, `image`
   // is `null` and `imageLoadFailed` is `false` — the exact same gap already
   // fixed for VideoPlayerScreen (iteration 12) and ProfilePicturePicker

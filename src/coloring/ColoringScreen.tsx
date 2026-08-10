@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert, Animated, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, Text, PanResponder, PanResponderInstance, useWindowDimensions, GestureResponderEvent, Alert, Animated, StyleSheet, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -187,6 +187,15 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // had.
   const [image, setImage] = useState<SkImage | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  // True only when getDisplayImage actually converted this picture to
+  // line art (a real photo) — used to show a small color-reference
+  // thumbnail of the original, since an already-suitable flat/line-art
+  // picture has no "original color" to reference that differs from what's
+  // already on screen.
+  const [isConverted, setIsConverted] = useState(false);
+  // Independent of the main canvas's own load state -- a broken reference
+  // thumbnail must never affect whether the coloring canvas itself shows.
+  const [referenceLoadFailed, setReferenceLoadFailed] = useState(false);
   // Bumped on Retry to force a fresh load attempt even when `imageUri`
   // hasn't changed (e.g. a transient failure) — same pattern used by
   // QuizScreen and ColoringGallery for this identical class of SAF failure
@@ -357,11 +366,14 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     let cancelled = false;
     setImage(null);
     setImageLoadFailed(false);
+    setIsConverted(false);
+    setReferenceLoadFailed(false);
 
     (async () => {
       try {
-        const { uri: displayUri } = await getDisplayImage(imageUri);
+        const { uri: displayUri, isConverted: converted } = await getDisplayImage(imageUri);
         if (cancelled) return;
+        setIsConverted(converted);
         const base64 = await FileSystem.readAsStringAsync(displayUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
@@ -865,6 +877,22 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
         paddingRight: insets.right,
       }}
     >
+      {/* A small reference thumbnail of the ORIGINAL color photo, only for
+          a picture that was actually converted to line art — there is
+          nothing to reference for an already-suitable flat/line-art
+          picture. Deliberately a plain RN <Image>, not routed through
+          Skia's decoder: RN's native Image already loads content:// uris
+          directly on Android (every gallery tile already relies on this),
+          so no new decoding path is needed for a simple reference view. */}
+      {isConverted && !referenceLoadFailed && (
+        <Image
+          testID="coloring-color-reference"
+          source={{ uri: imageUri }}
+          style={[styles.colorReferenceThumbnail, { top: spacing.md, right: spacing.md }]}
+          resizeMode="cover"
+          onError={() => setReferenceLoadFailed(true)}
+        />
+      )}
       {/* This container's own frame DOES move when the safe-area padding
           above it changes (the 180-degree landscape flip described on
           measureTouchAreaOrigin's effect), even though its descendants'
@@ -1294,6 +1322,17 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
 }
 
 const styles = StyleSheet.create({
+  colorReferenceThumbnail: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    backgroundColor: colors.surface,
+    zIndex: 10,
+    ...elevation.level2,
+  },
   errorCardOuter: {
     width: '100%',
     maxWidth: 420,
