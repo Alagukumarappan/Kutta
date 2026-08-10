@@ -1,12 +1,13 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ColoringGallery } from '../../src/coloring/ColoringGallery';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import { addFileReferences } from '../../src/storage/fileReferenceStore';
+import { pruneStaleDerivedImages } from '../../src/coloring/lineArtCache';
 
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
@@ -14,6 +15,17 @@ jest.mock('expo-file-system/legacy', () => ({
 }));
 jest.mock('@react-native-async-storage/async-storage');
 jest.mock('expo-document-picker');
+jest.mock('../../src/coloring/lineArtCache', () => ({
+  pruneStaleDerivedImages: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/coloring/ColoringGalleryTileImage', () => {
+  const RN = require('react-native');
+  const ReactActual = require('react');
+  return {
+    ColoringGalleryTileImage: ({ testID, uri, style }: { testID?: string; uri: string; style: unknown }) =>
+      ReactActual.createElement(RN.Image, { testID, source: { uri }, style }),
+  };
+});
 
 // Simulates tapping the destructive button of the remove-confirmation
 // Alert — same pattern already established by SettingsScreen.test.tsx's
@@ -80,6 +92,22 @@ describe('ColoringGallery', () => {
     const item = await findByTestId('coloring-item-content://tree/coloring/cat-outline.png');
     await fireEvent.press(item);
     expect(onSelect).toHaveBeenCalledWith('content://tree/coloring/cat-outline.png');
+  });
+
+  it('sweeps stale derived line-art images once the folder listing has loaded', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([
+      'content://tree/coloring/cat-outline.png',
+    ]);
+
+    await render(
+      <LanguageProvider initialLanguage="en">
+        <ColoringGallery coloringFolderUri="content://tree/coloring" onSelect={jest.fn()} />
+      </LanguageProvider>
+    );
+
+    await waitFor(() =>
+      expect(pruneStaleDerivedImages).toHaveBeenCalledWith(['content://tree/coloring/cat-outline.png'])
+    );
   });
 
   // Regression test for a real bug seen on-device: with 4 images (one more

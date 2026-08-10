@@ -13,7 +13,12 @@ import { removeGalleryItems } from '../storage/galleryRemoval';
 // differing between them. Behavior-preserving only: every testID, Alert
 // copy, and state transition below is identical to what each gallery's own
 // pre-extraction copy did.
-export function useSelectableGallery(folderUri: string, contentType: FileReferenceContentType, isValidFile: (uri: string) => boolean) {
+export function useSelectableGallery(
+  folderUri: string,
+  contentType: FileReferenceContentType,
+  isValidFile: (uri: string) => boolean,
+  onItemsLoaded?: (uris: string[]) => void
+) {
   const { t } = useLanguage();
   const [items, setItems] = useState<string[] | null>(null);
   // Which currently-displayed items came from an individual "+" pick
@@ -65,6 +70,7 @@ export function useSelectableGallery(folderUri: string, contentType: FileReferen
       const merged = [...folderItems, ...extraItems.filter((uri) => !folderSet.has(uri))];
       setItems(merged);
       setReferencedUris(new Set(extraItems));
+      onItemsLoaded?.(merged);
     });
 
     return () => {

@@ -52,6 +52,21 @@ describe('useSelectableGallery', () => {
     expect(result.current.error).toBe(false);
   });
 
+  it('calls onItemsLoaded with the merged item list once loading succeeds', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue(['content://a.png']);
+    (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockResolvedValue([]);
+
+    const onItemsLoaded = jest.fn();
+    const { result } = await renderHook(
+      () => useSelectableGallery('content://folder', 'coloring', isImageFile, onItemsLoaded),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+
+    expect(onItemsLoaded).toHaveBeenCalledWith(['content://a.png']);
+  });
+
   it('does not duplicate an item that is both in the folder and individually referenced', async () => {
     (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue(['content://a.png']);
     (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockResolvedValue(['content://a.png']);

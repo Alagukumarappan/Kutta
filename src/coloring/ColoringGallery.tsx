@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, FlatList, Image, Pressable, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
 import { AddFilesButton } from '../components/AddFilesButton';
 import { useSelectableGallery } from '../components/useSelectableGallery';
+import { ColoringGalleryTileImage } from './ColoringGalleryTileImage';
+import { pruneStaleDerivedImages } from './lineArtCache';
 import {
   colors,
   spacing,
@@ -87,7 +89,12 @@ export function ColoringGallery({
     handleLongPress,
     handleCancelSelection,
     handleRemoveSelected,
-  } = useSelectableGallery(coloringFolderUri, 'coloring', isImageFile);
+  } = useSelectableGallery(coloringFolderUri, 'coloring', isImageFile, (uris) => {
+    pruneStaleDerivedImages(uris).catch(() => {
+      // Best-effort housekeeping -- a failed sweep just means stale derived
+      // files linger a little longer, never a user-visible failure.
+    });
+  });
 
   function handleTilePress(uri: string) {
     if (selectionMode) {
@@ -206,7 +213,11 @@ export function ColoringGallery({
                 selected={selectionMode ? isSelected : undefined}
               >
                 <>
-                  <Image source={{ uri: item }} style={styles.tileImage} resizeMode="cover" />
+                  <ColoringGalleryTileImage
+                    testID={`coloring-item-image-${item}`}
+                    uri={item}
+                    style={styles.tileImage}
+                  />
                   {selectionMode && (
                     <View
                       testID={`coloring-item-check-${item}`}
