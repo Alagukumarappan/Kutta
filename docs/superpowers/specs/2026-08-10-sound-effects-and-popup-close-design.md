@@ -19,12 +19,18 @@ Three related gaps found while testing the music feature:
 
 ### Sourcing
 
-Two sounds from **Kenney's "Interface Sounds" pack, CC0 (public domain)**,
-via the maintained GitHub mirror
-`github.com/Calinou/kenney-interface-sounds` (verified real WAV files,
-`LICENSE.txt` confirms CC0 1.0 Universal):
-- `confirmation_001.wav` → bundled as `sample-content/sfx/correct.wav`
-- `error_001.wav` → bundled as `sample-content/sfx/wrong.wav`
+Two CC0 (public domain) sounds from OpenGameArt.org, both verified as real
+audio files:
+- **"Win Jingle" by Fupi** → bundled as `sample-content/sfx/correct.ogg`
+  (a short, cheerful jingle — a genuine "yay!" moment, not a subtle UI blip).
+- **"Game Over Trumpet SFX" by 0new4y** → bundled as
+  `sample-content/sfx/wrong.mp3` (a comedic descending trumpet — the same
+  "sad trombone" spirit as the reference the parent asked for).
+
+An earlier pass tried Kenney's "Interface Sounds" UI blips
+(`confirmation_001.wav`/`error_001.wav`) — rejected as too subtle/generic
+for this purpose; these two replace them entirely, nothing from that pack
+ships.
 
 Credited in `ATTRIBUTION.md` (no attribution legally required, credited
 anyway per this project's existing convention).
