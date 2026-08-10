@@ -293,6 +293,12 @@ export const UI_STRINGS = {
   // AddFilesButton's picker invocation but picks exactly one image.
   profilePictureBrowseAnywhere: { en: 'Browse anywhere on your device', de: 'Auf dem ganzen Gerät suchen' },
   profilePictureBrowseError: { en: "Couldn't open that picture — please try again.", de: 'Konnte das Bild nicht öffnen — bitte erneut versuchen.' },
+  settingsMusicTitle: { en: 'Music', de: 'Musik' },
+  musicMuteLabel: { en: 'Mute music', de: 'Musik stummschalten' },
+  musicUnmuteLabel: { en: 'Play music', de: 'Musik abspielen' },
+  musicChooseButton: { en: 'Choose your own music', de: 'Eigene Musik wählen' },
+  musicUseDefault: { en: 'Use default music', de: 'Standardmusik verwenden' },
+  musicPickError: { en: "Couldn't use that music file — please try again.", de: 'Konnte diese Musikdatei nicht verwenden — bitte erneut versuchen.' },
   // {name}'s Home-screen avatar accessible name/fallback — decorative only
   // (not tappable), but still needs a real label for screen readers per
   // this feature's own accessibility requirement.
