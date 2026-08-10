@@ -900,7 +900,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           onPress={() => setShowColorReferenceZoom(true)}
           accessibilityRole="button"
           accessibilityLabel={t('coloringColorReferenceLabel')}
-          style={[styles.colorReferenceThumbnail, { top: 2, right: 2 }]}
+          style={[styles.colorReferenceThumbnail, { top: 2, left: 2 }]}
         >
           <Image
             testID="coloring-color-reference-image"
