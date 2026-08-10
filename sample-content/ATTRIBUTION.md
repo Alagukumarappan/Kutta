@@ -23,3 +23,7 @@ All from Wikimedia Commons, public domain / CC0 (no attribution legally required
 **Also removed (quality, not licensing):** `princess.png` (CC0 clipart) and `car-icon.png` (Twemoji) were briefly seeded here too. Both were properly licensed but did not work as coloring pages: the car was a 72x72 icon that turns to mush when stretched across the coloring canvas, and the princess was gradient-shaded, so the flood fill (tolerance 10, see `src/coloring/floodFill.ts`) filled only a small speckle of the tapped shade instead of a whole region. Anything added here should be line art or flat color at a real page resolution.
 
 **Note:** earlier versions of this folder briefly included files named `spiderman.png`, `barbie.png`, and `car.png` sourced from third-party "free printable coloring page" websites — those carried both a trademark risk (official-style Spider-Man/Marvel branding and logo) and a copyright risk (visible third-party site watermarks, unclear commercial-redistribution rights). They have been permanently removed and replaced with the properly-licensed, generic content listed above. If you're reviewing this repo's history: do not reintroduce branded/watermarked third-party coloring pages.
+
+## Background music (`music/`)
+
+- **default-track.mp3** — "Happy Adventure (Loop)" by TinyWorlds, via OpenGameArt.org (https://opengameart.org/content/happy-adventure-loop). **CC0** (public domain, no attribution legally required, credited here anyway).
