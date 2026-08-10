@@ -8,6 +8,7 @@ import { tFormat } from '../i18n/strings';
 import { getProfile, saveProfile, clearProfile } from '../storage/profileStore';
 import { getActivityLog, clearActivityLog, type ActivityLog } from '../storage/activityLog';
 import { clearAllFileReferences } from '../storage/fileReferenceStore';
+import { clearLineArtCache } from '../coloring/lineArtCache';
 import { clearPuzzleDifficulty } from '../storage/puzzleDifficultyStore';
 import { requestFolderAccess, findChildUri, KUTTA_GAMES_FOLDER_NAME } from '../storage/folderAccess';
 import { migrateContent } from '../storage/folderMigration';
@@ -323,6 +324,7 @@ export function SettingsScreen({
       // PREVIOUS child's picked files and difficulty setting instead of a
       // genuine fresh start.
       await clearAllFileReferences();
+      await clearLineArtCache();
       await clearPuzzleDifficulty();
       onReset?.();
     } finally {

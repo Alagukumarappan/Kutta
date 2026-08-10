@@ -9,6 +9,7 @@ import * as folderMigration from '../../src/storage/folderMigration';
 import * as activityLogModule from '../../src/storage/activityLog';
 import * as fileReferenceStore from '../../src/storage/fileReferenceStore';
 import * as puzzleDifficultyStore from '../../src/storage/puzzleDifficultyStore';
+import * as lineArtCache from '../../src/coloring/lineArtCache';
 import * as FileSystem from 'expo-file-system/legacy';
 import { colors as dsColors } from '../../src/design-system';
 
@@ -18,6 +19,9 @@ jest.mock('../../src/storage/folderMigration');
 jest.mock('../../src/storage/activityLog');
 jest.mock('../../src/storage/fileReferenceStore');
 jest.mock('../../src/storage/puzzleDifficultyStore');
+jest.mock('../../src/coloring/lineArtCache', () => ({
+  clearLineArtCache: jest.fn(),
+}));
 jest.mock('expo-file-system/legacy', () => ({
   StorageAccessFramework: { readDirectoryAsync: jest.fn(), deleteAsync: jest.fn() },
 }));
@@ -893,6 +897,7 @@ describe('SettingsScreen', () => {
       await confirmAlertWith('Reset everything');
 
       await waitFor(() => expect(fileReferenceStore.clearAllFileReferences).toHaveBeenCalledTimes(1));
+      expect(lineArtCache.clearLineArtCache).toHaveBeenCalledTimes(1);
       expect(puzzleDifficultyStore.clearPuzzleDifficulty).toHaveBeenCalledTimes(1);
     });
 
