@@ -47,20 +47,20 @@ function makeSolidBuffer(width: number, height: number, r: number, g: number, b:
   return pixels;
 }
 
-// Deterministic pseudo-random RGB noise -- every sampled pixel gets a
-// different color, the way a real photo's continuous gradients/texture do.
+// Deterministic RGB "noise" -- each channel is a different linear mix of
+// (x, y), so every sampled pixel gets a distinct color the way a real
+// photo's continuous gradients/texture do (unlike a true random generator,
+// this guarantees high variety even across a sparse sample grid).
 function makeNoiseBuffer(width: number, height: number): Uint8ClampedArray {
   const pixels = new Uint8ClampedArray(width * height * 4);
-  let seed = 12345;
-  function next(): number {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed % 256;
-  }
-  for (let i = 0; i < width * height; i++) {
-    pixels[i * 4] = next();
-    pixels[i * 4 + 1] = next();
-    pixels[i * 4 + 2] = next();
-    pixels[i * 4 + 3] = 255;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      pixels[i] = (x * 13 + y * 97) % 256;
+      pixels[i + 1] = (x * 61 + y * 17) % 256;
+      pixels[i + 2] = (x * 29 + y * 53) % 256;
+      pixels[i + 3] = 255;
+    }
   }
   return pixels;
 }
