@@ -196,6 +196,11 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
   // Independent of the main canvas's own load state -- a broken reference
   // thumbnail must never affect whether the coloring canvas itself shows.
   const [referenceLoadFailed, setReferenceLoadFailed] = useState(false);
+  // Tapping the thumbnail shows a bigger version of the original photo;
+  // tapping anywhere outside it (the backdrop) closes it again without
+  // triggering a fill underneath, so the very next tap on the canvas is a
+  // normal, deliberate coloring tap rather than an accidental one.
+  const [showColorReferenceZoom, setShowColorReferenceZoom] = useState(false);
   // Bumped on Retry to force a fresh load attempt even when `imageUri`
   // hasn't changed (e.g. a transient failure) — same pattern used by
   // QuizScreen and ColoringGallery for this identical class of SAF failure
@@ -368,6 +373,7 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
     setImageLoadFailed(false);
     setIsConverted(false);
     setReferenceLoadFailed(false);
+    setShowColorReferenceZoom(false);
 
     (async () => {
       try {
@@ -883,15 +889,57 @@ export function ColoringScreen({ imageUri }: { imageUri: string }) {
           picture. Deliberately a plain RN <Image>, not routed through
           Skia's decoder: RN's native Image already loads content:// uris
           directly on Android (every gallery tile already relies on this),
-          so no new decoding path is needed for a simple reference view. */}
+          so no new decoding path is needed for a simple reference view.
+          Tapping it opens a bigger version (see the zoom overlay below);
+          hugging the very corner (a tiny fixed offset, not spacing.md) so
+          it reads as a corner badge rather than sitting out in the open
+          over the canvas. */}
       {isConverted && !referenceLoadFailed && (
-        <Image
+        <Pressable
           testID="coloring-color-reference"
-          source={{ uri: imageUri }}
-          style={[styles.colorReferenceThumbnail, { top: spacing.md, right: spacing.md }]}
-          resizeMode="cover"
-          onError={() => setReferenceLoadFailed(true)}
-        />
+          onPress={() => setShowColorReferenceZoom(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('coloringColorReferenceLabel')}
+          style={[styles.colorReferenceThumbnail, { top: 2, right: 2 }]}
+        >
+          <Image
+            testID="coloring-color-reference-image"
+            source={{ uri: imageUri }}
+            style={styles.colorReferenceThumbnailImage}
+            resizeMode="cover"
+            onError={() => setReferenceLoadFailed(true)}
+          />
+        </Pressable>
+      )}
+      {/* Tapping the thumbnail above shows this bigger version; tapping
+          anywhere on the backdrop OUTSIDE the enlarged photo closes it
+          again without coloring anything underneath — the backdrop's own
+          Pressable captures that tap, and the enlarged photo is wrapped in
+          its own nested Pressable so a tap ON the photo doesn't also
+          reach (and dismiss via) the backdrop beneath it. The very next
+          tap, once this is closed, reaches the real canvas as a normal
+          coloring tap. */}
+      {isConverted && !referenceLoadFailed && showColorReferenceZoom && (
+        <Pressable
+          testID="coloring-color-reference-zoom-backdrop"
+          style={styles.colorReferenceZoomBackdrop}
+          onPress={() => setShowColorReferenceZoom(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t('close')}
+        >
+          <Pressable
+            testID="coloring-color-reference-zoom"
+            onPress={() => {}}
+            style={styles.colorReferenceZoomCard}
+          >
+            <Image
+              testID="coloring-color-reference-zoom-image"
+              source={{ uri: imageUri }}
+              style={styles.colorReferenceZoomImage}
+              resizeMode="contain"
+            />
+          </Pressable>
+        </Pressable>
       )}
       {/* This container's own frame DOES move when the safe-area padding
           above it changes (the 180-degree landscape flip described on
@@ -1330,8 +1378,40 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
     backgroundColor: colors.surface,
+    overflow: 'hidden',
     zIndex: 10,
     ...elevation.level2,
+  },
+  colorReferenceThumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  // Covers the whole screen so a tap ANYWHERE outside the enlarged photo
+  // dismisses it -- a semi-transparent scrim rather than the app's opaque
+  // surfaces, so there's still a visual hint of the canvas underneath.
+  colorReferenceZoomBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  colorReferenceZoomCard: {
+    width: '70%',
+    height: '70%',
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    padding: spacing.sm,
+    overflow: 'hidden',
+    ...elevation.level3,
+  },
+  colorReferenceZoomImage: {
+    width: '100%',
+    height: '100%',
   },
   errorCardOuter: {
     width: '100%',

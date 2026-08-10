@@ -238,8 +238,9 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
 
-      const thumbnail = await findByTestId('coloring-color-reference');
-      expect(thumbnail.props.source.uri).toBe(IMAGE_URI);
+      await findByTestId('coloring-color-reference');
+      const thumbnailImage = await findByTestId('coloring-color-reference-image');
+      expect(thumbnailImage.props.source.uri).toBe(IMAGE_URI);
     });
 
     it('does not show a reference thumbnail when the picture was not converted (already suitable)', async () => {
@@ -269,13 +270,79 @@ describe('ColoringScreen', () => {
         </LanguageProvider>
       );
 
-      const thumbnail = await findByTestId('coloring-color-reference');
+      const thumbnailImage = await findByTestId('coloring-color-reference-image');
       await act(async () => {
-        thumbnail.props.onError();
+        thumbnailImage.props.onError();
       });
 
       expect(queryByTestId('coloring-color-reference')).toBeNull();
       await findByTestId('coloring-canvas-touch-area');
+    });
+
+    it('opens a bigger version of the original photo when the thumbnail is tapped', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      (getDisplayImage as jest.Mock).mockResolvedValue({
+        uri: 'file:///docs/kutta-line-art/converted.png',
+        isConverted: true,
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+
+      expect(queryByTestId('coloring-color-reference-zoom')).toBeNull();
+
+      const thumbnail = await findByTestId('coloring-color-reference');
+      await fireEvent.press(thumbnail);
+
+      const zoomedImage = await findByTestId('coloring-color-reference-zoom-image');
+      expect(zoomedImage.props.source.uri).toBe(IMAGE_URI);
+    });
+
+    it('closes the zoomed photo when the backdrop outside it is tapped', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      (getDisplayImage as jest.Mock).mockResolvedValue({
+        uri: 'file:///docs/kutta-line-art/converted.png',
+        isConverted: true,
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+
+      const thumbnail = await findByTestId('coloring-color-reference');
+      await fireEvent.press(thumbnail);
+      await findByTestId('coloring-color-reference-zoom');
+
+      const backdrop = await findByTestId('coloring-color-reference-zoom-backdrop');
+      await fireEvent.press(backdrop);
+
+      expect(queryByTestId('coloring-color-reference-zoom')).toBeNull();
+    });
+
+    it('does not close the zoomed photo when the photo itself (not the backdrop) is tapped', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(FAKE_BASE64);
+      (getDisplayImage as jest.Mock).mockResolvedValue({
+        uri: 'file:///docs/kutta-line-art/converted.png',
+        isConverted: true,
+      });
+
+      const { findByTestId, queryByTestId } = await render(
+        <LanguageProvider initialLanguage="en">
+          <ColoringScreen imageUri={IMAGE_URI} />
+        </LanguageProvider>
+      );
+
+      const thumbnail = await findByTestId('coloring-color-reference');
+      await fireEvent.press(thumbnail);
+      const zoomed = await findByTestId('coloring-color-reference-zoom');
+      await fireEvent.press(zoomed);
+
+      expect(queryByTestId('coloring-color-reference-zoom')).not.toBeNull();
     });
   });
 

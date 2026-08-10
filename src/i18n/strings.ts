@@ -176,6 +176,11 @@ export const UI_STRINGS = {
     en: 'This picture could not be loaded for coloring.',
     de: 'Dieses Bild konnte nicht zum Ausmalen geladen werden.',
   },
+  coloringColorReferenceLabel: {
+    en: 'Show the original color picture',
+    de: 'Das Originalbild in Farbe anzeigen',
+  },
+  close: { en: 'Close', de: 'Schließen' },
   folderResolveError: {
     en: 'Could not access your content folders. Please check folder access and try again.',
     de: 'Zugriff auf deine Inhaltsordner nicht möglich. Bitte überprüfe den Ordnerzugriff und versuche es erneut.',
