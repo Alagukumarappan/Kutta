@@ -53,18 +53,37 @@ synthetic buffers (flat 2-color, grayscale, random-noise, gradient).
 
 ## Conversion algorithm
 
-`convertToLineArt(image: SkImage): SkImage`, also in
-`src/coloring/lineArtConversion.ts`:
+**Refinement made while writing the implementation plan:** the spec
+originally called for Skia's `ImageFilter.MakeMatrixConvolution` end to end.
+That API applies exactly one convolution pass, but a real Sobel edge
+detector needs two passes (a horizontal kernel and a vertical kernel) whose
+results are then combined as a magnitude (`sqrt(gx² + gy²)`) — not something
+a single Skia `ImageFilter` pass can produce on its own. `ColoringScreen.tsx`
+already establishes a working "decode → `readPixels` into a raw RGBA buffer →
+process in plain JS → `Skia.Image.MakeImage` from the result" round trip for
+exactly this kind of pixel-level work (see `floodFill`'s call sites at
+`ColoringScreen.tsx:394` and `:443`) — reusing that pattern here, instead of
+Skia's convolution filter, is both simpler and lets the two-pass magnitude
+combine correctly.
 
-1. Convert to grayscale (a Skia color-matrix `ImageFilter`).
-2. Run edge detection via Skia's matrix-convolution `ImageFilter` (a
-   Sobel-style kernel) on the grayscale result.
-3. Threshold the edge-magnitude output to pure black (edge) / white
-   (non-edge).
+`convertToLineArt(pixels: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray`,
+in `src/coloring/lineArtConversion.ts`, a pure function operating on a raw
+RGBA buffer (the same shape `floodFill.ts` already takes and returns):
 
-All three steps render into an offscreen `Skia.Surface.MakeOffscreen`, the
-same technique `downscaleForColoring` (existing code in `ColoringScreen.tsx`)
-already uses — no new library, no native dependency.
+1. Convert each pixel to grayscale using standard luminance weights
+   (`0.2126*R + 0.7152*G + 0.0722*B`).
+2. Run a 3x3 Sobel kernel in both the horizontal and vertical directions
+   over the grayscale buffer, and combine them per-pixel as
+   `magnitude = sqrt(gx² + gy²)`.
+3. Threshold the magnitude: at/above the threshold → black, below → white
+   (alpha left at 255 — this is a coloring page, not a transparency mask).
+
+`ColoringScreen.tsx`'s existing load effect already does the "decode →
+`readPixels`" half of this round trip for its own pixel work; the cache
+(below) reuses the same `Skia.Image.MakeImageFromEncoded` decode step, then
+calls `image.readPixels(...)` to get the buffer this function needs, and
+`Skia.Image.MakeImage(...)` to turn the processed buffer back into an
+`SkImage` for encoding — no new Skia API surface, no native dependency.
 
 Runs on the already-downscaled image (after `downscaleForColoring`'s existing
 1600px cap), so conversion cost is bounded the same way decoding already is.
