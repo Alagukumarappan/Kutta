@@ -27,3 +27,8 @@ All from Wikimedia Commons, public domain / CC0 (no attribution legally required
 ## Background music (`music/`)
 
 - **default-track.mp3** — "Happy Adventure (Loop)" by TinyWorlds, via OpenGameArt.org (https://opengameart.org/content/happy-adventure-loop). **CC0** (public domain, no attribution legally required, credited here anyway).
+
+## Sound effects (`sfx/`)
+
+- **correct.ogg** — "Win Jingle" by Fupi, via OpenGameArt.org (https://opengameart.org/content/win-jingle). **CC0** (public domain, no attribution legally required, credited here anyway).
+- **wrong.mp3** — "Game Over Trumpet SFX" by 0new4y, via OpenGameArt.org (https://opengameart.org/content/game-over-trumpet-sfx). **CC0** (public domain; the author notes "No attribution required," credited here anyway).
