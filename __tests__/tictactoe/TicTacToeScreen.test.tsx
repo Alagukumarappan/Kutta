@@ -3,6 +3,12 @@ import { render, fireEvent, waitFor, act, within } from '@testing-library/react-
 import { TicTacToeScreen } from '../../src/tictactoe/TicTacToeScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { getComputerMove } from '../../src/tictactoe/ticTacToeEngine';
+import { playCorrectSound, playWrongSound } from '../../src/audio/soundEffects';
+
+jest.mock('../../src/audio/soundEffects', () => ({
+  playCorrectSound: jest.fn(),
+  playWrongSound: jest.fn(),
+}));
 
 // Defaults to the REAL minimax (via jest.fn(actual.getComputerMove)) for
 // every test — only the one test below that needs a guaranteed computer
@@ -52,6 +58,8 @@ describe('TicTacToeScreen', () => {
   // by its own dedicated tests further down, which mock this explicitly.
   beforeEach(() => {
     jest.spyOn(Math, 'random').mockReturnValue(0);
+    (playCorrectSound as jest.Mock).mockClear();
+    (playWrongSound as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -106,6 +114,8 @@ describe('TicTacToeScreen', () => {
       expect(within(overlay).getByText('Sam wins! 🎉')).toBeTruthy();
       expect(await findByTestId('tictactoe-retry')).toBeTruthy();
       expect(await findByTestId('tictactoe-menu')).toBeTruthy();
+      expect(playCorrectSound).toHaveBeenCalledTimes(1);
+      expect(playWrongSound).not.toHaveBeenCalled();
     });
 
     it('Play Again resets the board to a fresh, empty game', async () => {
@@ -182,6 +192,10 @@ describe('TicTacToeScreen', () => {
 
       const overlay = await findByTestId('tictactoe-complete');
       expect(within(overlay).getByText("It's a draw!")).toBeTruthy();
+      // A draw is neither a win nor a loss -- it plays no sound at all
+      // rather than guessing which one fits.
+      expect(playCorrectSound).not.toHaveBeenCalled();
+      expect(playWrongSound).not.toHaveBeenCalled();
     });
   });
 
@@ -357,6 +371,8 @@ describe('TicTacToeScreen', () => {
       // success-only flourish CelebrationOverlay renders when `tone`
       // is 'success' AND an `emoji` is provided.
       expect(within(overlay).queryByTestId('celebration-bubble')).toBeNull();
+      expect(playWrongSound).toHaveBeenCalledTimes(1);
+      expect(playCorrectSound).not.toHaveBeenCalled();
 
       jest.useRealTimers();
     });

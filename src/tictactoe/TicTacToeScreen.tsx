@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
+import { playCorrectSound, playWrongSound } from '../audio/soundEffects';
 import {
   createEmptyBoard,
   getGameStatus,
@@ -212,6 +213,27 @@ export function TicTacToeScreen({
   // one specific case gets a calmer, encouraging message instead.
   const isHumanLoss = mode === 'computer' && status.status === 'won' && status.winner === opponentMark;
   const isCelebratoryWin = status.status === 'won' && !isHumanLoss;
+
+  // Plays a correct/wrong sound exactly once per finished game -- a
+  // rising-edge guard (same shape as PuzzleScreen's hasRecordedThisSolveRef)
+  // reset whenever the game is back in progress (Retry/a fresh setup), so a
+  // re-render while still over doesn't replay it. A draw plays neither: it
+  // is genuinely neither a win nor a loss, and forcing it into one of the
+  // two sounds would misrepresent the outcome.
+  const soundPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!isGameOver) {
+      soundPlayedRef.current = false;
+      return;
+    }
+    if (soundPlayedRef.current) return;
+    soundPlayedRef.current = true;
+    if (isCelebratoryWin) {
+      playCorrectSound();
+    } else if (isHumanLoss) {
+      playWrongSound();
+    }
+  }, [isGameOver, isCelebratoryWin, isHumanLoss]);
 
   return (
     <GradientScreenBackground
