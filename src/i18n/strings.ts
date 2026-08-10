@@ -29,11 +29,13 @@ export const UI_STRINGS = {
   homePuzzle: { en: 'Photo Puzzle', de: 'Fotopuzzle' },
   homeVideo: { en: 'Videos', de: 'Videos' },
   homeTicTacToe: { en: 'Tic-Tac-Toe', de: 'Tic-Tac-Toe' },
+  homeCamera: { en: 'Camera', de: 'Kamera' },
   homeColoringTagline: { en: "Let's create!", de: 'Los geht’s!' },
   homeQuizTagline: { en: 'Test your smarts', de: 'Teste dein Wissen' },
   homePuzzleTagline: { en: 'Piece it together', de: 'Setz es zusammen' },
   homeVideoTagline: { en: 'Watch & learn', de: 'Schauen & lernen' },
   homeTicTacToeTagline: { en: 'Outsmart the computer!', de: 'Überlist den Computer!' },
+  homeCameraTagline: { en: 'Snap a photo!', de: 'Mach ein Foto!' },
   homeGreetingHi: { en: 'Hi,', de: 'Hallo,' },
   // Subtitle under the child's name in Home's redesigned header pill (see
   // HomeScreen.tsx) — e.g. "Age 7". Profile.age is always a single integer
@@ -274,6 +276,14 @@ export const UI_STRINGS = {
   addPuzzlePicture: { en: '+ Add puzzle picture', de: '+ Puzzlebild hinzufügen' },
   addVideo: { en: '+ Add video', de: '+ Video hinzufügen' },
   addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
+  cameraTakePhoto: { en: '📷 Take a photo', de: '📷 Foto aufnehmen' },
+  cameraPermissionError: {
+    en: 'Camera access is needed to take a photo — please allow it in your device settings.',
+    de: 'Für Fotos wird Kamerazugriff benötigt — bitte erlaube ihn in den Geräteeinstellungen.',
+  },
+  cameraPhotoError: { en: "Couldn't take that photo — please try again.", de: 'Konnte das Foto nicht aufnehmen — bitte erneut versuchen.' },
+  emptyCameraTitle: { en: 'No photos yet', de: 'Noch keine Fotos' },
+  emptyCamera: { en: 'Take your first photo to see it here!', de: 'Mach dein erstes Foto, um es hier zu sehen!' },
   gallerySelectedCount: { en: '{count} selected', de: '{count} ausgewählt' },
   galleryRemove: { en: 'Remove', de: 'Entfernen' },
   galleryRemoveConfirmTitle: { en: 'Remove selected items?', de: 'Ausgewählte Elemente entfernen?' },
