@@ -189,33 +189,39 @@ describe('MemoryMatchScreen', () => {
   });
 
   it('plays the wrong sound (and not the correct sound) as soon as a MISMATCHED pair is revealed, before it flips back', async () => {
-    const { getByTestId, queryByTestId } = await renderGame({ pairCount: 6 });
+    // Same determinism idiom as the adjacent MATCHED test below: pin
+    // Math.random to a constant so buildDeck/reshuffle are deterministic,
+    // then replay the exact same two pure calls the component itself makes
+    // (mount's buildDeck, then the preview-end effect's reshuffle) to
+    // compute the real post-reshuffle arrangement up front. That lets this
+    // test pick two indices that are KNOWN in advance to be a genuine
+    // MISMATCH and press exactly those two -- no randomness-dependent
+    // search loop that could, by chance, stumble onto a real match instead
+    // (which used to make this test flaky: `handleCardPress` would legitimately
+    // fire `playCorrectSound()` for that accidental match before the loop's
+    // search noticed and moved on, failing the "not.toHaveBeenCalled()"
+    // assertion below on some ~1-in-6 runs).
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const computedDeck = reshuffle(buildDeck(6, resolvableItemIds()));
+    let mismatchA = -1;
+    let mismatchB = -1;
+    for (let j = 1; j < computedDeck.length; j++) {
+      if (computedDeck[j].itemId !== computedDeck[0].itemId) {
+        mismatchA = 0;
+        mismatchB = j;
+        break;
+      }
+    }
+    expect(mismatchA).toBeGreaterThanOrEqual(0);
+
+    const { getByTestId } = await renderGame({ pairCount: 6 });
     await act(async () => {
       jest.advanceTimersByTime(2000); // past the preview
     });
+    randomSpy.mockRestore();
 
-    async function flipAndImage(index: number) {
-      await fireEvent.press(getByTestId(`memory-match-card-${index}`));
-      return queryByTestId(`memory-match-card-${index}-image`);
-    }
-
-    const untried = Array.from({ length: 11 }, (_, i) => i + 1);
-    let anchorIndex = 0;
-    let firstImage = await flipAndImage(anchorIndex);
-
-    let mismatchIndex = -1;
-    while (mismatchIndex === -1 && untried.length > 0) {
-      const i = untried.shift()!;
-      const candidateImage = await flipAndImage(i);
-      if (!candidateImage) continue;
-      if (candidateImage.props.source !== firstImage!.props.source) {
-        mismatchIndex = i;
-      } else if (untried.length > 0) {
-        anchorIndex = untried.shift()!;
-        firstImage = await flipAndImage(anchorIndex);
-      }
-    }
-    expect(mismatchIndex).toBeGreaterThan(-1);
+    await fireEvent.press(getByTestId(`memory-match-card-${mismatchA}`));
+    await fireEvent.press(getByTestId(`memory-match-card-${mismatchB}`));
 
     // The sound must play as soon as the mismatch is revealed -- BEFORE
     // the 900ms flip-back delay has elapsed, not only afterward.
