@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Pressable, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Pressable, Image, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
 import { tFormat } from '../i18n/strings';
@@ -17,6 +17,7 @@ import {
   colors,
   radii,
   spacing,
+  typography,
   clamp,
   getActivityPalette,
   CelebrationOverlay,
@@ -54,8 +55,6 @@ export function MemoryMatchScreen({
 }: {
   mode: MemoryMatchMode;
   pairCount: PairCount;
-  // Accepted now so Task 8's friend-mode addition doesn't need to change
-  // this component's props -- unused by solo mode.
   childName: string;
   friendName?: string;
   onMenu: () => void;
@@ -67,6 +66,14 @@ export function MemoryMatchScreen({
   const [deck, setDeck] = useState<MemoryCard[]>(() => buildDeck(pairCount, resolvableItemIds()));
   const [revealPhase, setRevealPhase] = useState<'previewing' | 'playing'>('previewing');
   const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
+  // Friend-mode only -- unused (and never shown) in solo mode. The child
+  // always goes first (matching every other 2-player activity in this
+  // app defaulting to a fixed, predictable starting player when there's
+  // no coin-flip requirement in the design), and a match keeps the
+  // current player's turn while a mismatch passes it.
+  const [currentPlayerIsChild, setCurrentPlayerIsChild] = useState(true);
+  const [childScore, setChildScore] = useState(0);
+  const [friendScore, setFriendScore] = useState(0);
   // Bumped on Retry to re-trigger the preview effect below (which only
   // otherwise runs once per mount) -- see handleRetry.
   const [roundKey, setRoundKey] = useState(0);
@@ -109,9 +116,10 @@ export function MemoryMatchScreen({
     if (flippedIndices.length !== 2) return;
     const timeoutId = setTimeout(() => {
       setFlippedIndices([]);
+      if (mode === 'friend') setCurrentPlayerIsChild((isChild) => !isChild);
     }, MISMATCH_FLIP_BACK_DELAY_MS);
     return () => clearTimeout(timeoutId);
-  }, [flippedIndices]);
+  }, [flippedIndices, mode]);
 
   function handleCardPress(index: number) {
     if (revealPhase !== 'playing' || flippedIndices.length === 2) return;
@@ -128,6 +136,10 @@ export function MemoryMatchScreen({
         const [first, second] = nextFlipped;
         if (checkMatch(deck, first, second)) {
           setDeck((prevDeck) => prevDeck.map((card, i) => (i === first || i === second ? { ...card, matched: true } : card)));
+          if (mode === 'friend') {
+            if (currentPlayerIsChild) setChildScore((score) => score + 1);
+            else setFriendScore((score) => score + 1);
+          }
           return [];
         }
       }
@@ -140,6 +152,9 @@ export function MemoryMatchScreen({
     retryFiredRef.current = true;
     setDeck(buildDeck(pairCount, resolvableItemIds()));
     setFlippedIndices([]);
+    setCurrentPlayerIsChild(true);
+    setChildScore(0);
+    setFriendScore(0);
     setRoundKey((key) => key + 1);
   }
 
@@ -153,8 +168,20 @@ export function MemoryMatchScreen({
     return revealPhase === 'previewing' || card.matched || flippedIndices.includes(index);
   }
 
+  function opponentDisplayName(): string {
+    return friendName ?? t('tictactoeOpponentFriend');
+  }
+
   function completionTitle(): string {
-    return t('memoryMatchSoloComplete');
+    if (mode === 'solo') return t('memoryMatchSoloComplete');
+    if (childScore === friendScore) return t('memoryMatchDraw');
+    const winnerName = childScore > friendScore ? childName : opponentDisplayName();
+    return tFormat('memoryMatchPlayerWinsNamed', language, { name: winnerName });
+  }
+
+  function turnText(): string {
+    const name = currentPlayerIsChild ? childName : opponentDisplayName();
+    return tFormat('memoryMatchPlayerTurnNamed', language, { name });
   }
 
   const columns = GRID_COLUMNS_BY_PAIR_COUNT[pairCount];
@@ -175,6 +202,25 @@ export function MemoryMatchScreen({
         },
       ]}
     >
+      {mode === 'friend' && (
+        <View style={styles.scoreRow}>
+          <View style={styles.scoreChip}>
+            <Text testID="memory-match-score-child" style={styles.scoreChipText}>
+              {tFormat('memoryMatchScoreLabel', language, { name: childName, score: childScore })}
+            </Text>
+          </View>
+          <View style={styles.scoreChip}>
+            <Text testID="memory-match-score-friend" style={styles.scoreChipText}>
+              {tFormat('memoryMatchScoreLabel', language, { name: opponentDisplayName(), score: friendScore })}
+            </Text>
+          </View>
+        </View>
+      )}
+      {mode === 'friend' && revealPhase === 'playing' && (
+        <Text testID="memory-match-turn" style={styles.turnText}>
+          {turnText()}
+        </Text>
+      )}
       <View style={styles.grid}>
         {Array.from({ length: rows }, (_, rowIndex) => (
           <View key={rowIndex} testID={`memory-match-row-${rowIndex}`} style={styles.gridRow}>
@@ -240,6 +286,28 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  scoreChip: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+  },
+  scoreChipText: {
+    fontSize: typography.caption.fontSize,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  turnText: {
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: typography.bodySmall.fontWeight,
+    color: colors.ink,
+    marginBottom: spacing.xs,
   },
   grid: {
     flexDirection: 'column',
