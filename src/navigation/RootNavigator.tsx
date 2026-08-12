@@ -28,6 +28,9 @@ import { SplashScreen } from '../splash/SplashScreen';
 import { TicTacToeSetupScreen, type TicTacToeMode } from '../tictactoe/TicTacToeSetupScreen';
 import { TicTacToeScreen } from '../tictactoe/TicTacToeScreen';
 import type { Difficulty as TicTacToeDifficulty } from '../tictactoe/ticTacToeEngine';
+import { MemoryMatchSetupScreen, type MemoryMatchMode } from '../memoryMatch/MemoryMatchSetupScreen';
+import { MemoryMatchScreen } from '../memoryMatch/MemoryMatchScreen';
+import type { PairCount } from '../memoryMatch/memoryMatchEngine';
 
 // Everything past the very first launch moment (onboarding, home, settings,
 // quiz, coloring, puzzle, video) is landscape-designed, so app.json's
@@ -102,6 +105,8 @@ export type RootStackParamList = {
   tictactoe: undefined;
   'tictactoe-game': { mode: TicTacToeMode; difficulty: TicTacToeDifficulty | null; friendName?: string };
   camera: undefined;
+  memoryMatchSetup: undefined;
+  'memoryMatch-game': { mode: MemoryMatchMode; pairCount: PairCount; friendName?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -375,6 +380,26 @@ function AppStack({
       </Stack.Screen>
       <Stack.Screen name="camera" options={{ headerShown: false, title: titleFor('homeCamera') }}>
         {() => <CameraGallery />}
+      </Stack.Screen>
+      <Stack.Screen name="memoryMatchSetup" options={{ headerShown: false, title: titleFor('memoryMatchSetupTitle') }}>
+        {({ navigation }) => (
+          <MemoryMatchSetupScreen
+            onStart={(mode, pairCount, friendName) =>
+              navigation.navigate('memoryMatch-game', { mode, pairCount, friendName })
+            }
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="memoryMatch-game" options={{ headerShown: false, title: titleFor('memoryMatchDetailTitle') }}>
+        {({ navigation, route }) => (
+          <MemoryMatchScreen
+            mode={route.params.mode}
+            pairCount={route.params.pairCount}
+            childName={profile.name}
+            friendName={route.params.friendName}
+            onMenu={() => navigation.goBack()}
+          />
+        )}
       </Stack.Screen>
     </Stack.Navigator>
   );
