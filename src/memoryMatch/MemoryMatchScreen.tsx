@@ -341,7 +341,17 @@ export function MemoryMatchScreen({
   const availableWidth = width - insets.left - insets.right - spacing.md * 2;
   const availableHeight =
     height - insets.top - insets.bottom - spacing.md * 2 - (mode === 'friend' ? FRIEND_MODE_HEADER_ALLOWANCE : 0);
-  const cellSize = clamp(Math.min(availableWidth / columns, availableHeight / rows) - spacing.xs, 36, 96);
+  // Raised from an earlier (36, 96) range after real-device feedback that
+  // cards read as too small, especially at the lower pair counts where
+  // there's genuine room to grow — the 96 ceiling was the actual binding
+  // constraint there, not the available screen space. 48 (not 36) as the
+  // floor also brings this in line with design-system's own
+  // touchTarget.minimum, since a very small card is both hard to see and
+  // hard to tap precisely for a young child. At the highest pair counts
+  // (most cards, least room) the real constraint is still availableWidth/
+  // availableHeight, so this ceiling change never risks the friend-mode
+  // overflow a real-device bug report already caught and fixed once.
+  const cellSize = clamp(Math.min(availableWidth / columns, availableHeight / rows) - spacing.xs, 48, 140);
 
   return (
     <GradientScreenBackground
