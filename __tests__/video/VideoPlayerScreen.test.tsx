@@ -264,6 +264,31 @@ describe('VideoPlayerScreen', () => {
     expect(queryByTestId('video-player-loading')).toBeNull();
   });
 
+  // Regression test: the synchronous up-front `applyStatus({ status:
+  // player.status })` call has no real statusChange payload (and so no
+  // `payload.error`) available — if the player already happened to be in
+  // 'error' at that exact moment, this must NOT log `console.warn(...,
+  // undefined)`, which would be useless noise. It should log a distinct,
+  // clearly-labeled message instead.
+  it('does not console.warn with undefined when the player already settled to error before subscribing', async () => {
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    __mockPlayer.status = 'error';
+
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-player-error');
+
+    expect(consoleWarn).not.toHaveBeenCalledWith(expect.anything(), undefined);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[VideoPlayerScreen] player already in error state at subscribe time, no error detail available'
+    );
+    consoleWarn.mockRestore();
+  });
+
   // Regression test: some real-device failures never fire ANY statusChange
   // event at all (no 'error', nothing) — previously that left the spinner
   // up forever with zero recourse, which read to a child/parent as "this

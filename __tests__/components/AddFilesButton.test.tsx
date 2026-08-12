@@ -288,7 +288,10 @@ describe('AddFilesButton', () => {
     it('rejects a video with an unsupported mimeType, alerts, and does not add it', async () => {
       (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
         canceled: false,
-        assets: [{ uri: 'content://media/video/1', name: 'clip.avi', mimeType: 'video/x-msvideo', lastModified: 0 }],
+        // video/x-ms-wmv (.wmv) is NOT handled by media3's default extractor
+        // factory, unlike video/x-msvideo (.avi) below — this is now the
+        // canonical genuinely-unsupported example.
+        assets: [{ uri: 'content://media/video/1', name: 'clip.wmv', mimeType: 'video/x-ms-wmv', lastModified: 0 }],
       });
       jest.spyOn(Alert, 'alert').mockImplementation(() => {});
       const onAdded = jest.fn();
@@ -299,6 +302,64 @@ describe('AddFilesButton', () => {
       await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
       expect(onAdded).not.toHaveBeenCalled();
       expect(await getFileReferences('video')).toEqual([]);
+    });
+
+    // Regression test: video/x-msvideo (.avi) has an AviExtractor in
+    // media3's default factory, so it plays fine and must NOT be rejected —
+    // it was previously (wrongly) used as the canonical "bad" example.
+    it('accepts a video with mimeType video/x-msvideo (.avi), which media3 actually supports', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://media/video/avi', name: 'clip.avi', mimeType: 'video/x-msvideo', lastModified: 0 }],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://media/video/avi']);
+    });
+
+    // Regression test: video/3gpp (.3gp, extremely common on Android camera
+    // recordings), video/x-m4v (.m4v), video/mp2t (.ts), and video/x-flv
+    // (.flv) are all well-supported by ExoPlayer/media3's default extractor
+    // set and must not be wrongly rejected.
+    it.each([
+      ['video/3gpp', 'clip.3gp'],
+      ['video/x-m4v', 'clip.m4v'],
+      ['video/mp2t', 'clip.ts'],
+      ['video/x-flv', 'clip.flv'],
+    ])('accepts a video with mimeType %s (%s)', async (mimeType, name) => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: `content://media/video/${name}`, name, mimeType, lastModified: 0 }],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual([`content://media/video/${name}`]);
+    });
+
+    // The allow-list comparison must be case/parameter insensitive: some
+    // providers report a codecs parameter suffix or an uppercase mimeType.
+    it('accepts a video whose mimeType has a codecs parameter suffix and different casing', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [
+          { uri: 'content://media/video/upper', name: 'party.mp4', mimeType: 'VIDEO/MP4; codecs=avc1', lastModified: 0 },
+        ],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://media/video/upper']);
     });
 
     it('still adds a video with a supported mimeType, same as before', async () => {
@@ -334,7 +395,7 @@ describe('AddFilesButton', () => {
         canceled: false,
         assets: [
           { uri: 'content://media/video/good.mp4', name: 'good.mp4', mimeType: 'video/mp4', lastModified: 0 },
-          { uri: 'content://media/video/bad.avi', name: 'bad.avi', mimeType: 'video/x-msvideo', lastModified: 0 },
+          { uri: 'content://media/video/bad.wmv', name: 'bad.wmv', mimeType: 'video/x-ms-wmv', lastModified: 0 },
         ],
       });
       jest.spyOn(Alert, 'alert').mockImplementation(() => {});

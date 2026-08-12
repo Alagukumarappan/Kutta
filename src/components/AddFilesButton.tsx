@@ -17,12 +17,34 @@ import { radii, spacing, shadow } from '../theme/tokens';
 // system's own content provider at pick time, before this app ever reads a
 // single byte, so it's a real signal about the file's actual container —
 // not a guess derived from its name.
+//
+// This allow-list is scoped to what ExoPlayer/media3's DEFAULT extractor
+// factory can actually demux, not just "common" video formats: video/3gpp
+// (.3gp) and video/x-m4v (.m4v) are both MP4-family containers, video/mp2t
+// (.ts) and video/x-msvideo (.avi) each have their own extractor in
+// media3's default set, and video/x-flv (.flv) likewise. A genuinely
+// unsupported format (e.g. video/x-ms-wmv/.wmv, which media3's default
+// extractors do NOT handle) is still correctly rejected.
 const SUPPORTED_VIDEO_MIME_TYPES = new Set([
   'video/mp4',
   'video/quicktime', // .mov
   'video/x-matroska', // .mkv
   'video/webm',
+  'video/3gpp', // .3gp — MP4 variant, extremely common on Android camera recordings
+  'video/x-m4v', // .m4v — MP4 variant
+  'video/mp2t', // .ts
+  'video/x-msvideo', // .avi — has an AviExtractor in media3's default factory
+  'video/x-flv', // .flv
 ]);
+
+// Normalizes a picker-reported mimeType before comparing it against the
+// allow-list above: some providers report a parameter suffix (e.g.
+// 'video/mp4; codecs=avc1') or an uppercase/mixed-case string (e.g.
+// 'VIDEO/MP4'), neither of which the Set's exact-string membership check
+// would recognize as the same format.
+function normalizeMimeType(mimeType: string): string {
+  return mimeType.toLowerCase().split(';')[0].trim();
+}
 // Colors come from the NEW design-system palette, not `../theme/tokens`'s
 // old one: this button is rendered directly on the shared sky gradient
 // background (GradientScreenBackground) in all three galleries, and the old
@@ -114,7 +136,8 @@ export function AddFilesButton({
         let someRejected = false;
         if (contentType === 'video') {
           const accepted = assets.filter(
-            (asset) => !asset.mimeType || SUPPORTED_VIDEO_MIME_TYPES.has(asset.mimeType)
+            (asset) =>
+              !asset.mimeType || SUPPORTED_VIDEO_MIME_TYPES.has(normalizeMimeType(asset.mimeType))
           );
           someRejected = accepted.length < assets.length;
           assets = accepted;
