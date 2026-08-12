@@ -45,6 +45,34 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// A SAF grant that's silently gone bad (revoked permission, a device backup
+// restoring an old profile that points at a folder this install was never
+// actually granted, an OEM storage provider that never replies) can leave
+// `resolveSubfolderUris` neither resolving nor rejecting — and with nothing
+// racing it, that used to mean the splash screen below stayed up forever,
+// with no error, no retry button, and no way out except reinstalling.
+// Racing it against this timeout guarantees the promise ALWAYS settles one
+// way or another, so a hang of this kind now surfaces FolderErrorScreen
+// (which has a working Retry / "choose a different folder" recovery) instead
+// of a screen that looks identical to a frozen app.
+const FOLDER_RESOLUTION_TIMEOUT_MS = 15000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out resolving content folders')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 // Every route this navigator renders, with its exact `route.params` shape (or
 // `undefined` for routes that take none). Passing this to
 // `createNativeStackNavigator<RootStackParamList>()` below makes React
@@ -437,7 +465,7 @@ export function RootNavigator({
     if (profile?.rootFolderUri) {
       setFolderError(false);
       setFolderUris(null);
-      resolveSubfolderUris(profile.rootFolderUri)
+      withTimeout(resolveSubfolderUris(profile.rootFolderUri), FOLDER_RESOLUTION_TIMEOUT_MS)
         .then((uris) => {
           if (!cancelled) setFolderUris(uris);
         })

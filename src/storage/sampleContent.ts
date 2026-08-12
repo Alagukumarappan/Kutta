@@ -92,8 +92,45 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
   }
   if (existing.length > 0) return;
 
-  for (const sample of samples) {
-    try {
+  // Each sample goes through several slow SAF IPC round-trips (create +
+  // write), and on real hardware (confirmed via an Android bug report from a
+  // Samsung S22) a sequential await-per-file loop over ~37 bundled files
+  // took long enough to look like the app had permanently frozen — Android's
+  // own ActivityManager log showed the activity displayed and healthy the
+  // whole time, with no crash/ANR anywhere; this loop was simply still
+  // running.
+  //
+  // Racing every sample fully in parallel fixed that, but traded it for a
+  // second, worse real-device bug: a SAF/DocumentsProvider is a single
+  // background service shared by every request, and firing off dozens of
+  // concurrent create+write calls at once (times three, once per
+  // coloring/pictures/quiz folder, all seeding at the same time — see
+  // ensureContentStructure) can starve that same provider's ability to
+  // answer OTHER, already-awaited SAF calls happening at the same moment
+  // (RootNavigator's own folder lookups) — reproduced on a real Samsung S22
+  // once its target folder already held a lot of prior content to enumerate
+  // (from repeated test installs), which made the provider slow enough that
+  // the flood of concurrent seed requests visibly blocked unrelated lookups.
+  // A small bounded pool keeps the "much faster than one-at-a-time" benefit
+  // without ever putting more than a handful of requests in flight against
+  // the provider at once.
+  await mapWithConcurrencyLimit(samples, 4, (sample) => seedOneSample(folderUri, sample));
+}
+
+async function mapWithConcurrencyLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      await fn(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+async function seedOneSample(folderUri: string, sample: SampleAsset): Promise<void> {
+  try {
       // Two previous attempts at this got progressively closer but still
       // failed on a genuine standalone release APK:
       //
@@ -133,7 +170,7 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
       const asset = Asset.fromURI(resolved.uri);
       await asset.downloadAsync();
       const localUri = asset.localUri;
-      if (!localUri) continue;
+      if (!localUri) return;
 
       // StorageAccessFramework.copyAsync's native Android implementation
       // (FileSystemLegacyModule.kt) only handles a few specific from/to
@@ -155,9 +192,8 @@ async function seedFolderIfEmpty(folderUri: string, samples: SampleAsset[]): Pro
       await FileSystem.StorageAccessFramework.writeAsStringAsync(destUri, base64, {
         encoding: FileSystem.EncodingType.Base64,
       });
-    } catch {
-      // Best-effort: move on to the next sample.
-    }
+  } catch {
+    // Best-effort: this one sample failing must not block the rest.
   }
 }
 

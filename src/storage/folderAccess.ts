@@ -93,13 +93,28 @@ export async function ensureContentStructure(rootUri: string): Promise<string> {
     await FileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, getSampleQuestionsJson());
   }
 
-  // Each of these is independently gated on its own destination folder
-  // being empty (see sampleContent.ts), so re-running ensureContentStructure
-  // against a folder the parent has already started adding their own
-  // content to is always a safe no-op.
-  await seedSampleColoring(subfolderUris.coloring);
-  await seedSamplePictures(subfolderUris.pictures);
-  await seedSampleQuizImages(quizImagesUri);
+  // Deliberately NOT awaited: each of these copies dozens of bundled files
+  // into the SAF folder through several slow IPC round-trips per file, and
+  // on real hardware (confirmed via an Android bug report from a Samsung
+  // S22 — the app itself was healthy the whole time, no crash/ANR anywhere,
+  // just this promise chain still running) that added up to a long enough
+  // wait to look like the app had frozen. resolveSubfolderUris (the caller)
+  // only needs the four subfolders to exist, not for them to be pre-filled,
+  // so seeding now continues in the background after this function
+  // returns — the app can show Home immediately, and a gallery just
+  // populates a little later if it happens to be opened before its seeding
+  // finishes. Each call is independently gated on its own destination
+  // folder being empty (see sampleContent.ts), so re-running
+  // ensureContentStructure against a folder the parent has already started
+  // adding their own content to is always a safe no-op.
+  Promise.all([
+    seedSampleColoring(subfolderUris.coloring),
+    seedSamplePictures(subfolderUris.pictures),
+    seedSampleQuizImages(quizImagesUri),
+  ]).catch(() => {
+    // Best-effort convenience content, not core functionality — nothing to
+    // recover from here even if every seed unexpectedly rejected.
+  });
 
   return gamesUri;
 }
