@@ -8,6 +8,21 @@ import {
   type FileReferenceContentType,
 } from '../storage/fileReferenceStore';
 import { radii, spacing, shadow } from '../theme/tokens';
+// Matches VideoGallery.tsx's own VIDEO_EXTENSIONS list's intent (mp4/mov/
+// mkv/webm), but keyed on the OS-reported MIME type instead of a URI
+// extension. This is deliberately NOT the same mechanism as the (reverted)
+// URI-extension filter: a picker-sourced content:// URI is often fully
+// opaque with no extension in it at all, so filtering on the URI string
+// wrongly rejected valid videos. asset.mimeType is determined by the
+// system's own content provider at pick time, before this app ever reads a
+// single byte, so it's a real signal about the file's actual container —
+// not a guess derived from its name.
+const SUPPORTED_VIDEO_MIME_TYPES = new Set([
+  'video/mp4',
+  'video/quicktime', // .mov
+  'video/x-matroska', // .mkv
+  'video/webm',
+]);
 // Colors come from the NEW design-system palette, not `../theme/tokens`'s
 // old one: this button is rendered directly on the shared sky gradient
 // background (GradientScreenBackground) in all three galleries, and the old
@@ -84,20 +99,47 @@ export function AddFilesButton({
         copyToCacheDirectory: copiesToCache,
       });
       if (!result.canceled && result.assets.length > 0) {
-        // Move the cache copy somewhere the OS won't reclaim, so a picture
-        // added today is still there in a month (persistPickedFile falls
-        // back to the original uri if the copy fails, so this can only ever
-        // improve on the previous behavior). Videos are referenced in place
-        // and deliberately NOT copied — they're only ever streamed, and
-        // duplicating a multi-gigabyte file into app storage to add it to a
-        // gallery would be a far worse bug than the one this avoids.
-        const uris = copiesToCache
-          ? await Promise.all(
-              result.assets.map((asset, index) => persistPickedFile(asset.uri, asset.name, index))
-            )
-          : result.assets.map((asset) => asset.uri);
-        await addFileReferences(contentType, uris);
-        onAdded();
+        // The video "+" picker applies mimeType="video/*" to the SYSTEM
+        // picker, which is only a provider-declared filter, not content
+        // verification — a file whose provider reports e.g. video/x-msvideo
+        // (.avi) or video/3gpp passes that filter fine, gets added, and then
+        // fails silently at play time because ExoPlayer/media3 has no
+        // extractor/decoder for it. This is the real, twice-reported "tap to
+        // play does nothing" bug. Only applies to videos: images/other
+        // content types are unaffected. Fails OPEN on a missing mimeType
+        // (some providers just don't report one) — rejecting on missing data
+        // would be worse than the current behavior — and fails CLOSED only
+        // on a mimeType we positively know isn't playable.
+        let assets = result.assets;
+        let someRejected = false;
+        if (contentType === 'video') {
+          const accepted = assets.filter(
+            (asset) => !asset.mimeType || SUPPORTED_VIDEO_MIME_TYPES.has(asset.mimeType)
+          );
+          someRejected = accepted.length < assets.length;
+          assets = accepted;
+        }
+
+        if (someRejected) {
+          Alert.alert(t('unsupportedVideoFormatError'));
+        }
+
+        if (assets.length > 0) {
+          // Move the cache copy somewhere the OS won't reclaim, so a picture
+          // added today is still there in a month (persistPickedFile falls
+          // back to the original uri if the copy fails, so this can only ever
+          // improve on the previous behavior). Videos are referenced in place
+          // and deliberately NOT copied — they're only ever streamed, and
+          // duplicating a multi-gigabyte file into app storage to add it to a
+          // gallery would be a far worse bug than the one this avoids.
+          const uris = copiesToCache
+            ? await Promise.all(
+                assets.map((asset, index) => persistPickedFile(asset.uri, asset.name, index))
+              )
+            : assets.map((asset) => asset.uri);
+          await addFileReferences(contentType, uris);
+          onAdded();
+        }
       }
     } catch {
       Alert.alert(t('addFilesError'));

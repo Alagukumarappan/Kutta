@@ -35,6 +35,14 @@ const FIRST_LOAD_TIMEOUT_MS = 20000;
 export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const { t } = useLanguage();
   const [error, setError] = useState(false);
+  // The actual PlaybackError expo-video hands back on a status of 'error'
+  // (a message, sometimes a code) — previously discarded entirely, so every
+  // distinct real failure (unsupported codec, provider I/O error, decoder
+  // exhaustion, whatever it actually is) collapsed into one generic
+  // "videoLoadError" string with no way to tell what went wrong. This is
+  // surfaced via console.warn below regardless of UI display, so a future
+  // investigation of this same bug report has something concrete to go on.
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   // Every other async-load screen (galleries, QuizScreen, ColoringScreen)
   // shows an explicit spinner while its content is still loading; this
   // screen previously showed none at all — between mount and the player
@@ -128,6 +136,10 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     clearLoadTimeout();
     loadTimeoutRef.current = setTimeout(() => {
       if (!hasLoadedRef.current) {
+        // No statusChange ever arrived, so there is no PlaybackError to
+        // report — a stale detail from an earlier, different failure must
+        // not be shown as if it explained this one.
+        setErrorDetail(null);
         setError(true);
         setLoading(false);
       }
@@ -150,6 +162,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     // than pushing a second copy (see RootNavigator) — i.e. a live videoUri
     // change on a mounted player screen.
     setError(false);
+    setErrorDetail(null);
     setFinished(false);
     hasLoadedRef.current = false;
     setLoading(true);
@@ -162,9 +175,21 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     // forever with no later `statusChange` ever arriving to unstick it.
     // Syncing from the player's own current `status` up front (in addition
     // to listening for future changes) closes that gap.
-    function applyStatus(status: typeof player.status) {
+    // Accepts the full statusChange payload (not just `status`) so the
+    // 'error' branch can also read `payload.error` — expo-video's own
+    // PlaybackError, which carries the actual reason this source failed
+    // (unsupported codec, provider I/O error, etc.), not just the fact that
+    // it did. The synchronous up-front call below (syncing from the
+    // player's already-current status) has no such payload available, so
+    // `error` is simply omitted there — that's fine, the far more common
+    // path is the live statusChange listener.
+    function applyStatus(payload: { status: typeof player.status; error?: { message: string } }) {
+      const { status } = payload;
       if (status === 'error') {
         clearLoadTimeout();
+        // eslint-disable-next-line no-console
+        console.warn('[VideoPlayerScreen] playback error:', payload.error);
+        setErrorDetail(payload.error?.message ?? null);
         setError(true);
         setLoading(false);
         return;
@@ -181,8 +206,8 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
       setLoading(!hasLoadedRef.current);
     }
     armLoadTimeout();
-    applyStatus(player.status);
-    const subscription = player.addListener('statusChange', ({ status }) => applyStatus(status));
+    applyStatus({ status: player.status });
+    const subscription = player.addListener('statusChange', (payload) => applyStatus(payload));
     return () => {
       subscription.remove();
       clearLoadTimeout();
@@ -210,6 +235,7 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     if (retryFiredRef.current) return;
     retryFiredRef.current = true;
     setError(false);
+    setErrorDetail(null);
     setFinished(false);
     // Replacing the source re-triggers the same load sequence as a fresh
     // mount, so the loading spinner should reappear until a new

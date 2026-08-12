@@ -301,6 +301,14 @@ export const UI_STRINGS = {
   addPuzzlePicture: { en: '+ Add puzzle picture', de: '+ Puzzlebild hinzufügen' },
   addVideo: { en: '+ Add video', de: '+ Video hinzufügen' },
   addFilesError: { en: "Couldn't add that — please try again.", de: 'Konnte das nicht hinzufügen — bitte erneut versuchen.' },
+  // Shown when the "+ Add video" picker returns a file whose OS-reported
+  // MIME type isn't one this app's player can actually play (see
+  // AddFilesButton.tsx's mimeType allow-list) — distinct from
+  // addFilesError above, which covers the picker/write itself failing.
+  unsupportedVideoFormatError: {
+    en: "That video format isn't supported — please choose an MP4, MOV, MKV, or WebM file.",
+    de: 'Dieses Videoformat wird nicht unterstützt — bitte wähle eine MP4-, MOV-, MKV- oder WebM-Datei.',
+  },
   cameraTakePhoto: { en: '📷 Take a photo', de: '📷 Foto aufnehmen' },
   cameraPermissionError: {
     en: 'Camera access is needed to take a photo — please allow it in your device settings.',

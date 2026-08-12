@@ -265,6 +265,108 @@ describe('AddFilesButton', () => {
     });
   });
 
+  // Regression tests for the twice-reported "tap a picker-added video and
+  // nothing plays" bug: the folder-listed video path filters entries by
+  // file extension (isVideoFile in VideoGallery.tsx), but the "+" picker
+  // path applied ZERO validation — mimeType="video/*" on the system picker
+  // is only a provider-declared filter, not content verification, so a
+  // file whose provider reports an unsupported container (e.g. .avi's
+  // video/x-msvideo) passed straight through and failed silently at play
+  // time. These assert the new pick-time mimeType allow-list added to
+  // AddFilesButton, using the OS-reported mimeType (never re-derived from
+  // the URI) — a fundamentally different, safe mechanism from the
+  // URI-extension filtering that was tried and reverted elsewhere.
+  describe('video mimeType validation (pick-time)', () => {
+    function renderVideoButton(onAdded = jest.fn()) {
+      return render(
+        <LanguageProvider initialLanguage="en">
+          <AddFilesButton testID="add-files" label="+ Add video" contentType="video" mimeType="video/*" onAdded={onAdded} />
+        </LanguageProvider>
+      );
+    }
+
+    it('rejects a video with an unsupported mimeType, alerts, and does not add it', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://media/video/1', name: 'clip.avi', mimeType: 'video/x-msvideo', lastModified: 0 }],
+      });
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+      expect(onAdded).not.toHaveBeenCalled();
+      expect(await getFileReferences('video')).toEqual([]);
+    });
+
+    it('still adds a video with a supported mimeType, same as before', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://media/video/2', name: 'party.mp4', mimeType: 'video/mp4', lastModified: 0 }],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://media/video/2']);
+    });
+
+    it('adds a video with no mimeType at all (fails open on missing metadata)', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://media/video/3', name: 'clip', lastModified: 0 }],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://media/video/3']);
+    });
+
+    it('adds the supported videos and still alerts when only some of several picked videos are rejected', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [
+          { uri: 'content://media/video/good.mp4', name: 'good.mp4', mimeType: 'video/mp4', lastModified: 0 },
+          { uri: 'content://media/video/bad.avi', name: 'bad.avi', mimeType: 'video/x-msvideo', lastModified: 0 },
+        ],
+      });
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderVideoButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect(Alert.alert).toHaveBeenCalled();
+      expect((await getFileReferences('video')).map((r) => r.uri)).toEqual(['content://media/video/good.mp4']);
+    });
+
+    // The mimeType filter is scoped to contentType === 'video' only — images
+    // (and any other content type) must be entirely unaffected by it, even
+    // if a picker somehow reported a mimeType this allow-list wouldn't
+    // recognize.
+    it('does not apply the video mimeType filter to images', async () => {
+      (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: 'content://tree/pic1.bmp', name: 'pic1.bmp', mimeType: 'image/bmp', lastModified: 0 }],
+      });
+      const onAdded = jest.fn();
+      const { findByTestId } = await renderButton(onAdded);
+
+      await fireEvent.press(await findByTestId('add-files'));
+
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect(await getFileReferences('coloring')).toHaveLength(1);
+    });
+  });
+
   it('ignores a rapid second tap while the first pick is still in flight', async () => {
     let resolvePicker: (value: unknown) => void = () => {};
     (DocumentPicker.getDocumentAsync as jest.Mock).mockReturnValue(

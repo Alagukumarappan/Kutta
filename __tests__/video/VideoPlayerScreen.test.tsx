@@ -13,7 +13,10 @@ import { LanguageProvider } from '../../src/i18n/LanguageContext';
 // controllable in-memory player that can emit a real `statusChange` event —
 // this exercises the screen's actual effect/listener/retry code, it doesn't
 // fake the behavior under test.
-type StatusChangePayload = { status: 'idle' | 'loading' | 'readyToPlay' | 'error' };
+type StatusChangePayload = {
+  status: 'idle' | 'loading' | 'readyToPlay' | 'error';
+  error?: { message: string };
+};
 type Listener = (payload?: StatusChangePayload) => void;
 
 interface MockVideoPlayer {
@@ -347,6 +350,34 @@ describe('VideoPlayerScreen', () => {
     await findByText('This video could not be played.');
     await findByTestId('video-player-error');
     expect(queryByText(/Exception|ENOENT|undefined/)).toBeNull();
+  });
+
+  // Regression test: the twice-reported "tap a picker-added video and
+  // nothing plays" bug was never pinned down because the real
+  // expo-video PlaybackError (which explains WHY playback failed —
+  // unsupported codec, provider I/O error, etc.) was discarded entirely,
+  // collapsing every distinct failure into one generic message with no
+  // diagnostic trail. console.warn is the must-have here regardless of
+  // whether the UI ever shows the detail.
+  it('logs the real PlaybackError detail via console.warn when the player reports a status error', async () => {
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { findByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    const playbackError = { message: 'No extractor found for container' };
+    await act(async () => {
+      __mockPlayer.emit('statusChange', { status: 'error', error: playbackError });
+    });
+
+    await findByTestId('video-player-error');
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[VideoPlayerScreen] playback error:',
+      playbackError
+    );
+    consoleWarn.mockRestore();
   });
 
   it('offers a retry action that recovers from a transient playback failure, matching the retry pattern used elsewhere for the same failure category', async () => {
