@@ -1,4 +1,5 @@
 import { Image } from 'react-native';
+import { Asset } from 'expo-asset';
 
 // The bundled photo set Memory Match draws from -- a brand-new, dedicated
 // set (NOT the parent's own `pictures` folder, NOT the Quiz icon set --
@@ -55,4 +56,43 @@ export function resolvableItemIds(): string[] {
       return false;
     }
   }).map((item) => item.itemId);
+}
+
+// Preloads only the bundled photos actually dealt into THIS deck (not all
+// 20 available items) so the "memorize the board" preview timer can start
+// only once every card the child will actually see has real decoded pixels
+// behind it -- without this, MemoryMatchScreen's preview window could be
+// spent looking at 36 simultaneously-mounting <Image> components still
+// loading, defeating the point of the preview.
+//
+// Goes through the same `Image.resolveAssetSource` -> `Asset.fromURI(...)`
+// seam sampleContent.ts's `seedOneSample` already had to work out the hard
+// way (see its own long comment): `Asset.fromModule(module).downloadAsync()`
+// looks like the obvious API but silently fails on a real release APK
+// (expo-asset's own resolver fabricates a fake network URL for any asset
+// not served by expo-updates). Resolving the URI via React Native core's
+// resolver FIRST, then handing that already-correct URI to `Asset.fromURI`,
+// sidesteps that broken resolution path entirely.
+//
+// Uses `Promise.allSettled` (not `Promise.all`) so a single asset's
+// `downloadAsync()` rejecting -- or resolving to a real Image whose
+// resolution itself throws -- can never hang or fail the whole preload:
+// every item is attempted independently and this always resolves once
+// every attempt has settled, one way or another.
+export async function preloadItemImages(itemIds: readonly string[]): Promise<void> {
+  await Promise.allSettled(
+    itemIds.map(async (itemId) => {
+      try {
+        const item = MEMORY_MATCH_ITEMS.find((candidate) => candidate.itemId === itemId);
+        if (!item) return;
+        const resolved = Image.resolveAssetSource(item.module);
+        if (!resolved?.uri) return;
+        await Asset.fromURI(resolved.uri).downloadAsync();
+      } catch {
+        // Best-effort only -- a failed/hung preload for one card must never
+        // block the round from starting (see this function's own doc
+        // comment above).
+      }
+    })
+  );
 }

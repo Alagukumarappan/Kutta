@@ -11,7 +11,7 @@ import {
   type MemoryCard,
   type PairCount,
 } from './memoryMatchEngine';
-import { moduleForItemId, resolvableItemIds } from './memoryMatchContent';
+import { moduleForItemId, resolvableItemIds, preloadItemImages } from './memoryMatchContent';
 import type { MemoryMatchMode } from './MemoryMatchSetupScreen';
 import {
   colors,
@@ -22,6 +22,7 @@ import {
   getActivityPalette,
   CelebrationOverlay,
   GradientScreenBackground,
+  LoadingPanel,
 } from '../design-system';
 
 const PALETTE = getActivityPalette('memoryMatch');
@@ -75,7 +76,12 @@ export function MemoryMatchScreen({
   const { width, height } = useWindowDimensions();
 
   const [deck, setDeck] = useState<MemoryCard[]>(() => buildDeck(pairCount, resolvableItemIds()));
-  const [revealPhase, setRevealPhase] = useState<'previewing' | 'playing'>('previewing');
+  // Starts in 'preloading' (not 'previewing') -- see the preload effect
+  // below: the 2s "memorize the board" preview must not start counting
+  // down until the actual photos in THIS deck have been preloaded, or a
+  // meaningful chunk of that window can be spent looking at blank/loading
+  // cards on a cold start or slow device.
+  const [revealPhase, setRevealPhase] = useState<'preloading' | 'previewing' | 'playing'>('preloading');
   const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
   // Friend-mode only -- unused (and never shown) in solo mode. The child
   // always goes first (matching every other 2-player activity in this
@@ -109,6 +115,41 @@ export function MemoryMatchScreen({
     setFlippedIndices(next);
   }
 
+  // Mirrors `deck` synchronously, exactly like `flippedIndicesRef` above
+  // mirrors `flippedIndices` -- and for the identical reason. Without this,
+  // `handleCardPress`'s `deck[index].matched` guard (and its `checkMatch`
+  // call) would read the possibly-stale closure `deck`, which is only
+  // updated by the async `setDeck` call below, not synchronously the way
+  // this ref is. A batch of 4 rapid taps on the SAME matching pair (A, B,
+  // A, B) landing in one React batch would otherwise let taps 3-4 pass the
+  // stale (still-unmatched-in-the-closure) guard and re-score the same
+  // pair a second time; a 3-tap (A, B, A) variant would let an
+  // already-matched card re-enter `flippedIndices` and wrongly resolve the
+  // child's next genuine tap as a mismatch, passing the turn. Kept in sync
+  // everywhere `deck` is set: mount (initial value below), retry, and
+  // inside `handleCardPress`'s own match branch.
+  const deckRef = useRef<MemoryCard[]>(deck);
+  function updateDeck(next: MemoryCard[]) {
+    deckRef.current = next;
+    setDeck(next);
+  }
+
+  // Same synchronous-mirror technique, for the same reason, applied to
+  // `currentPlayerIsChild`: `handleCardPress` needs to know whose score to
+  // increment on a genuine match, and reading the async closure variable
+  // here would be exactly as stale-prone as the un-mirrored `deck` read
+  // above was -- this is pure defense-in-depth alongside `deckRef`, not a
+  // fix for a currently-reachable bug (the friend-mode turn only flips on
+  // a mismatch's OWN delayed effect, not inside the same batch a match's
+  // side effects run in), but it removes the same class of risk. Kept in
+  // sync everywhere `setCurrentPlayerIsChild` is called: mount (initial
+  // value below), the mismatch flip-back turn-pass, and retry.
+  const currentPlayerIsChildRef = useRef(currentPlayerIsChild);
+  function updateCurrentPlayerIsChild(next: boolean) {
+    currentPlayerIsChildRef.current = next;
+    setCurrentPlayerIsChild(next);
+  }
+
   // Guard against a vacuous "complete" on a degenerate empty deck (e.g. if
   // every bundled photo somehow failed to resolve) -- isDeckComplete([])
   // is trivially true, which would otherwise show a false "you won"
@@ -124,20 +165,44 @@ export function MemoryMatchScreen({
     }
   }, [isComplete]);
 
-  // The reveal-then-shuffle round intro: deal face-up (the initial
-  // buildDeck() call above already shows every card, since revealPhase
-  // starts 'previewing'), wait, then reshuffle to a freshly shuffled
-  // arrangement and flip face-down for real play. Depends on `roundKey`
-  // (not `[]`) so handleRetry can re-trigger this exact sequence for a
-  // fresh round without needing a new component instance.
+  // Preloads the real bundled photos for THIS deck's cards -- and only
+  // those (deckRef.current already holds exactly the pairCount*2 cards
+  // this round deals, not the full 20-item pool) -- before the "memorize
+  // the board" preview is allowed to start counting down. Depends on
+  // `roundKey` (not `[]`) so handleRetry re-triggers this exact sequence
+  // for a fresh round. Guarded with a `cancelled` flag rather than
+  // clearing a timer: `preloadItemImages` itself can never hang forever
+  // (it's built on `Promise.allSettled` over individually try/caught
+  // downloads -- see its own doc comment in memoryMatchContent.ts), so
+  // this only needs to avoid setting state after an unmount/retry, not
+  // guard against the promise itself getting stuck.
   useEffect(() => {
-    setRevealPhase('previewing');
+    let cancelled = false;
+    setRevealPhase('preloading');
+    const itemIds = Array.from(new Set(deckRef.current.map((card) => card.itemId)));
+    preloadItemImages(itemIds).then(() => {
+      if (cancelled) return;
+      setRevealPhase('previewing');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roundKey]);
+
+  // The reveal-then-shuffle round intro: once preloading has actually
+  // finished (revealPhase became 'previewing'), deal face-up (the initial
+  // buildDeck() call above already shows every card since isCardFaceUp
+  // treats 'previewing' as face-up), wait PREVIEW_DURATION_MS, then
+  // reshuffle to a freshly shuffled arrangement and flip face-down for
+  // real play.
+  useEffect(() => {
+    if (revealPhase !== 'previewing') return;
     const timeoutId = setTimeout(() => {
-      setDeck((prev) => reshuffle(prev));
+      updateDeck(reshuffle(deckRef.current));
       setRevealPhase('playing');
     }, PREVIEW_DURATION_MS);
     return () => clearTimeout(timeoutId);
-  }, [roundKey]);
+  }, [revealPhase]);
 
   // Any time exactly 2 cards are flipped, they must be a MISMATCH: a match
   // is resolved synchronously (see handleCardPress below) and immediately
@@ -148,14 +213,18 @@ export function MemoryMatchScreen({
     if (flippedIndices.length !== 2) return;
     const timeoutId = setTimeout(() => {
       updateFlippedIndices([]);
-      if (mode === 'friend') setCurrentPlayerIsChild((isChild) => !isChild);
+      if (mode === 'friend') updateCurrentPlayerIsChild(!currentPlayerIsChildRef.current);
     }, MISMATCH_FLIP_BACK_DELAY_MS);
     return () => clearTimeout(timeoutId);
   }, [flippedIndices, mode]);
 
   function handleCardPress(index: number) {
     if (revealPhase !== 'playing') return;
-    if (deck[index].matched) return;
+    // Reads the ACTUAL latest deck via deckRef (kept in sync by
+    // updateDeck), not the outer closure's possibly-stale `deck` snapshot
+    // -- see deckRef's own doc comment above for the exploit this guards
+    // against (a batched double-tap on an already-matched pair).
+    if (deckRef.current[index].matched) return;
 
     // Reads the ACTUAL latest flipped indices via flippedIndicesRef (kept
     // in sync by updateFlippedIndices), not the outer closure's possibly-
@@ -167,7 +236,7 @@ export function MemoryMatchScreen({
     const nextFlipped = [...prevFlipped, index];
     if (nextFlipped.length === 2) {
       const [first, second] = nextFlipped;
-      if (checkMatch(deck, first, second)) {
+      if (checkMatch(deckRef.current, first, second)) {
         // These side effects (marking cards matched, scoring a point) run
         // exactly once per genuine match: handleCardPress is a plain event
         // handler invoked once per press, unlike a setState updater
@@ -175,9 +244,9 @@ export function MemoryMatchScreen({
         // to surface impurities -- doing this here, outside any updater,
         // is what keeps a single match from ever being double-counted.
         updateFlippedIndices([]);
-        setDeck((prevDeck) => prevDeck.map((card, i) => (i === first || i === second ? { ...card, matched: true } : card)));
+        updateDeck(deckRef.current.map((card, i) => (i === first || i === second ? { ...card, matched: true } : card)));
         if (mode === 'friend') {
-          if (currentPlayerIsChild) setChildScore((score) => score + 1);
+          if (currentPlayerIsChildRef.current) setChildScore((score) => score + 1);
           else setFriendScore((score) => score + 1);
         }
         return;
@@ -189,9 +258,9 @@ export function MemoryMatchScreen({
   function handleRetry() {
     if (retryFiredRef.current) return;
     retryFiredRef.current = true;
-    setDeck(buildDeck(pairCount, resolvableItemIds()));
+    updateDeck(buildDeck(pairCount, resolvableItemIds()));
     updateFlippedIndices([]);
-    setCurrentPlayerIsChild(true);
+    updateCurrentPlayerIsChild(true);
     setChildScore(0);
     setFriendScore(0);
     setRoundKey((key) => key + 1);
@@ -261,47 +330,60 @@ export function MemoryMatchScreen({
           {turnText()}
         </Text>
       )}
-      <View style={styles.grid}>
-        {Array.from({ length: rows }, (_, rowIndex) => (
-          <View key={rowIndex} testID={`memory-match-row-${rowIndex}`} style={styles.gridRow}>
-            {Array.from({ length: columns }, (_, colIndex) => {
-              const index = rowIndex * columns + colIndex;
-              if (index >= deck.length) {
-                return <View key={colIndex} style={[styles.cell, { width: cellSize, height: cellSize }]} />;
-              }
-              const card = deck[index];
-              const faceUp = isCardFaceUp(card, index);
-              const imageModule = moduleForItemId(card.itemId);
-              return (
-                <Pressable
-                  key={colIndex}
-                  testID={`memory-match-card-${index}`}
-                  onPress={() => handleCardPress(index)}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    faceUp
-                      ? tFormat('memoryMatchCardRevealedLabel', language, { item: card.itemId })
-                      : t('memoryMatchCardHiddenLabel')
-                  }
-                  accessibilityState={{ disabled: card.matched || revealPhase !== 'playing' }}
-                  style={[styles.cell, { width: cellSize, height: cellSize }, card.matched && styles.cellMatched]}
-                >
-                  {faceUp && imageModule !== undefined ? (
-                    <Image
-                      testID={`memory-match-card-${index}-image`}
-                      source={imageModule}
-                      style={styles.cardImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View testID={`memory-match-card-${index}-back`} style={styles.cardBack} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
-      </View>
+      {revealPhase === 'preloading' ? (
+        // Preloading the actual photos this deck needs (see the preload
+        // effect above) -- shown instead of the grid so a child never sees
+        // a board full of blank/loading cards during what's meant to be
+        // the "memorize this" preview.
+        <LoadingPanel
+          testID="memory-match-loading"
+          color={PALETTE.accent}
+          messageColor={colors.ink}
+          message={t('galleryLoading')}
+        />
+      ) : (
+        <View style={styles.grid}>
+          {Array.from({ length: rows }, (_, rowIndex) => (
+            <View key={rowIndex} testID={`memory-match-row-${rowIndex}`} style={styles.gridRow}>
+              {Array.from({ length: columns }, (_, colIndex) => {
+                const index = rowIndex * columns + colIndex;
+                if (index >= deck.length) {
+                  return <View key={colIndex} style={[styles.cell, { width: cellSize, height: cellSize }]} />;
+                }
+                const card = deck[index];
+                const faceUp = isCardFaceUp(card, index);
+                const imageModule = moduleForItemId(card.itemId);
+                return (
+                  <Pressable
+                    key={colIndex}
+                    testID={`memory-match-card-${index}`}
+                    onPress={() => handleCardPress(index)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      faceUp
+                        ? tFormat('memoryMatchCardRevealedLabel', language, { item: card.itemId })
+                        : t('memoryMatchCardHiddenLabel')
+                    }
+                    accessibilityState={{ disabled: card.matched || revealPhase !== 'playing' }}
+                    style={[styles.cell, { width: cellSize, height: cellSize }, card.matched && styles.cellMatched]}
+                  >
+                    {faceUp && imageModule !== undefined ? (
+                      <Image
+                        testID={`memory-match-card-${index}-image`}
+                        source={imageModule}
+                        style={styles.cardImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View testID={`memory-match-card-${index}-back`} style={styles.cardBack} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      )}
 
       <CelebrationOverlay
         visible={isComplete && !overlayDismissed}

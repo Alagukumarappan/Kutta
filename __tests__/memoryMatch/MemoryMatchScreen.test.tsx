@@ -8,6 +8,21 @@ import { resolvableItemIds } from '../../src/memoryMatch/memoryMatchContent';
 
 jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({ uri: 'asset:///fake.jpg' } as any);
 
+// Bug 3 (preview-preloading) coverage needs control over when the actual
+// asset download "completes" -- the real `expo-asset` module isn't
+// deterministic/controllable here the way this mock is (same idiom as
+// sampleContent.test.ts's own `expo-asset` mock). Defaults to resolving
+// immediately so every OTHER test in this file (none of which care about
+// preloading timing) sees the same fast, synchronous-ish preload it always
+// has; only the dedicated preloading tests below override this to defer
+// resolution and observe the mid-preload state.
+const mockDownloadAsync = jest.fn().mockResolvedValue(undefined);
+jest.mock('expo-asset', () => ({
+  Asset: {
+    fromURI: jest.fn(() => ({ downloadAsync: mockDownloadAsync })),
+  },
+}));
+
 function renderGame(
   props: Partial<React.ComponentProps<typeof MemoryMatchScreen>> = {},
   options: { strictMode?: boolean } = {}
@@ -430,6 +445,58 @@ describe('MemoryMatchScreen', () => {
       expect(childPts + friendPts).toBe(1);
     });
 
+    // Regression test for the stale-`deck`-CLOSURE bug (distinct from the
+    // batched-match test above, which covers the `flippedIndices` closure):
+    // 4 rapid taps on the SAME matching pair (A, B, A, B) landing in one
+    // React batch used to score the pair TWICE. Taps 1-2 resolve the match
+    // (score +1, `matched: true` queued via the async `setDeck` call) --
+    // but the outer `deck` closure variable itself isn't updated until
+    // React actually re-renders, so taps 3-4 (still running against that
+    // same pre-update render) saw `deck[index].matched` as still `false`,
+    // re-flipped the "same" pair as if fresh, and `checkMatch` (also
+    // reading the stale closure `deck`) reported a second genuine match.
+    // `deckRef` (kept synchronously in sync, exactly like
+    // `flippedIndicesRef` already was) is what makes taps 3-4 correctly see
+    // the pair as already matched and bail out via the early-return guard.
+    it('4 rapid taps on the same matching pair in one batch (A, B, A, B) score exactly once, not twice', async () => {
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+      const computedDeck = reshuffle(buildDeck(6, resolvableItemIds()));
+      let matchA = -1;
+      let matchB = -1;
+      outer: for (let i = 0; i < computedDeck.length && matchA === -1; i++) {
+        for (let j = i + 1; j < computedDeck.length; j++) {
+          if (computedDeck[i].itemId === computedDeck[j].itemId) {
+            matchA = i;
+            matchB = j;
+            break outer;
+          }
+        }
+      }
+      expect(matchA).toBeGreaterThanOrEqual(0);
+
+      const { getByTestId } = await renderGame({ mode: 'friend', pairCount: 6, friendName: 'Alex' });
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000); // past the preview
+      });
+      randomSpy.mockRestore();
+
+      // Same deliberately-nested-act idiom as the batched-match test above
+      // -- the nesting IS the single batch of 4 taps being reproduced.
+      const silenceOverlappingActWarning = jest.spyOn(console, 'error').mockImplementation(() => {});
+      await act(async () => {
+        fireEvent.press(getByTestId(`memory-match-card-${matchA}`));
+        fireEvent.press(getByTestId(`memory-match-card-${matchB}`));
+        fireEvent.press(getByTestId(`memory-match-card-${matchA}`));
+        fireEvent.press(getByTestId(`memory-match-card-${matchB}`));
+      });
+      silenceOverlappingActWarning.mockRestore();
+
+      const childPts = Number(getByTestId('memory-match-score-child').props.children.match(/(\d+)$/)?.[1]);
+      const friendPts = Number(getByTestId('memory-match-score-friend').props.children.match(/(\d+)$/)?.[1]);
+      expect(childPts + friendPts).toBe(1);
+    });
+
     // Regression guard for the same fix: the match/score side effects used
     // to run inside the setFlippedIndices updater function, which React
     // deliberately double-invokes under StrictMode to surface impurities --
@@ -472,6 +539,82 @@ describe('MemoryMatchScreen', () => {
       const childPts = Number(getByTestId('memory-match-score-child').props.children.match(/(\d+)$/)?.[1]);
       const friendPts = Number(getByTestId('memory-match-score-friend').props.children.match(/(\d+)$/)?.[1]);
       expect(childPts + friendPts).toBe(1);
+    });
+  });
+
+  // Bug 3: the "memorize the board" preview timer must not start counting
+  // down until this deck's actual bundled photos have been preloaded --
+  // otherwise a meaningful chunk of the 2s preview can be spent looking at
+  // still-loading cards. mockDownloadAsync (declared at the top of this
+  // file, mocking `expo-asset`) defaults to resolving immediately for every
+  // other test in this file; these tests take direct control of it.
+  describe('preview preloading (bug 3)', () => {
+    afterEach(() => {
+      mockDownloadAsync.mockReset();
+      mockDownloadAsync.mockResolvedValue(undefined);
+    });
+
+    it('shows a loading panel and does not start the preview timer until preloading actually resolves', async () => {
+      let resolveDownload!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        resolveDownload = resolve;
+      });
+      mockDownloadAsync.mockImplementation(() => pending);
+
+      const { queryByTestId, queryAllByTestId } = await renderGame({ pairCount: 6 });
+
+      // Still preloading: the loading panel shows, no cards are rendered
+      // yet, and a real preload attempt has genuinely been kicked off.
+      expect(queryByTestId('memory-match-loading')).toBeTruthy();
+      expect(queryAllByTestId(/memory-match-card-\d+/)).toHaveLength(0);
+      expect(mockDownloadAsync).toHaveBeenCalled();
+
+      // Advancing the FULL preview duration must not be enough to reach
+      // the post-preview face-down state while preloading is still stuck
+      // -- proving the preview timer genuinely waits for preloading
+      // rather than running on its own regardless of it.
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(queryByTestId('memory-match-loading')).toBeTruthy();
+      expect(queryAllByTestId(/memory-match-card-\d+/)).toHaveLength(0);
+
+      // Let preloading resolve: the preview should now start (every card
+      // visible face-up), and only THEN, after another full
+      // PREVIEW_DURATION_MS, flip face-down into real play.
+      await act(async () => {
+        resolveDownload();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(queryByTestId('memory-match-loading')).toBeNull();
+      expect(queryAllByTestId(/memory-match-card-\d+-image/)).toHaveLength(12);
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(queryAllByTestId(/memory-match-card-\d+-back/)).toHaveLength(12);
+    });
+
+    it('preloads only the itemIds actually dealt into this deck, not the whole bundled pool', async () => {
+      await renderGame({ pairCount: 6 });
+
+      // pairCount 6 means exactly 6 unique itemIds are dealt into this
+      // deck (12 cards, 2 per item) -- out of a 20-item bundled pool.
+      // Preloading must only ever attempt those 6, never all 20.
+      expect(mockDownloadAsync).toHaveBeenCalled();
+      expect(mockDownloadAsync.mock.calls.length).toBeLessThanOrEqual(6);
+    });
+
+    it('does not get stuck forever if one asset\'s download rejects (best-effort preload)', async () => {
+      mockDownloadAsync.mockRejectedValue(new Error('simulated download failure'));
+
+      const { queryByTestId, queryAllByTestId } = await renderGame({ pairCount: 6 });
+
+      // The rejection must not hang the screen -- the preview still starts
+      // (proving the round is never permanently stuck on a bad asset).
+      expect(queryByTestId('memory-match-loading')).toBeNull();
+      expect(queryAllByTestId(/memory-match-card-\d+-image/)).toHaveLength(12);
     });
   });
 });
