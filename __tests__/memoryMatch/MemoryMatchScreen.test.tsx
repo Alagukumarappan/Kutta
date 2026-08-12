@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image } from 'react-native';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { MemoryMatchScreen } from '../../src/memoryMatch/MemoryMatchScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 
@@ -304,19 +304,71 @@ describe('MemoryMatchScreen', () => {
       expect(turnAfter).not.toBe(turnBefore);
     });
 
-    it('shows the friend\'s name as the winner when they end with more pairs', async () => {
-      const { getByTestId } = await renderGame({ mode: 'friend', pairCount: 6, childName: 'Sam', friendName: 'Alex' });
-      // This test only asserts the RENDER path for a friend win exists and
-      // is reachable via the same completion overlay every other mode
-      // uses -- the exact score-driving sequence needed to force a
-      // friend win deterministically is exercised structurally by the
-      // "increments score"/"passes the turn" tests above; this test
-      // confirms completionTitle's friend-win branch renders real text
-      // (not solo-mode's copy) once mode is 'friend'.
+    it('shows a completion title matching the actual final scores in friend mode (win or draw)', async () => {
+      const { getByTestId, queryByTestId } = await renderGame({
+        mode: 'friend',
+        pairCount: 6,
+        childName: 'Sam',
+        friendName: 'Alex',
+      });
       await act(async () => {
         jest.advanceTimersByTime(2000);
       });
-      expect(getByTestId('memory-match-turn')).toBeTruthy();
+
+      // Same brute-force full-board pairing sweep the solo completion test
+      // uses above -- drive the game all the way to completion so
+      // completionTitle()'s real friend-mode branches (draw / child win /
+      // friend win) actually run, instead of asserting on a placeholder.
+      // Which player ends up ahead is NOT fixed by this sweep (matches keep
+      // the turn, mismatches pass it, so who happens to find more pairs
+      // during a scripted sweep is incidental) -- so this test reads
+      // whichever outcome actually happened from the score chips themselves
+      // and asserts the title reflects THAT, rather than assuming a winner.
+      const cardCount = 12;
+      const matchedIndices = new Set<number>();
+      let guard = 0;
+      while (matchedIndices.size < cardCount && guard < 200) {
+        guard++;
+        const remaining = Array.from({ length: cardCount }, (_, i) => i).filter((i) => !matchedIndices.has(i));
+        if (remaining.length < 2) break;
+        const [a, ...candidates] = remaining;
+        let foundMatch = false;
+        for (const b of candidates) {
+          await fireEvent.press(getByTestId(`memory-match-card-${a}`));
+          await fireEvent.press(getByTestId(`memory-match-card-${b}`));
+          await act(async () => {
+            jest.advanceTimersByTime(900);
+          });
+          const stillThereA = queryByTestId(`memory-match-card-${a}-image`);
+          if (stillThereA) {
+            matchedIndices.add(a);
+            matchedIndices.add(b);
+            foundMatch = true;
+            break;
+          }
+        }
+        if (!foundMatch) break;
+      }
+
+      await waitFor(() => expect(getByTestId('memory-match-complete')).toBeTruthy());
+
+      // Parse each player's real final score off the score chips (text
+      // like "Sam: 4") rather than hardcoding an assumed winner.
+      const childScoreText = getByTestId('memory-match-score-child').props.children as string;
+      const friendScoreText = getByTestId('memory-match-score-friend').props.children as string;
+      const childScore = Number(childScoreText.match(/(\d+)$/)?.[1]);
+      const friendScore = Number(friendScoreText.match(/(\d+)$/)?.[1]);
+      expect(Number.isNaN(childScore)).toBe(false);
+      expect(Number.isNaN(friendScore)).toBe(false);
+
+      const overlay = getByTestId('celebration-overlay-card');
+      if (childScore === friendScore) {
+        expect(within(overlay).getByText("It's a draw!")).toBeTruthy();
+      } else if (childScore > friendScore) {
+        expect(within(overlay).getByText('Sam wins! 🎉')).toBeTruthy();
+      } else {
+        expect(within(overlay).getByText('Alex wins! 🎉')).toBeTruthy();
+      }
     });
   });
 });
