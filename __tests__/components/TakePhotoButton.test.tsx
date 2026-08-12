@@ -57,7 +57,7 @@ describe('TakePhotoButton', () => {
     expect(addFileReferences).not.toHaveBeenCalled();
   });
 
-  it('does nothing when the camera is cancelled', async () => {
+  it('shows a hint about the checkmark (not back) when the camera is cancelled', async () => {
     (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true });
     (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
     const onTaken = jest.fn();
@@ -65,7 +65,11 @@ describe('TakePhotoButton', () => {
     const { getByTestId } = await renderButton(onTaken);
     await fireEvent.press(getByTestId('take-photo-button'));
 
-    await waitFor(() => expect(ImagePicker.launchCameraAsync).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'No photo was saved. If you took a picture, tap the checkmark to confirm it before going back — the back button cancels it instead.'
+      )
+    );
     expect(onTaken).not.toHaveBeenCalled();
     expect(addFileReferences).not.toHaveBeenCalled();
   });

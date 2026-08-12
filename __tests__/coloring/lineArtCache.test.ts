@@ -31,6 +31,30 @@ const mockDecodedImage = {
   readPixels: jest.fn(() => ({ buffer: new ArrayBuffer(100 * 80 * 4), byteOffset: 0, byteLength: 100 * 80 * 4 })),
 };
 
+// A stand-in for a real modern-phone-camera photo (e.g. 4000x3000) — used to
+// verify getDisplayImage downscales BEFORE the expensive photographic
+// check/conversion ever run, rather than only trusting that downscaling
+// happened by inspecting timing.
+function makeOversizedImage() {
+  return {
+    width: () => 4000,
+    height: () => 3000,
+    readPixels: jest.fn(),
+  };
+}
+
+const mockDownscaledSnapshot = {
+  width: () => 1600,
+  height: () => 1200,
+  readPixels: jest.fn(() => ({ buffer: new ArrayBuffer(1600 * 1200 * 4), byteOffset: 0, byteLength: 1600 * 1200 * 4 })),
+};
+
+const mockCanvas = { drawImageRectOptions: jest.fn() };
+const mockSurface = {
+  getCanvas: jest.fn(() => mockCanvas),
+  makeImageSnapshot: jest.fn(() => mockDownscaledSnapshot),
+};
+
 jest.mock('@shopify/react-native-skia', () => ({
   Skia: {
     Data: { fromBytes: jest.fn(() => 'fake-data') },
@@ -40,10 +64,14 @@ jest.mock('@shopify/react-native-skia', () => ({
         encodeToBase64: jest.fn(() => 'ZmFrZS1wbmc='),
       })),
     },
+    Surface: { MakeOffscreen: jest.fn() },
+    XYWHRect: jest.fn((x, y, w, h) => ({ x, y, w, h })),
   },
   ColorType: { RGBA_8888: 'rgba8888' },
   AlphaType: { Unpremul: 'unpremul' },
   ImageFormat: { PNG: 'png' },
+  FilterMode: { Linear: 'linear' },
+  MipmapMode: { None: 'none' },
 }));
 
 describe('lineArtCache', () => {
@@ -127,6 +155,39 @@ describe('lineArtCache', () => {
       const result = await getDisplayImage('content://source/unreachable.jpg');
 
       expect(result).toEqual({ uri: 'content://source/unreachable.jpg', isConverted: false });
+    });
+
+    // Regression test: a real modern phone photo (e.g. 4000x3000) ran
+    // convertToLineArt's O(width*height) Sobel filter at FULL resolution,
+    // which took literally minutes on a real device the first time any
+    // given photo was opened. Downscaling to the same 1600px cap
+    // ColoringScreen.tsx already uses for its own flood-fill buffer, BEFORE
+    // the photographic check/conversion ever run, is what fixes that.
+    it('downscales an oversized source to MAX_CONVERSION_DIMENSION before checking/converting it', async () => {
+      (Skia.Image.MakeImageFromEncoded as jest.Mock).mockReturnValue(makeOversizedImage());
+      (Skia.Surface.MakeOffscreen as jest.Mock).mockReturnValue(mockSurface);
+      (looksPhotographic as jest.Mock).mockReturnValue(true);
+      (convertToLineArt as jest.Mock).mockReturnValue(new Uint8ClampedArray(1600 * 1200 * 4));
+
+      await getDisplayImage('content://source/big-photo.jpg');
+
+      expect(Skia.Surface.MakeOffscreen).toHaveBeenCalledWith(1600, 1200);
+      expect(mockCanvas.drawImageRectOptions).toHaveBeenCalled();
+      // looksPhotographic/convertToLineArt must run against the DOWNSCALED
+      // buffer's real dimensions (1600x1200), never the original 4000x3000.
+      expect(looksPhotographic).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 1600, 1200);
+      expect(convertToLineArt).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 1600, 1200);
+    });
+
+    it('leaves an already-small source untouched (no downscale surface created)', async () => {
+      // mockDecodedImage (the default) is 100x80 — well under the cap.
+      (looksPhotographic as jest.Mock).mockReturnValue(true);
+      (convertToLineArt as jest.Mock).mockReturnValue(new Uint8ClampedArray(100 * 80 * 4));
+
+      await getDisplayImage('content://source/small-photo.jpg');
+
+      expect(Skia.Surface.MakeOffscreen).not.toHaveBeenCalled();
+      expect(looksPhotographic).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 100, 80);
     });
   });
 

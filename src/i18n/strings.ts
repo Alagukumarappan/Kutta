@@ -171,6 +171,7 @@ export const UI_STRINGS = {
   tictactoeChangeSetup: { en: 'Menu', de: 'Menü' },
   tictactoeCellEmptyLabel: { en: 'Row {row}, column {column}, empty', de: 'Reihe {row}, Spalte {column}, leer' },
   tictactoeCellFilledLabel: { en: 'Row {row}, column {column}, {mark}', de: 'Reihe {row}, Spalte {column}, {mark}' },
+  tictactoeYouLabel: { en: 'You', de: 'Du' },
   videoLoadError: { en: 'This video could not be played.', de: 'Dieses Video konnte nicht abgespielt werden.' },
   videoFinished: { en: 'Nice watching! 🎬', de: 'Schön geschaut! 🎬' },
   videoWatchAgain: { en: 'Watch Again', de: 'Nochmal ansehen' },
@@ -282,6 +283,10 @@ export const UI_STRINGS = {
     de: 'Für Fotos wird Kamerazugriff benötigt — bitte erlaube ihn in den Geräteeinstellungen.',
   },
   cameraPhotoError: { en: "Couldn't take that photo — please try again.", de: 'Konnte das Foto nicht aufnehmen — bitte erneut versuchen.' },
+  cameraPhotoCancelledHint: {
+    en: 'No photo was saved. If you took a picture, tap the checkmark to confirm it before going back — the back button cancels it instead.',
+    de: 'Es wurde kein Foto gespeichert. Wenn du ein Foto aufgenommen hast, tippe zum Bestätigen auf das Häkchen, bevor du zurückgehst — die Zurück-Taste bricht das Foto stattdessen ab.',
+  },
   emptyCameraTitle: { en: 'No photos yet', de: 'Noch keine Fotos' },
   emptyCamera: { en: 'Take your first photo to see it here!', de: 'Mach dein erstes Foto, um es hier zu sehen!' },
   gallerySelectedCount: { en: '{count} selected', de: '{count} ausgewählt' },

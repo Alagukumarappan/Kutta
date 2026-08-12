@@ -185,6 +185,19 @@ export function TicTacToeScreen({
     return player === childMark ? childName : friendName ?? t('tictactoeOpponentFriend');
   }
 
+  // Who's playing which mark this game is decided by the childIsX coin
+  // flip above and otherwise invisible — the on-screen "X: .../O: ..."
+  // labels below are the ONLY place a parent/child can check who's who
+  // once the game is underway, so this always resolves to a real name (or
+  // "You"/"Computer" in computer mode) for both marks, never just the
+  // child's own.
+  function playerLabelFor(player: Player): string {
+    if (mode === 'computer') {
+      return player === childMark ? t('tictactoeYouLabel') : t('tictactoeOpponentComputer');
+    }
+    return friendModeName(player);
+  }
+
   function statusText(): string {
     if (status.status === 'won') {
       const childWon = status.winner === childMark;
@@ -256,6 +269,19 @@ export function TicTacToeScreen({
       <Text testID="tictactoe-status" style={styles.statusText}>
         {statusText()}
       </Text>
+
+      {/* Fixed X-then-O order (never reordered by the coin flip) so this
+          row's layout stays put game to game — only the names swap. */}
+      <View style={styles.playersRow}>
+        <View style={styles.playerChip} testID="tictactoe-player-x">
+          <Text style={[styles.playerChipMark, styles.cellTextX]}>X</Text>
+          <Text style={styles.playerChipName}>{playerLabelFor('X')}</Text>
+        </View>
+        <View style={styles.playerChip} testID="tictactoe-player-o">
+          <Text style={[styles.playerChipMark, styles.cellTextO]}>O</Text>
+          <Text style={styles.playerChipName}>{playerLabelFor('O')}</Text>
+        </View>
+      </View>
 
       <View style={[styles.board, { width: boardSize, height: boardSize }, elevation.level4]}>
         {/* Explicit row-by-row rendering instead of a single flexWrap:'wrap'
@@ -361,6 +387,30 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: spacing.md,
     textAlign: 'center',
+  },
+  playersRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+    gap: spacing.md,
+  },
+  playerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+    ...elevation.level2,
+  },
+  playerChipMark: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  playerChipName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.ink,
   },
   board: {
     flexDirection: 'column',

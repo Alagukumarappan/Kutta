@@ -261,6 +261,53 @@ describe('VideoPlayerScreen', () => {
     expect(queryByTestId('video-player-loading')).toBeNull();
   });
 
+  // Regression test: some real-device failures never fire ANY statusChange
+  // event at all (no 'error', nothing) — previously that left the spinner
+  // up forever with zero recourse, which read to a child/parent as "this
+  // video can't play" with no way to know that or retry. A source that
+  // never settles must eventually surface the same error/retry screen a
+  // genuine 'error' status would.
+  it('surfaces the error screen if the player never reports readyToPlay or error at all', async () => {
+    jest.useFakeTimers();
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await findByTestId('video-player-loading');
+
+    await act(async () => {
+      jest.advanceTimersByTime(20000);
+    });
+
+    await findByTestId('video-player-error');
+    expect(queryByTestId('video-player-loading')).toBeNull();
+    jest.useRealTimers();
+  });
+
+  it('never times out a video that already reported readyToPlay, even much later', async () => {
+    jest.useFakeTimers();
+    const { findByTestId, queryByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <VideoPlayerScreen videoUri={VIDEO_URI} />
+      </LanguageProvider>
+    );
+
+    await act(async () => {
+      __mockPlayer.emit('statusChange', { status: 'readyToPlay' });
+    });
+    await findByTestId('video-view');
+
+    await act(async () => {
+      jest.advanceTimersByTime(20000);
+    });
+
+    await findByTestId('video-view');
+    expect(queryByTestId('video-player-error')).toBeNull();
+    jest.useRealTimers();
+  });
+
   // Companion to the "idle" test above: expo-video's status mirrors the
   // LIVE native playback state, so it also drops back to 'loading' for
   // ordinary mid-playback events — Android maps ExoPlayer's STATE_BUFFERING

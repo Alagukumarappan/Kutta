@@ -1,8 +1,58 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Skia, ColorType, AlphaType, ImageFormat } from '@shopify/react-native-skia';
+import { Skia, ColorType, AlphaType, ImageFormat, FilterMode, MipmapMode, type SkImage } from '@shopify/react-native-skia';
 import { base64ToUint8Array } from './base64';
 import { looksPhotographic, convertToLineArt } from './lineArtConversion';
+
+// Mirrors ColoringScreen.tsx's own MAX_PIXEL_BUFFER_DIMENSION/
+// downscaleForColoring — a modern phone photo (12+ megapixels, e.g.
+// 4000x3000) run through convertToLineArt's Sobel filter AT FULL RESOLUTION
+// took literally minutes on a real device (confirmed by a parent's report:
+// every other coloring image was instant except the first time a given
+// photo was opened) — the Sobel loop is O(width*height), so a 4000x3000
+// photo is ~35x more pixels than the 1600px cap below. The derived line-art
+// PNG is only ever displayed on a small (~600x400) coloring canvas anyway
+// (see sampleContent.ts's own reasoning for why bundled samples need real
+// resolution but not more than that), so downscaling BEFORE conversion loses
+// no visible quality while cutting the dominant cost by well over an order
+// of magnitude. ColoringScreen's own later downscaleForColoring becomes a
+// no-op on this already-capped derived file, exactly as intended.
+const MAX_CONVERSION_DIMENSION = 1600;
+
+// Same technique as ColoringScreen.tsx's downscaleForColoring (linear
+// filtering via an offscreen Skia surface, not point-sampled nearest-
+// neighbour) — kept as its own small copy here rather than importing from
+// ColoringScreen.tsx, since pulling in a whole screen component just for one
+// helper function would be an odd, easy-to-break dependency direction for a
+// plain caching module to have.
+function downscaleForConversion(decoded: SkImage): SkImage {
+  const sourceWidth = decoded.width();
+  const sourceHeight = decoded.height();
+  const longestSide = Math.max(sourceWidth, sourceHeight);
+  if (!Number.isFinite(longestSide) || longestSide <= MAX_CONVERSION_DIMENSION) return decoded;
+
+  const ratio = MAX_CONVERSION_DIMENSION / longestSide;
+  const targetWidth = Math.max(1, Math.round(sourceWidth * ratio));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * ratio));
+
+  try {
+    const surface = Skia.Surface.MakeOffscreen(targetWidth, targetHeight);
+    if (!surface) return decoded;
+    surface
+      .getCanvas()
+      .drawImageRectOptions(
+        decoded,
+        Skia.XYWHRect(0, 0, sourceWidth, sourceHeight),
+        Skia.XYWHRect(0, 0, targetWidth, targetHeight),
+        FilterMode.Linear,
+        MipmapMode.None
+      );
+    const snapshot = surface.makeImageSnapshot();
+    return snapshot ?? decoded;
+  } catch {
+    return decoded;
+  }
+}
 
 const CACHE_KEY = 'kutta.lineArtCache.v1';
 const DERIVED_DIRNAME = 'kutta-line-art/';
@@ -79,8 +129,13 @@ export async function getDisplayImage(sourceUri: string): Promise<DisplayImage> 
     });
     const bytes = base64ToUint8Array(base64);
     const data = Skia.Data.fromBytes(bytes);
-    const decoded = Skia.Image.MakeImageFromEncoded(data);
-    if (!decoded) return { uri: sourceUri, isConverted: false };
+    const rawDecoded = Skia.Image.MakeImageFromEncoded(data);
+    if (!rawDecoded) return { uri: sourceUri, isConverted: false };
+    // See MAX_CONVERSION_DIMENSION above: this is what turns a "minutes on a
+    // real device" full-resolution Sobel pass into a sub-second one, by
+    // capping the pixel buffer BEFORE either the photographic check or the
+    // actual conversion ever touches it.
+    const decoded = downscaleForConversion(rawDecoded);
 
     const width = decoded.width();
     const height = decoded.height();

@@ -39,6 +39,18 @@ export function TakePhotoButton({ onTaken }: { onTaken: () => void }) {
         const persistedUri = await persistPickedFile(asset.uri, asset.fileName ?? undefined);
         await addFileReferences('camera', [persistedUri]);
         onTaken();
+      } else if (result.canceled) {
+        // The native camera's own post-capture review screen requires an
+        // explicit tap on its checkmark/confirm button to keep the shot —
+        // pressing back (or a hardware/gesture back) at that screen is
+        // reported here identically to backing out before ever taking a
+        // picture at all (both are `canceled: true`, with no way to tell
+        // them apart from this result alone). Without this, a parent who
+        // pressed back thinking the photo was already saved got zero
+        // feedback and just found an unchanged, empty gallery — this
+        // makes the actual behavior (back cancels, the checkmark confirms)
+        // explicit instead of silently discarding the shot.
+        Alert.alert(t('cameraPhotoCancelledHint'));
       }
     } catch {
       Alert.alert(t('cameraPhotoError'));

@@ -66,6 +66,17 @@ export function useSelectableGallery(
     ]).then(([folderResult, extraResult]) => {
       if (cancelled) return;
       const folderItems = folderResult.status === 'fulfilled' ? folderResult.value : [];
+      // Deliberately NOT filtered through `isValidFile` — unlike a folder
+      // listing (whose SAF entries carry the file's real display name/
+      // extension), the system document picker routinely hands back an
+      // OPAQUE content:// URI with no extension anywhere in the string at
+      // all (e.g. `content://media/external/video/media/12345`), especially
+      // for anything sourced from Google Photos or the media provider. An
+      // earlier attempt at extension-filtering this exact list rejected
+      // every single individually-added video, since none of those URIs end
+      // in ".mp4" — the picker's own `mimeType` constraint (see
+      // AddFilesButton) is what actually keeps the wrong file type out here,
+      // not a client-side extension guess.
       const extraItems = extraResult.status === 'fulfilled' ? extraResult.value : [];
 
       if (folderResult.status === 'rejected' && extraItems.length === 0) {

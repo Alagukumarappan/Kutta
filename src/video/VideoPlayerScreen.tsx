@@ -21,6 +21,17 @@ import {
 // matching VideoGallery.
 const palette = getActivityPalette('video');
 
+// A first-time-open guard, not a playback stall guard: if the underlying
+// native player fails to even initialize a source, expo-video has no way to
+// report that other than a genuine 'error' statusChange — but a small
+// number of real device/codec/SAF-permission failures never fire ANY
+// statusChange at all, leaving `loading` stuck true forever with nothing to
+// unstick it (a video that "can't play" looked identical to one still
+// buffering). Scoped to the first load only (see hasLoadedRef below) so a
+// legitimately long buffer/seek later in normal playback is never mistaken
+// for a failure.
+const FIRST_LOAD_TIMEOUT_MS = 20000;
+
 export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   const { t } = useLanguage();
   const [error, setError] = useState(false);
@@ -58,6 +69,12 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
   // handler that would otherwise re-raise the spinner, with no re-render
   // in between. Reset in handleRetry, which really does reload the source.
   const hasLoadedRef = useRef(false);
+  // Holds whichever FIRST_LOAD_TIMEOUT_MS timer is currently armed — needed
+  // as a ref (not a local variable in the effect below) because handleRetry
+  // has to re-arm this exact same guard against the SAME player instance
+  // (retrying doesn't create a new player/doesn't re-run that effect), so
+  // there must be one shared place both can clear-and-replace safely.
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Previously this screen gave a child NO feedback at all when a video
   // finished — it just sat on its last frame with native controls, unlike
   // every other activity (Quiz/Puzzle/Tic-Tac-Toe), which all celebrate a
@@ -92,6 +109,31 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     if (error || finished) retryFiredRef.current = false;
   }, [error, finished]);
 
+  function clearLoadTimeout() {
+    if (loadTimeoutRef.current !== null) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+  }
+
+  // See FIRST_LOAD_TIMEOUT_MS above: fires only if this source never
+  // settles to 'readyToPlay' or 'error' on its own within a generous
+  // window. The `!hasLoadedRef.current` check inside is what keeps this
+  // from ever misfiring against a video that already loaded fine and is
+  // now just buffering mid-playback. A plain function (not useCallback) —
+  // it only touches refs and stable state setters, so there's no benefit
+  // to memoizing it, and both call sites below already run inside an
+  // effect/event handler, never during render.
+  function armLoadTimeout() {
+    clearLoadTimeout();
+    loadTimeoutRef.current = setTimeout(() => {
+      if (!hasLoadedRef.current) {
+        setError(true);
+        setLoading(false);
+      }
+    }, FIRST_LOAD_TIMEOUT_MS);
+  }
+
   useEffect(() => {
     // A NEW player object means a genuinely different source: `useVideoPlayer`
     // keys its player on the source uri (see expo-video's
@@ -122,11 +164,13 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     // to listening for future changes) closes that gap.
     function applyStatus(status: typeof player.status) {
       if (status === 'error') {
+        clearLoadTimeout();
         setError(true);
         setLoading(false);
         return;
       }
       if (status === 'readyToPlay') {
+        clearLoadTimeout();
         hasLoadedRef.current = true;
         setLoading(false);
         return;
@@ -136,9 +180,14 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
       // (seek, re-buffer, reached the end) and must NOT blank the screen.
       setLoading(!hasLoadedRef.current);
     }
+    armLoadTimeout();
     applyStatus(player.status);
     const subscription = player.addListener('statusChange', ({ status }) => applyStatus(status));
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      clearLoadTimeout();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player]);
 
   useEffect(() => {
@@ -170,8 +219,14 @@ export function VideoPlayerScreen({ videoUri }: { videoUri: string }) {
     // genuinely-fresh load this is about to start (see hasLoadedRef above).
     hasLoadedRef.current = false;
     setLoading(true);
+    // Same reasoning as the mount effect's own armLoadTimeout() call: a
+    // retry that itself never settles (the exact same underlying failure
+    // recurring) needs its own fresh timeout, since `replace` doesn't
+    // create a new player object and so never re-runs that effect.
+    armLoadTimeout();
     player.replace(videoUri);
     player.play();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player, videoUri]);
 
   // "Watch Again" is NOT the same operation as the error-state Retry, and

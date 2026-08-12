@@ -291,6 +291,32 @@ describe('TicTacToeScreen', () => {
     });
   });
 
+  describe('persistent who-is-X/who-is-O labels', () => {
+    it('shows the child and friend names against their marks in friend mode', async () => {
+      // Math.random pinned to 0 in beforeEach => childIsX is true => child is X.
+      const { getByTestId } = await renderGame({ mode: 'friend', childName: 'Sam', friendName: 'Alex' });
+
+      expect(within(getByTestId('tictactoe-player-x')).getByText('Sam')).toBeTruthy();
+      expect(within(getByTestId('tictactoe-player-o')).getByText('Alex')).toBeTruthy();
+    });
+
+    it('shows "You" and "Computer" against the marks in computer mode', async () => {
+      // Math.random pinned to 0 => childIsX true => child (You) is X, Computer is O.
+      const { getByTestId } = await renderGame({ mode: 'computer', difficulty: 'easy' });
+
+      expect(within(getByTestId('tictactoe-player-x')).getByText('You')).toBeTruthy();
+      expect(within(getByTestId('tictactoe-player-o')).getByText('Computer')).toBeTruthy();
+    });
+
+    it('flips which name is X vs O when the coin flip favors the opponent', async () => {
+      (Math.random as jest.Mock).mockReturnValue(0.9); // childIsX = false
+      const { getByTestId } = await renderGame({ mode: 'computer', difficulty: 'easy' });
+
+      expect(within(getByTestId('tictactoe-player-x')).getByText('Computer')).toBeTruthy();
+      expect(within(getByTestId('tictactoe-player-o')).getByText('You')).toBeTruthy();
+    });
+  });
+
   describe('computer mode', () => {
     it('lets the human (X) move first, then triggers a computer (O) move automatically', async () => {
       jest.useFakeTimers();

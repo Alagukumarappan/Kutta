@@ -68,6 +68,27 @@ describe('useSelectableGallery', () => {
     expect(FileSystem.StorageAccessFramework.readDirectoryAsync).not.toHaveBeenCalled();
   });
 
+  // Regression test: individually-added references must NOT be filtered by
+  // isValidFile — unlike a folder listing, the system document picker
+  // routinely returns an opaque content:// URI with no extension at all
+  // (e.g. a video from Google Photos), which a naive extension check would
+  // wrongly reject even though it's a perfectly valid, already
+  // mimeType-constrained pick (see AddFilesButton).
+  it('does not filter individually-added references by isValidFile, even when their uri has no matching extension', async () => {
+    (FileSystem.StorageAccessFramework.readDirectoryAsync as jest.Mock).mockResolvedValue([]);
+    (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockResolvedValue([
+      'content://media/external/video/media/12345',
+    ]);
+
+    const { result } = await renderHook(() => useSelectableGallery('content://folder', 'video', isImageFile), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+
+    expect(result.current.items).toEqual(['content://media/external/video/media/12345']);
+  });
+
   it('never shows an error screen just because there is no folder, even if references fail to load too', async () => {
     (fileReferenceStore.pruneMissingFileReferences as jest.Mock).mockRejectedValue(new Error('storage unavailable'));
 
