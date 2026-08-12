@@ -3,12 +3,17 @@ import { Image } from 'react-native';
 import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { MemoryMatchScreen } from '../../src/memoryMatch/MemoryMatchScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
+import { buildDeck, reshuffle } from '../../src/memoryMatch/memoryMatchEngine';
+import { resolvableItemIds } from '../../src/memoryMatch/memoryMatchContent';
 
 jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({ uri: 'asset:///fake.jpg' } as any);
 
-function renderGame(props: Partial<React.ComponentProps<typeof MemoryMatchScreen>> = {}) {
+function renderGame(
+  props: Partial<React.ComponentProps<typeof MemoryMatchScreen>> = {},
+  options: { strictMode?: boolean } = {}
+) {
   const onMenu = props.onMenu ?? jest.fn();
-  return render(
+  const tree = (
     <LanguageProvider initialLanguage="en">
       <MemoryMatchScreen
         mode={props.mode ?? 'solo'}
@@ -19,6 +24,7 @@ function renderGame(props: Partial<React.ComponentProps<typeof MemoryMatchScreen
       />
     </LanguageProvider>
   );
+  return render(options.strictMode ? <React.StrictMode>{tree}</React.StrictMode> : tree);
 }
 
 describe('MemoryMatchScreen', () => {
@@ -369,6 +375,103 @@ describe('MemoryMatchScreen', () => {
       } else {
         expect(within(overlay).getByText('Alex wins! 🎉')).toBeTruthy();
       }
+    });
+
+    // Regression test for the score/deck side effects that used to live
+    // INSIDE the setFlippedIndices functional updater: two taps resolving a
+    // MATCH, delivered in the same React batch (a child drumming on the
+    // board), must still score exactly once -- not be lost, and not be
+    // double-applied. Uses the preview phase (every card face-up) to find a
+    // real matching pair by reading images directly, without flipping
+    // anything, so the board is still pristine for the actual batched press.
+    it('a batched match (two taps in one React batch) scores exactly once', async () => {
+      // The board reshuffles when the preview ends (see the roundKey
+      // effect in MemoryMatchScreen), so a matching pair's positions can't
+      // be read from the preview's face-up images -- those positions are
+      // gone by the time play starts. Instead, pin Math.random to a
+      // constant so buildDeck/reshuffle are deterministic, and replay the
+      // exact same two pure calls the component itself makes (mount's
+      // buildDeck, then the preview-end effect's reshuffle) to compute the
+      // real post-reshuffle arrangement up front.
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+      const computedDeck = reshuffle(buildDeck(6, resolvableItemIds()));
+      let matchA = -1;
+      let matchB = -1;
+      outer: for (let i = 0; i < computedDeck.length && matchA === -1; i++) {
+        for (let j = i + 1; j < computedDeck.length; j++) {
+          if (computedDeck[i].itemId === computedDeck[j].itemId) {
+            matchA = i;
+            matchB = j;
+            break outer;
+          }
+        }
+      }
+      expect(matchA).toBeGreaterThanOrEqual(0);
+
+      const { getByTestId } = await renderGame({ mode: 'friend', pairCount: 6, friendName: 'Alex' });
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000); // past the preview
+      });
+      randomSpy.mockRestore();
+
+      // React logs "overlapping act() calls" for the deliberately-nested
+      // act below -- that nesting IS the batch being reproduced, same
+      // spy-and-restore idiom as TicTacToeScreen's own batched-tap test.
+      const silenceOverlappingActWarning = jest.spyOn(console, 'error').mockImplementation(() => {});
+      await act(async () => {
+        fireEvent.press(getByTestId(`memory-match-card-${matchA}`));
+        fireEvent.press(getByTestId(`memory-match-card-${matchB}`));
+      });
+      silenceOverlappingActWarning.mockRestore();
+
+      const childPts = Number(getByTestId('memory-match-score-child').props.children.match(/(\d+)$/)?.[1]);
+      const friendPts = Number(getByTestId('memory-match-score-friend').props.children.match(/(\d+)$/)?.[1]);
+      expect(childPts + friendPts).toBe(1);
+    });
+
+    // Regression guard for the same fix: the match/score side effects used
+    // to run inside the setFlippedIndices updater function, which React
+    // deliberately double-invokes under StrictMode to surface impurities --
+    // a real risk here, since a naive re-run would score a match twice.
+    // Restructured so those side effects live in the (once-per-press) event
+    // handler instead, which StrictMode does not double-invoke.
+    it('under React.StrictMode, a genuine match increments a score by exactly 1, not 2', async () => {
+      const { getByTestId, queryByTestId } = await renderGame(
+        { mode: 'friend', pairCount: 6, friendName: 'Alex' },
+        { strictMode: true }
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      async function flipAndImage(index: number) {
+        await fireEvent.press(getByTestId(`memory-match-card-${index}`));
+        return queryByTestId(`memory-match-card-${index}-image`);
+      }
+
+      const untried = Array.from({ length: 11 }, (_, i) => i + 1);
+      let anchorIndex = 0;
+      let anchorImage = await flipAndImage(anchorIndex);
+
+      let matchIndex = -1;
+      while (matchIndex === -1 && untried.length > 0) {
+        const candidate = untried.shift()!;
+        const candidateImage = await flipAndImage(candidate);
+        if (candidateImage && anchorImage && candidateImage.props.source === anchorImage.props.source) {
+          matchIndex = candidate;
+          break;
+        }
+        await act(async () => {
+          jest.advanceTimersByTime(900);
+        });
+        anchorImage = await flipAndImage(anchorIndex);
+      }
+      expect(matchIndex).toBeGreaterThanOrEqual(0);
+
+      const childPts = Number(getByTestId('memory-match-score-child').props.children.match(/(\d+)$/)?.[1]);
+      const friendPts = Number(getByTestId('memory-match-score-friend').props.children.match(/(\d+)$/)?.[1]);
+      expect(childPts + friendPts).toBe(1);
     });
   });
 });

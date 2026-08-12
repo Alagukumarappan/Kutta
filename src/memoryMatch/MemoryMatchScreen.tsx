@@ -46,6 +46,17 @@ const GRID_COLUMNS_BY_PAIR_COUNT: Record<PairCount, number> = {
   18: 9, // 36 cards -> 9x4
 };
 
+// Friend mode renders a score row (~33dp: chip + marginBottom) and a turn
+// indicator (~28dp: text + marginBottom) ABOVE the grid — this cell-size
+// math predates that (it was written in Task 7 for solo-mode-only, before
+// Task 8 added those elements), and never accounted for the space they
+// take, which visibly clipped the top and bottom card rows on real phone
+// screens in friend mode (~45dp overflow measured by a whole-branch
+// review). A little extra buffer (80 total) keeps this safely
+// conservative rather than exactly matching the measured styles, which
+// would break again the next time either element's padding changes.
+const FRIEND_MODE_HEADER_ALLOWANCE = 80;
+
 export function MemoryMatchScreen({
   mode,
   pairCount,
@@ -82,7 +93,28 @@ export function MemoryMatchScreen({
   const menuFiredRef = useRef(false);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
 
-  const isComplete = isDeckComplete(deck);
+  // Mirrors `flippedIndices` synchronously, alongside every update to that
+  // state -- same technique as PuzzleScreen's own selectedSlotRef. React
+  // Native delivers a BATCH of queued touch events to JS at once, so two
+  // taps landing close together (a child drumming on the board) both run
+  // against the same pre-update render; reading this ref instead of the
+  // `flippedIndices` closure lets the second tap of a batch see what the
+  // first one just did, without needing a setState updater function (whose
+  // body React may invoke twice under StrictMode -- unsafe here, since the
+  // match branch below also scores a point and marks cards matched, and
+  // those side effects must run exactly once per genuine match).
+  const flippedIndicesRef = useRef<number[]>([]);
+  function updateFlippedIndices(next: number[]) {
+    flippedIndicesRef.current = next;
+    setFlippedIndices(next);
+  }
+
+  // Guard against a vacuous "complete" on a degenerate empty deck (e.g. if
+  // every bundled photo somehow failed to resolve) -- isDeckComplete([])
+  // is trivially true, which would otherwise show a false "you won"
+  // celebration over an empty grid instead of just rendering the (empty)
+  // grid.
+  const isComplete = deck.length > 0 && isDeckComplete(deck);
 
   useEffect(() => {
     if (isComplete) {
@@ -115,43 +147,50 @@ export function MemoryMatchScreen({
   useEffect(() => {
     if (flippedIndices.length !== 2) return;
     const timeoutId = setTimeout(() => {
-      setFlippedIndices([]);
+      updateFlippedIndices([]);
       if (mode === 'friend') setCurrentPlayerIsChild((isChild) => !isChild);
     }, MISMATCH_FLIP_BACK_DELAY_MS);
     return () => clearTimeout(timeoutId);
   }, [flippedIndices, mode]);
 
   function handleCardPress(index: number) {
-    if (revealPhase !== 'playing' || flippedIndices.length === 2) return;
+    if (revealPhase !== 'playing') return;
     if (deck[index].matched) return;
 
-    // Re-derives "is this a genuinely new second flip" from the LATEST
-    // flippedIndices via the functional updater, not the outer closure's
-    // possibly-stale snapshot -- same reasoning as TicTacToeScreen's own
-    // documented fix for two taps delivered in a single React batch.
-    setFlippedIndices((prevFlipped) => {
-      if (prevFlipped.includes(index) || prevFlipped.length >= 2) return prevFlipped;
-      const nextFlipped = [...prevFlipped, index];
-      if (nextFlipped.length === 2) {
-        const [first, second] = nextFlipped;
-        if (checkMatch(deck, first, second)) {
-          setDeck((prevDeck) => prevDeck.map((card, i) => (i === first || i === second ? { ...card, matched: true } : card)));
-          if (mode === 'friend') {
-            if (currentPlayerIsChild) setChildScore((score) => score + 1);
-            else setFriendScore((score) => score + 1);
-          }
-          return [];
+    // Reads the ACTUAL latest flipped indices via flippedIndicesRef (kept
+    // in sync by updateFlippedIndices), not the outer closure's possibly-
+    // stale `flippedIndices` snapshot -- same reasoning as TicTacToeScreen's
+    // own documented fix for two taps delivered in a single React batch.
+    const prevFlipped = flippedIndicesRef.current;
+    if (prevFlipped.includes(index) || prevFlipped.length >= 2) return;
+
+    const nextFlipped = [...prevFlipped, index];
+    if (nextFlipped.length === 2) {
+      const [first, second] = nextFlipped;
+      if (checkMatch(deck, first, second)) {
+        // These side effects (marking cards matched, scoring a point) run
+        // exactly once per genuine match: handleCardPress is a plain event
+        // handler invoked once per press, unlike a setState updater
+        // function's body, which React may invoke twice under StrictMode
+        // to surface impurities -- doing this here, outside any updater,
+        // is what keeps a single match from ever being double-counted.
+        updateFlippedIndices([]);
+        setDeck((prevDeck) => prevDeck.map((card, i) => (i === first || i === second ? { ...card, matched: true } : card)));
+        if (mode === 'friend') {
+          if (currentPlayerIsChild) setChildScore((score) => score + 1);
+          else setFriendScore((score) => score + 1);
         }
+        return;
       }
-      return nextFlipped;
-    });
+    }
+    updateFlippedIndices(nextFlipped);
   }
 
   function handleRetry() {
     if (retryFiredRef.current) return;
     retryFiredRef.current = true;
     setDeck(buildDeck(pairCount, resolvableItemIds()));
-    setFlippedIndices([]);
+    updateFlippedIndices([]);
     setCurrentPlayerIsChild(true);
     setChildScore(0);
     setFriendScore(0);
@@ -187,7 +226,8 @@ export function MemoryMatchScreen({
   const columns = GRID_COLUMNS_BY_PAIR_COUNT[pairCount];
   const rows = Math.ceil(deck.length / columns);
   const availableWidth = width - insets.left - insets.right - spacing.md * 2;
-  const availableHeight = height - insets.top - insets.bottom - spacing.md * 2;
+  const availableHeight =
+    height - insets.top - insets.bottom - spacing.md * 2 - (mode === 'friend' ? FRIEND_MODE_HEADER_ALLOWANCE : 0);
   const cellSize = clamp(Math.min(availableWidth / columns, availableHeight / rows) - spacing.xs, 36, 96);
 
   return (

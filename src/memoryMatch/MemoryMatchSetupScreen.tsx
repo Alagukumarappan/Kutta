@@ -39,7 +39,7 @@ export function MemoryMatchSetupScreen({
 }: {
   onStart: (mode: MemoryMatchMode, pairCount: PairCount, friendName?: string) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<MemoryMatchMode | null>(null);
   const [pairCount, setPairCount] = useState<PairCount | null>(null);
@@ -162,7 +162,7 @@ export function MemoryMatchSetupScreen({
               style={styles.difficultyOuter}
               innerStyle={[styles.difficultyPill, pairCount === count && styles.difficultyPillSelected]}
               accessibilityRole="button"
-              accessibilityLabel={tFormat('memoryMatchPairs', 'en', { count })}
+              accessibilityLabel={tFormat('memoryMatchPairs', language, { count })}
             >
               <Text style={[styles.difficultyText, pairCount === count && styles.difficultyTextSelected]}>
                 {count}
