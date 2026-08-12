@@ -83,6 +83,57 @@ describe('MemoryMatchSetupScreen', () => {
     expect(getByTestId('memory-match-difficulty-18')).toBeTruthy();
   });
 
+  // Bughunt round 3, finding 1: friend mode shows the friend-name field AND
+  // the difficulty row at once, which can overflow a landscape phone even
+  // with the keyboard closed. The ScrollView wrapper already makes the
+  // overflow content reachable -- the bug was that
+  // showsVerticalScrollIndicator={false} hid the only visual cue that more
+  // content exists below the fold. Must now be visible (true, or omitted --
+  // which also defaults to true).
+  it('shows the vertical scroll indicator (a visible cue that there is more content below the fold)', async () => {
+    const { getByTestId } = await renderSetup();
+
+    const scrollViewProps = getByTestId('memory-match-setup-scroll-view').props;
+    expect(scrollViewProps.showsVerticalScrollIndicator).not.toBe(false);
+  });
+
+  // Bughunt round 3, finding 2: a TalkBack user could hear "Solo"/"Friend"/
+  // "6 pairs" etc. but never which one is CURRENTLY selected -- purely a
+  // color/border visual cue before this fix.
+  it('conveys the selected mode to assistive tech via accessibilityState.selected', async () => {
+    const { getByTestId } = await renderSetup();
+
+    expect(getByTestId('memory-match-mode-solo').props.accessibilityState?.selected).toBe(false);
+    expect(getByTestId('memory-match-mode-friend').props.accessibilityState?.selected).toBe(false);
+
+    await fireEvent.press(getByTestId('memory-match-mode-solo'));
+
+    expect(getByTestId('memory-match-mode-solo').props.accessibilityState?.selected).toBe(true);
+    expect(getByTestId('memory-match-mode-friend').props.accessibilityState?.selected).toBe(false);
+
+    await fireEvent.press(getByTestId('memory-match-mode-friend'));
+
+    expect(getByTestId('memory-match-mode-solo').props.accessibilityState?.selected).toBe(false);
+    expect(getByTestId('memory-match-mode-friend').props.accessibilityState?.selected).toBe(true);
+  });
+
+  it('conveys the selected difficulty pill to assistive tech via accessibilityState.selected', async () => {
+    const { getByTestId } = await renderSetup();
+
+    expect(getByTestId('memory-match-difficulty-6').props.accessibilityState?.selected).toBe(false);
+    expect(getByTestId('memory-match-difficulty-10').props.accessibilityState?.selected).toBe(false);
+
+    await fireEvent.press(getByTestId('memory-match-difficulty-10'));
+
+    expect(getByTestId('memory-match-difficulty-10').props.accessibilityState?.selected).toBe(true);
+    expect(getByTestId('memory-match-difficulty-6').props.accessibilityState?.selected).toBe(false);
+
+    await fireEvent.press(getByTestId('memory-match-difficulty-6'));
+
+    expect(getByTestId('memory-match-difficulty-6').props.accessibilityState?.selected).toBe(true);
+    expect(getByTestId('memory-match-difficulty-10').props.accessibilityState?.selected).toBe(false);
+  });
+
   it('guards against a rapid double-tap on Start, only calling onStart once', async () => {
     const onStart = jest.fn();
     const { getByTestId } = await renderSetup(onStart);

@@ -13,6 +13,7 @@ import {
 } from './memoryMatchEngine';
 import { moduleForItemId, resolvableItemIds, preloadItemImages, displayNameForItemId } from './memoryMatchContent';
 import type { MemoryMatchMode } from './MemoryMatchSetupScreen';
+import { playCorrectSound, playWrongSound } from '../audio/soundEffects';
 import {
   colors,
   radii,
@@ -252,6 +253,7 @@ export function MemoryMatchScreen({
   // to be flipped back.
   useEffect(() => {
     if (flippedIndices.length !== 2) return;
+    playWrongSound();
     const timeoutId = setTimeout(() => {
       updateFlippedIndices([]);
       if (mode === 'friend') updateCurrentPlayerIsChild(!currentPlayerIsChildRef.current);
@@ -286,6 +288,7 @@ export function MemoryMatchScreen({
         // is what keeps a single match from ever being double-counted.
         updateFlippedIndices([]);
         updateDeck(deckRef.current.map((card, i) => (i === first || i === second ? { ...card, matched: true } : card)));
+        playCorrectSound();
         if (mode === 'friend') {
           if (currentPlayerIsChildRef.current) setChildScore((score) => score + 1);
           else setFriendScore((score) => score + 1);

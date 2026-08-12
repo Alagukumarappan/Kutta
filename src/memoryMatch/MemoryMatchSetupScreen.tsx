@@ -83,6 +83,7 @@ export function MemoryMatchSetupScreen({
           field, and this app is landscape-locked, where the keyboard eats
           well over half the window height. */}
       <ScrollView
+        testID="memory-match-setup-scroll-view"
         style={styles.scrollView}
         contentContainerStyle={[
           styles.screen,
@@ -94,7 +95,7 @@ export function MemoryMatchSetupScreen({
           },
         ]}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
       >
         <Text style={styles.brandEmoji}>🃏</Text>
         <Text style={styles.title}>{t('memoryMatchSetupTitle')}</Text>
@@ -109,6 +110,7 @@ export function MemoryMatchSetupScreen({
             innerStyle={[styles.optionCard, mode === 'solo' && styles.optionCardSelected]}
             accessibilityRole="button"
             accessibilityLabel={t('memoryMatchModeSolo')}
+            selected={mode === 'solo'}
           >
             <Text style={styles.optionEmoji}>🧑</Text>
             <Text style={[styles.optionText, mode === 'solo' && styles.optionTextSelected]}>
@@ -123,6 +125,7 @@ export function MemoryMatchSetupScreen({
             innerStyle={[styles.optionCard, mode === 'friend' && styles.optionCardSelected]}
             accessibilityRole="button"
             accessibilityLabel={t('memoryMatchModeFriend')}
+            selected={mode === 'friend'}
           >
             <Text style={styles.optionEmoji}>🧑‍🤝‍🧑</Text>
             <Text style={[styles.optionText, mode === 'friend' && styles.optionTextSelected]}>
@@ -163,6 +166,7 @@ export function MemoryMatchSetupScreen({
               innerStyle={[styles.difficultyPill, pairCount === count && styles.difficultyPillSelected]}
               accessibilityRole="button"
               accessibilityLabel={tFormat('memoryMatchPairs', language, { count })}
+              selected={pairCount === count}
             >
               <Text style={[styles.difficultyText, pairCount === count && styles.difficultyTextSelected]}>
                 {count}

@@ -5,8 +5,17 @@ import { MemoryMatchScreen } from '../../src/memoryMatch/MemoryMatchScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { buildDeck, reshuffle } from '../../src/memoryMatch/memoryMatchEngine';
 import { resolvableItemIds, displayNameForItemId } from '../../src/memoryMatch/memoryMatchContent';
+import { playCorrectSound, playWrongSound } from '../../src/audio/soundEffects';
 
 jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({ uri: 'asset:///fake.jpg' } as any);
+
+// Same mocking idiom as TicTacToeScreen.test.tsx's own soundEffects mock --
+// a match/mismatch's sound is a side effect this suite verifies was
+// TRIGGERED, not that real audio genuinely played.
+jest.mock('../../src/audio/soundEffects', () => ({
+  playCorrectSound: jest.fn(),
+  playWrongSound: jest.fn(),
+}));
 
 // Bug 3 (preview-preloading) coverage needs control over when the actual
 // asset download "completes" -- the real `expo-asset` module isn't
@@ -45,6 +54,8 @@ function renderGame(
 describe('MemoryMatchScreen', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    (playCorrectSound as jest.Mock).mockClear();
+    (playWrongSound as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -175,6 +186,78 @@ describe('MemoryMatchScreen', () => {
 
     expect(queryByTestId(`memory-match-card-${anchorIndex}-image`)).toBeNull();
     expect(queryByTestId(`memory-match-card-${mismatchIndex}-image`)).toBeNull();
+  });
+
+  it('plays the wrong sound (and not the correct sound) as soon as a MISMATCHED pair is revealed, before it flips back', async () => {
+    const { getByTestId, queryByTestId } = await renderGame({ pairCount: 6 });
+    await act(async () => {
+      jest.advanceTimersByTime(2000); // past the preview
+    });
+
+    async function flipAndImage(index: number) {
+      await fireEvent.press(getByTestId(`memory-match-card-${index}`));
+      return queryByTestId(`memory-match-card-${index}-image`);
+    }
+
+    const untried = Array.from({ length: 11 }, (_, i) => i + 1);
+    let anchorIndex = 0;
+    let firstImage = await flipAndImage(anchorIndex);
+
+    let mismatchIndex = -1;
+    while (mismatchIndex === -1 && untried.length > 0) {
+      const i = untried.shift()!;
+      const candidateImage = await flipAndImage(i);
+      if (!candidateImage) continue;
+      if (candidateImage.props.source !== firstImage!.props.source) {
+        mismatchIndex = i;
+      } else if (untried.length > 0) {
+        anchorIndex = untried.shift()!;
+        firstImage = await flipAndImage(anchorIndex);
+      }
+    }
+    expect(mismatchIndex).toBeGreaterThan(-1);
+
+    // The sound must play as soon as the mismatch is revealed -- BEFORE
+    // the 900ms flip-back delay has elapsed, not only afterward.
+    expect(playWrongSound).toHaveBeenCalledTimes(1);
+    expect(playCorrectSound).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(900);
+    });
+
+    // Flipping back doesn't play the sound again.
+    expect(playWrongSound).toHaveBeenCalledTimes(1);
+    expect(playCorrectSound).not.toHaveBeenCalled();
+  });
+
+  it('plays the correct sound (and not the wrong sound) exactly once when a pair is MATCHED', async () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const computedDeck = reshuffle(buildDeck(6, resolvableItemIds()));
+    let matchA = -1;
+    let matchB = -1;
+    outer: for (let i = 0; i < computedDeck.length && matchA === -1; i++) {
+      for (let j = i + 1; j < computedDeck.length; j++) {
+        if (computedDeck[i].itemId === computedDeck[j].itemId) {
+          matchA = i;
+          matchB = j;
+          break outer;
+        }
+      }
+    }
+    expect(matchA).toBeGreaterThanOrEqual(0);
+
+    const { getByTestId } = await renderGame({ pairCount: 6 });
+    await act(async () => {
+      jest.advanceTimersByTime(2000); // past the preview
+    });
+    randomSpy.mockRestore();
+
+    await fireEvent.press(getByTestId(`memory-match-card-${matchA}`));
+    await fireEvent.press(getByTestId(`memory-match-card-${matchB}`));
+
+    expect(playCorrectSound).toHaveBeenCalledTimes(1);
+    expect(playWrongSound).not.toHaveBeenCalled();
   });
 
   it('never shows a score row or turn indicator in solo mode', async () => {
