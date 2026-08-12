@@ -3,6 +3,7 @@ import {
   MEMORY_MATCH_ITEMS,
   moduleForItemId,
   resolvableItemIds,
+  displayNameForItemId,
 } from '../../src/memoryMatch/memoryMatchContent';
 
 describe('memoryMatchContent', () => {
@@ -31,6 +32,25 @@ describe('memoryMatchContent', () => {
       const ids = MEMORY_MATCH_ITEMS.map((item) => item.itemId);
       expect(new Set(ids).size).toBe(ids.length);
     });
+
+    it('gives every item a non-empty English and German display name', () => {
+      MEMORY_MATCH_ITEMS.forEach((item) => {
+        expect(item.displayName.en.trim().length).toBeGreaterThan(0);
+        expect(item.displayName.de.trim().length).toBeGreaterThan(0);
+      });
+    });
+
+    it('never uses the raw itemId slug as a display name (no un-translated passthrough)', () => {
+      // A hyphenated itemId (e.g. "pickup-truck") appearing verbatim as a
+      // display name would be exactly the raw-slug regression this field
+      // exists to prevent -- display names must be real words, not
+      // identifiers.
+      MEMORY_MATCH_ITEMS.forEach((item) => {
+        expect(item.displayName.en).not.toBe(item.itemId);
+        expect(item.displayName.en).not.toContain('-');
+        expect(item.displayName.de).not.toContain('-');
+      });
+    });
   });
 
   describe('moduleForItemId', () => {
@@ -41,6 +61,19 @@ describe('memoryMatchContent', () => {
 
     it('returns undefined for an unknown itemId', () => {
       expect(moduleForItemId('not-a-real-item')).toBeUndefined();
+    });
+  });
+
+  describe('displayNameForItemId', () => {
+    it('returns the correct English and German display name for a real itemId', () => {
+      expect(displayNameForItemId('pickup-truck', 'en')).toBe('Pickup Truck');
+      expect(displayNameForItemId('pickup-truck', 'de')).toBe('Pickup');
+      expect(displayNameForItemId('lion', 'en')).toBe('Lion');
+      expect(displayNameForItemId('lion', 'de')).toBe('Löwe');
+    });
+
+    it('falls back to the raw itemId for an unknown itemId (never throws)', () => {
+      expect(displayNameForItemId('not-a-real-item', 'en')).toBe('not-a-real-item');
     });
   });
 

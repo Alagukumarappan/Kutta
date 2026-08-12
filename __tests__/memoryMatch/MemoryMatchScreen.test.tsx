@@ -4,7 +4,7 @@ import { render, fireEvent, waitFor, act, within } from '@testing-library/react-
 import { MemoryMatchScreen } from '../../src/memoryMatch/MemoryMatchScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
 import { buildDeck, reshuffle } from '../../src/memoryMatch/memoryMatchEngine';
-import { resolvableItemIds } from '../../src/memoryMatch/memoryMatchContent';
+import { resolvableItemIds, displayNameForItemId } from '../../src/memoryMatch/memoryMatchContent';
 
 jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({ uri: 'asset:///fake.jpg' } as any);
 
@@ -25,11 +25,11 @@ jest.mock('expo-asset', () => ({
 
 function renderGame(
   props: Partial<React.ComponentProps<typeof MemoryMatchScreen>> = {},
-  options: { strictMode?: boolean } = {}
+  options: { strictMode?: boolean; language?: 'en' | 'de' } = {}
 ) {
   const onMenu = props.onMenu ?? jest.fn();
   const tree = (
-    <LanguageProvider initialLanguage="en">
+    <LanguageProvider initialLanguage={options.language ?? 'en'}>
       <MemoryMatchScreen
         mode={props.mode ?? 'solo'}
         pairCount={props.pairCount ?? 6}
@@ -66,6 +66,46 @@ describe('MemoryMatchScreen', () => {
     // After the preview: every card is face-down.
     expect(queryAllByTestId(/memory-match-card-\d+-image/)).toHaveLength(0);
     expect(queryAllByTestId(/memory-match-card-\d+-back/)).toHaveLength(12);
+  });
+
+  it('gives a revealed card a real translated display name as its accessibility label, not the raw itemId', async () => {
+    // Pin Math.random for the ENTIRE render (not just a precomputed value
+    // read beforehand) so the component's own initial buildDeck() call --
+    // made internally with the real Math.random, not something the test
+    // can inject -- lands on the exact same deterministic deck this test
+    // independently computes card 0's itemId from.
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const computedDeck = buildDeck(6, resolvableItemIds());
+    const card0ItemId = computedDeck[0].itemId;
+
+    const { getByTestId } = await renderGame({ pairCount: 6 }, { language: 'en' });
+    randomSpy.mockRestore();
+
+    // Bug: this used to be tFormat(..., { item: card.itemId }), which put
+    // the raw internal slug (e.g. "pickup-truck") straight into a screen
+    // reader announcement. It must instead be the real English word.
+    expect(getByTestId('memory-match-card-0').props.accessibilityLabel).toBe(
+      displayNameForItemId(card0ItemId, 'en')
+    );
+    expect(getByTestId('memory-match-card-0').props.accessibilityLabel).not.toBe(card0ItemId);
+  });
+
+  it('gives a revealed card its German display name when the app language is German', async () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const computedDeck = buildDeck(6, resolvableItemIds());
+    const card0ItemId = computedDeck[0].itemId;
+
+    const { getByTestId } = await renderGame({ pairCount: 6 }, { language: 'de' });
+    randomSpy.mockRestore();
+
+    // Bug: the old passthrough string was IDENTICAL for en/de ('{item}'
+    // in both), so a German-language user's screen reader announced the
+    // English-only itemId regardless of the app's language setting.
+    const expectedGerman = displayNameForItemId(card0ItemId, 'de');
+    expect(getByTestId('memory-match-card-0').props.accessibilityLabel).toBe(expectedGerman);
+    expect(getByTestId('memory-match-card-0').props.accessibilityLabel).not.toBe(
+      displayNameForItemId(card0ItemId, 'en')
+    );
   });
 
   it('does not let a tap flip a card during the preview (before play has actually started)', async () => {

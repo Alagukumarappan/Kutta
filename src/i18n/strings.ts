@@ -183,6 +183,11 @@ export const UI_STRINGS = {
   memoryMatchStartGame: { en: 'Start Game', de: 'Spiel starten' },
   memoryMatchDetailTitle: { en: 'Memory Match', de: 'Memory' },
   memoryMatchCardHiddenLabel: { en: 'Face-down card', de: 'Verdeckte Karte' },
+  // `{item}` is filled in with the item's real, translated display name
+  // (memoryMatchContent.ts's `displayNameForItemId`) -- NOT the raw
+  // itemId slug -- so a screen reader announces e.g. "Pickup Truck" /
+  // "Pickup" instead of the internal id "pickup-truck", in the correct
+  // language for both English and German users.
   memoryMatchCardRevealedLabel: { en: '{item}', de: '{item}' },
   memoryMatchPlayerTurnNamed: { en: '{name}\'s turn', de: '{name} ist dran' },
   memoryMatchScoreLabel: { en: '{name}: {score}', de: '{name}: {score}' },

@@ -11,7 +11,7 @@ import {
   type MemoryCard,
   type PairCount,
 } from './memoryMatchEngine';
-import { moduleForItemId, resolvableItemIds, preloadItemImages } from './memoryMatchContent';
+import { moduleForItemId, resolvableItemIds, preloadItemImages, displayNameForItemId } from './memoryMatchContent';
 import type { MemoryMatchMode } from './MemoryMatchSetupScreen';
 import {
   colors,
@@ -402,7 +402,9 @@ export function MemoryMatchScreen({
                     accessibilityRole="button"
                     accessibilityLabel={
                       faceUp
-                        ? tFormat('memoryMatchCardRevealedLabel', language, { item: card.itemId })
+                        ? tFormat('memoryMatchCardRevealedLabel', language, {
+                            item: displayNameForItemId(card.itemId, language),
+                          })
                         : t('memoryMatchCardHiddenLabel')
                     }
                     accessibilityState={{ disabled: card.matched || revealPhase !== 'playing' }}

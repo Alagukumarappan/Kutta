@@ -11,30 +11,47 @@ export interface MemoryMatchItem {
   itemId: string;
   module: number;
   category: 'animal' | 'car';
+  // Real, translated word for this item -- read by MemoryMatchScreen's
+  // revealed-card accessibility label instead of the raw `itemId` slug
+  // (a screen reader must never announce an internal identifier like
+  // "pickup-truck" or "sports-car", and never in the wrong language for
+  // a German-language user). Kept alongside the item itself (rather than
+  // as a separate lookup table) so a new item can never be added to
+  // MEMORY_MATCH_ITEMS without also supplying a display name for it.
+  displayName: { en: string; de: string };
 }
 
 export const MEMORY_MATCH_ITEMS: MemoryMatchItem[] = [
-  { itemId: 'lion', module: require('../../sample-content/memory-match/animals/lion.jpg'), category: 'animal' },
-  { itemId: 'elephant', module: require('../../sample-content/memory-match/animals/elephant.jpg'), category: 'animal' },
-  { itemId: 'giraffe', module: require('../../sample-content/memory-match/animals/giraffe.jpg'), category: 'animal' },
-  { itemId: 'zebra', module: require('../../sample-content/memory-match/animals/zebra.jpg'), category: 'animal' },
-  { itemId: 'panda', module: require('../../sample-content/memory-match/animals/panda.jpg'), category: 'animal' },
-  { itemId: 'koala', module: require('../../sample-content/memory-match/animals/koala.jpg'), category: 'animal' },
-  { itemId: 'kangaroo', module: require('../../sample-content/memory-match/animals/kangaroo.jpg'), category: 'animal' },
-  { itemId: 'penguin', module: require('../../sample-content/memory-match/animals/penguin.jpg'), category: 'animal' },
-  { itemId: 'owl', module: require('../../sample-content/memory-match/animals/owl.jpg'), category: 'animal' },
-  { itemId: 'dolphin', module: require('../../sample-content/memory-match/animals/dolphin.jpg'), category: 'animal' },
-  { itemId: 'tiger', module: require('../../sample-content/memory-match/animals/tiger.jpg'), category: 'animal' },
-  { itemId: 'monkey', module: require('../../sample-content/memory-match/animals/monkey.jpg'), category: 'animal' },
-  { itemId: 'horse', module: require('../../sample-content/memory-match/animals/horse.jpg'), category: 'animal' },
-  { itemId: 'rabbit', module: require('../../sample-content/memory-match/animals/rabbit.jpg'), category: 'animal' },
-  { itemId: 'sedan', module: require('../../sample-content/memory-match/cars/sedan.jpg'), category: 'car' },
-  { itemId: 'suv', module: require('../../sample-content/memory-match/cars/suv.jpg'), category: 'car' },
-  { itemId: 'pickup-truck', module: require('../../sample-content/memory-match/cars/pickup-truck.jpg'), category: 'car' },
-  { itemId: 'sports-car', module: require('../../sample-content/memory-match/cars/sports-car.jpg'), category: 'car' },
-  { itemId: 'taxi', module: require('../../sample-content/memory-match/cars/taxi.jpg'), category: 'car' },
-  { itemId: 'race-car', module: require('../../sample-content/memory-match/cars/race-car.jpg'), category: 'car' },
+  { itemId: 'lion', module: require('../../sample-content/memory-match/animals/lion.jpg'), category: 'animal', displayName: { en: 'Lion', de: 'Löwe' } },
+  { itemId: 'elephant', module: require('../../sample-content/memory-match/animals/elephant.jpg'), category: 'animal', displayName: { en: 'Elephant', de: 'Elefant' } },
+  { itemId: 'giraffe', module: require('../../sample-content/memory-match/animals/giraffe.jpg'), category: 'animal', displayName: { en: 'Giraffe', de: 'Giraffe' } },
+  { itemId: 'zebra', module: require('../../sample-content/memory-match/animals/zebra.jpg'), category: 'animal', displayName: { en: 'Zebra', de: 'Zebra' } },
+  { itemId: 'panda', module: require('../../sample-content/memory-match/animals/panda.jpg'), category: 'animal', displayName: { en: 'Panda', de: 'Panda' } },
+  { itemId: 'koala', module: require('../../sample-content/memory-match/animals/koala.jpg'), category: 'animal', displayName: { en: 'Koala', de: 'Koala' } },
+  { itemId: 'kangaroo', module: require('../../sample-content/memory-match/animals/kangaroo.jpg'), category: 'animal', displayName: { en: 'Kangaroo', de: 'Känguru' } },
+  { itemId: 'penguin', module: require('../../sample-content/memory-match/animals/penguin.jpg'), category: 'animal', displayName: { en: 'Penguin', de: 'Pinguin' } },
+  { itemId: 'owl', module: require('../../sample-content/memory-match/animals/owl.jpg'), category: 'animal', displayName: { en: 'Owl', de: 'Eule' } },
+  { itemId: 'dolphin', module: require('../../sample-content/memory-match/animals/dolphin.jpg'), category: 'animal', displayName: { en: 'Dolphin', de: 'Delfin' } },
+  { itemId: 'tiger', module: require('../../sample-content/memory-match/animals/tiger.jpg'), category: 'animal', displayName: { en: 'Tiger', de: 'Tiger' } },
+  { itemId: 'monkey', module: require('../../sample-content/memory-match/animals/monkey.jpg'), category: 'animal', displayName: { en: 'Monkey', de: 'Affe' } },
+  { itemId: 'horse', module: require('../../sample-content/memory-match/animals/horse.jpg'), category: 'animal', displayName: { en: 'Horse', de: 'Pferd' } },
+  { itemId: 'rabbit', module: require('../../sample-content/memory-match/animals/rabbit.jpg'), category: 'animal', displayName: { en: 'Rabbit', de: 'Hase' } },
+  { itemId: 'sedan', module: require('../../sample-content/memory-match/cars/sedan.jpg'), category: 'car', displayName: { en: 'Sedan', de: 'Limousine' } },
+  { itemId: 'suv', module: require('../../sample-content/memory-match/cars/suv.jpg'), category: 'car', displayName: { en: 'SUV', de: 'SUV' } },
+  { itemId: 'pickup-truck', module: require('../../sample-content/memory-match/cars/pickup-truck.jpg'), category: 'car', displayName: { en: 'Pickup Truck', de: 'Pickup' } },
+  { itemId: 'sports-car', module: require('../../sample-content/memory-match/cars/sports-car.jpg'), category: 'car', displayName: { en: 'Sports Car', de: 'Sportwagen' } },
+  { itemId: 'taxi', module: require('../../sample-content/memory-match/cars/taxi.jpg'), category: 'car', displayName: { en: 'Taxi', de: 'Taxi' } },
+  { itemId: 'race-car', module: require('../../sample-content/memory-match/cars/race-car.jpg'), category: 'car', displayName: { en: 'Race Car', de: 'Rennwagen' } },
 ];
+
+// Looks up the display name for `itemId` in the given language, falling
+// back to the raw itemId only if the id is somehow not a real bundled
+// item (defensive -- every real card's itemId always resolves to a
+// MEMORY_MATCH_ITEMS entry, but a screen reader announcement is exactly
+// the wrong place to ever throw).
+export function displayNameForItemId(itemId: string, language: 'en' | 'de'): string {
+  return MEMORY_MATCH_ITEMS.find((item) => item.itemId === itemId)?.displayName[language] ?? itemId;
+}
 
 export function moduleForItemId(itemId: string): number | undefined {
   return MEMORY_MATCH_ITEMS.find((item) => item.itemId === itemId)?.module;
