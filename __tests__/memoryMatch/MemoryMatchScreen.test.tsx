@@ -3,7 +3,6 @@ import { Image } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { MemoryMatchScreen } from '../../src/memoryMatch/MemoryMatchScreen';
 import { LanguageProvider } from '../../src/i18n/LanguageContext';
-import { MEMORY_MATCH_ITEMS } from '../../src/memoryMatch/memoryMatchContent';
 
 jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({ uri: 'asset:///fake.jpg' } as any);
 
@@ -22,12 +21,6 @@ function renderGame(props: Partial<React.ComponentProps<typeof MemoryMatchScreen
   );
 }
 
-// Every itemId actually flipped face-up during a test is asserted against
-// this real, bundled list rather than a fake one -- MemoryMatchScreen
-// draws its deck from the real memoryMatchContent module, so a card's
-// revealed image module must be one of these 20 real entries.
-const REAL_ITEM_IDS = new Set(MEMORY_MATCH_ITEMS.map((item) => item.itemId));
-
 describe('MemoryMatchScreen', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -38,7 +31,7 @@ describe('MemoryMatchScreen', () => {
   });
 
   it('deals the deck face-up for the preview, then flips it face-down after the preview delay', async () => {
-    const { getByTestId, queryAllByTestId } = await renderGame({ pairCount: 6 });
+    const { queryAllByTestId } = await renderGame({ pairCount: 6 });
 
     // During the preview: every one of the 12 cards is face-up (has an
     // -image child), none show the face-down back.
@@ -59,9 +52,17 @@ describe('MemoryMatchScreen', () => {
 
     await fireEvent.press(getByTestId('memory-match-card-0'));
 
-    // Still mid-preview -- the tap must not have started a "flip" (there's
-    // nothing to flip TO, every card is already showing its image).
-    expect(queryByTestId('memory-match-card-0-image')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    // If the tap during the preview had genuinely flipped card 0, it would
+    // be exempt from the post-preview face-down flip and would still show
+    // its image here, unlike the rest of the untapped deck. Asserting the
+    // opposite -- back showing, no image -- is only true if the tap was
+    // actually blocked while mid-preview.
+    expect(queryByTestId('memory-match-card-0-back')).toBeTruthy();
+    expect(queryByTestId('memory-match-card-0-image')).toBeNull();
   });
 
   it('flips exactly two tapped cards face-up, then flips a MISMATCHED pair back down after a short delay', async () => {

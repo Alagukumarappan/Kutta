@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Pressable, Image, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../i18n/LanguageContext';
+import { tFormat } from '../i18n/strings';
 import {
   buildDeck,
   reshuffle,
@@ -16,7 +17,6 @@ import {
   colors,
   radii,
   spacing,
-  typography,
   clamp,
   getActivityPalette,
   CelebrationOverlay,
@@ -60,7 +60,7 @@ export function MemoryMatchScreen({
   friendName?: string;
   onMenu: () => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -87,7 +87,7 @@ export function MemoryMatchScreen({
 
   // The reveal-then-shuffle round intro: deal face-up (the initial
   // buildDeck() call above already shows every card, since revealPhase
-  // starts 'previewing'), wait, then reshuffle to a genuinely different
+  // starts 'previewing'), wait, then reshuffle to a freshly shuffled
   // arrangement and flip face-down for real play. Depends on `roundKey`
   // (not `[]`) so handleRetry can re-trigger this exact sequence for a
   // fresh round without needing a new component instance.
@@ -159,8 +159,8 @@ export function MemoryMatchScreen({
 
   const columns = GRID_COLUMNS_BY_PAIR_COUNT[pairCount];
   const rows = Math.ceil(deck.length / columns);
-  const availableWidth = width - insets.left - insets.right - spacing.lg * 2;
-  const availableHeight = height - insets.top - insets.bottom - spacing.lg * 2;
+  const availableWidth = width - insets.left - insets.right - spacing.md * 2;
+  const availableHeight = height - insets.top - insets.bottom - spacing.md * 2;
   const cellSize = clamp(Math.min(availableWidth / columns, availableHeight / rows) - spacing.xs, 36, 96);
 
   return (
@@ -192,7 +192,11 @@ export function MemoryMatchScreen({
                   testID={`memory-match-card-${index}`}
                   onPress={() => handleCardPress(index)}
                   accessibilityRole="button"
-                  accessibilityLabel={faceUp ? card.itemId : t('memoryMatchCardHiddenLabel')}
+                  accessibilityLabel={
+                    faceUp
+                      ? tFormat('memoryMatchCardRevealedLabel', language, { item: card.itemId })
+                      : t('memoryMatchCardHiddenLabel')
+                  }
                   accessibilityState={{ disabled: card.matched || revealPhase !== 'playing' }}
                   style={[styles.cell, { width: cellSize, height: cellSize }, card.matched && styles.cellMatched]}
                 >
