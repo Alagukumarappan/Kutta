@@ -35,7 +35,7 @@ describe('withAlpha', () => {
 
 describe('getActivityPalette', () => {
   it('gives each activity a distinct accent from the others', () => {
-    const activities = ['coloring', 'quiz', 'puzzle', 'video', 'tictactoe'] as const;
+    const activities = ['coloring', 'quiz', 'puzzle', 'video', 'tictactoe', 'camera', 'memoryMatch'] as const;
     const accents = activities.map((activity) => getActivityPalette(activity).accent);
     expect(new Set(accents).size).toBe(activities.length);
   });
@@ -68,12 +68,21 @@ describe('getActivityPalette', () => {
   }
 
   it("gives every activity's onAccentText at least a 3:1 contrast ratio against its own accent (WCAG AA for large/bold label text)", () => {
-    const activities = ['coloring', 'quiz', 'puzzle', 'video', 'tictactoe'] as const;
+    const activities = ['coloring', 'quiz', 'puzzle', 'video', 'tictactoe', 'camera', 'memoryMatch'] as const;
     for (const activity of activities) {
       const palette = getActivityPalette(activity);
       const ratio = contrastRatio(palette.accent, palette.onAccentText);
       expect(ratio).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it('maps memoryMatch to the grass family', () => {
+    expect(getActivityPalette('memoryMatch')).toEqual({
+      accent: colors.grass,
+      accentDark: colors.grassDark,
+      accentSoft: colors.grassSoft,
+      onAccentText: colors.ink,
+    });
   });
 
   it('maps quiz to the violet family', () => {

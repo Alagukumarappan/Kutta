@@ -65,6 +65,14 @@ export const colors = {
   lemon: '#FFE066', // small highlight accents (badges, sparkles); also Camera's activity accent
   lemonDark: '#E0BE3D',
   lemonSoft: '#FFF6D9',
+  // A fresh green, distinct from jade's teal -- the last of the six brand
+  // hues (bubblegum/violet/jade/marigold/sky/lemon) was already claimed by
+  // an earlier activity, so Memory Match needed a genuinely new one rather
+  // than reusing `berry` (reserved for error/"incorrect" feedback
+  // elsewhere in the app, not available for a normal activity accent).
+  grass: '#5FBF57',
+  grassDark: '#3D9636',
+  grassSoft: '#E3F5DE',
 
   // Neutrals
   line: '#E4DCF5',
@@ -94,7 +102,7 @@ export const colors = {
 // Per-activity identity: one accent family per major activity so each card,
 // gallery header, and in-activity chrome can carry a consistent, recognizable
 // color without every screen re-picking hues by hand.
-export type ActivityId = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'tictactoe' | 'camera';
+export type ActivityId = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'tictactoe' | 'camera' | 'memoryMatch';
 
 export interface ActivityPalette {
   accent: string;
@@ -155,6 +163,12 @@ const ACTIVITY_PALETTES: Record<ActivityId, ActivityPalette> = {
     accent: colors.lemon,
     accentDark: colors.lemonDark,
     accentSoft: colors.lemonSoft,
+    onAccentText: colors.ink,
+  },
+  memoryMatch: {
+    accent: colors.grass,
+    accentDark: colors.grassDark,
+    accentSoft: colors.grassSoft,
     onAccentText: colors.ink,
   },
 };
