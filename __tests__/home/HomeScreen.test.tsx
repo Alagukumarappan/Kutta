@@ -17,9 +17,9 @@ describe('HomeScreen', () => {
     (profilePicture.resolveProfilePictureUri as jest.Mock).mockResolvedValue(null);
   });
 
-  it('shows the child name and all six feature cards', async () => {
+  it('shows the child name and all seven feature cards', async () => {
     const onNavigate = jest.fn();
-    const { getByText } = await render(
+    const { getByText, getByTestId } = await render(
       <LanguageProvider initialLanguage="en">
         <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
       </LanguageProvider>
@@ -47,6 +47,8 @@ describe('HomeScreen', () => {
 
     await fireEvent.press(getByText('Camera'));
     expect(onNavigate).toHaveBeenCalledWith('camera');
+
+    expect(getByTestId('home-card-memory-match')).toBeTruthy();
   });
 
   it('exposes the settings icon button to screen readers with an accessible name', async () => {
@@ -60,6 +62,19 @@ describe('HomeScreen', () => {
     const settingsButton = await findByLabelText('Settings');
     await fireEvent.press(settingsButton);
     expect(onNavigate).toHaveBeenCalledWith('settings');
+  });
+
+  it('navigates to memoryMatchSetup when the Memory Match card is pressed', async () => {
+    const onNavigate = jest.fn();
+    const { getByTestId } = await render(
+      <LanguageProvider initialLanguage="en">
+        <HomeScreen childName="Sam" childAge={7} onNavigate={onNavigate} />
+      </LanguageProvider>
+    );
+
+    await fireEvent.press(getByTestId('home-card-memory-match'));
+
+    expect(onNavigate).toHaveBeenCalledWith('memoryMatchSetup');
   });
 
   describe('card press animation / navigation safety', () => {
@@ -173,7 +188,7 @@ describe('HomeScreen', () => {
   });
 
   describe('redesigned layout (horizontal scrolling carousel, design-system cards)', () => {
-    it('lays out all six cards at the same fixed width, inside a horizontally-scrolling row', async () => {
+    it('lays out all seven cards at the same fixed width, inside a horizontally-scrolling row', async () => {
       const { getByTestId } = await render(
         <LanguageProvider initialLanguage="en">
           <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
@@ -194,12 +209,14 @@ describe('HomeScreen', () => {
       const videoWidth = getByTestId('home-card-video').parent?.props.style.width;
       const tictactoeWidth = getByTestId('home-card-tictactoe').parent?.props.style.width;
       const cameraWidth = getByTestId('home-card-camera').parent?.props.style.width;
+      const memoryMatchWidth = getByTestId('home-card-memory-match').parent?.props.style.width;
 
       expect(coloringWidth).toBeCloseTo(quizWidth, 5);
       expect(quizWidth).toBeCloseTo(puzzleWidth, 5);
       expect(quizWidth).toBeCloseTo(videoWidth, 5);
       expect(quizWidth).toBeCloseTo(tictactoeWidth, 5);
       expect(quizWidth).toBeCloseTo(cameraWidth, 5);
+      expect(quizWidth).toBeCloseTo(memoryMatchWidth, 5);
 
       const scrollRow = getByTestId('home-card-row');
       expect(scrollRow.props.horizontal).toBe(true);
@@ -218,9 +235,10 @@ describe('HomeScreen', () => {
       expect(getByText('Watch & learn')).toBeTruthy();
       expect(getByText('Outsmart the computer!')).toBeTruthy();
       expect(getByText('Snap a photo!')).toBeTruthy();
+      expect(getByText('Find the pairs!')).toBeTruthy();
     });
 
-    it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video/TicTacToe/Camera each distinct)', async () => {
+    it('colors each activity card with its own design-system accent (Coloring/Quiz/Puzzle/Video/TicTacToe/Camera/MemoryMatch each distinct)', async () => {
       const { toJSON } = await render(
         <LanguageProvider initialLanguage="en">
           <HomeScreen childName="Sam" childAge={7} onNavigate={jest.fn()} />
@@ -241,6 +259,7 @@ describe('HomeScreen', () => {
       expect(rendered).toContain(getActivityPalette('video').accent);
       expect(rendered).toContain(getActivityPalette('tictactoe').accent);
       expect(rendered).toContain(getActivityPalette('camera').accent);
+      expect(rendered).toContain(getActivityPalette('memoryMatch').accent);
     });
 
     it('gives the settings icon button a touch target that meets the design system\'s 48dp minimum', async () => {

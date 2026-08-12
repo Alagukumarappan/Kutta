@@ -29,19 +29,28 @@ import {
 // short screen (e.g. Galaxy S22 landscape).
 const AVATAR_SIZE = 36;
 
-export type HomeDestination = 'coloring' | 'quiz' | 'puzzle' | 'video' | 'tictactoe' | 'camera' | 'settings';
+export type HomeDestination =
+  | 'coloring'
+  | 'quiz'
+  | 'puzzle'
+  | 'video'
+  | 'tictactoe'
+  | 'camera'
+  | 'memoryMatchSetup'
+  | 'settings';
 
 type CardSpec = {
   testID: string;
   destination: HomeDestination;
-  labelKey: 'homeColoring' | 'homeQuiz' | 'homePuzzle' | 'homeVideo' | 'homeTicTacToe' | 'homeCamera';
+  labelKey: 'homeColoring' | 'homeQuiz' | 'homePuzzle' | 'homeVideo' | 'homeTicTacToe' | 'homeCamera' | 'homeMemoryMatch';
   taglineKey:
     | 'homeColoringTagline'
     | 'homeQuizTagline'
     | 'homePuzzleTagline'
     | 'homeVideoTagline'
     | 'homeTicTacToeTagline'
-    | 'homeCameraTagline';
+    | 'homeCameraTagline'
+    | 'homeMemoryMatchTagline';
   emoji: string;
   activity: ActivityId;
 };
@@ -74,6 +83,7 @@ const CARDS: CardSpec[] = [
   { testID: 'home-card-video', destination: 'video', labelKey: 'homeVideo', taglineKey: 'homeVideoTagline', emoji: '🎬', activity: 'video' },
   { testID: 'home-card-tictactoe', destination: 'tictactoe', labelKey: 'homeTicTacToe', taglineKey: 'homeTicTacToeTagline', emoji: '⭕', activity: 'tictactoe' },
   { testID: 'home-card-camera', destination: 'camera', labelKey: 'homeCamera', taglineKey: 'homeCameraTagline', emoji: '📷', activity: 'camera' },
+  { testID: 'home-card-memory-match', destination: 'memoryMatchSetup', labelKey: 'homeMemoryMatch', taglineKey: 'homeMemoryMatchTagline', emoji: '🃏', activity: 'memoryMatch' },
 ];
 
 export function HomeScreen({
