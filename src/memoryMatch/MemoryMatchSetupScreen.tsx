@@ -178,7 +178,7 @@ export function MemoryMatchSetupScreen({
             onPress={handleStart}
             disabled={!canStart}
             color={PALETTE.accent}
-            textColor={colors.ink}
+            textColor={PALETTE.onAccentText}
             size="compact"
             style={styles.startButton}
           />
