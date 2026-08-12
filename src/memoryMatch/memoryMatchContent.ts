@@ -76,9 +76,13 @@ export function resolvableItemIds(): string[] {
 //
 // Uses `Promise.allSettled` (not `Promise.all`) so a single asset's
 // `downloadAsync()` rejecting -- or resolving to a real Image whose
-// resolution itself throws -- can never hang or fail the whole preload:
-// every item is attempted independently and this always resolves once
-// every attempt has settled, one way or another.
+// resolution itself throws -- can never FAIL the whole preload: every
+// item is attempted independently and this resolves once every attempt
+// has settled. Note what this does NOT cover: `Promise.allSettled` only
+// protects against a per-item REJECTION, not a `downloadAsync()` call
+// that never settles at all (neither resolves nor rejects). That's a
+// caller-side concern -- MemoryMatchScreen's preload effect races this
+// whole function against `withPreloadTimeout` for exactly that reason.
 export async function preloadItemImages(itemIds: readonly string[]): Promise<void> {
   await Promise.allSettled(
     itemIds.map(async (itemId) => {
@@ -89,9 +93,12 @@ export async function preloadItemImages(itemIds: readonly string[]): Promise<voi
         if (!resolved?.uri) return;
         await Asset.fromURI(resolved.uri).downloadAsync();
       } catch {
-        // Best-effort only -- a failed/hung preload for one card must never
-        // block the round from starting (see this function's own doc
-        // comment above).
+        // Best-effort only -- a REJECTED preload for one card must never
+        // fail the round from starting (see this function's own doc
+        // comment above). A card whose `downloadAsync()` instead hangs
+        // rather than rejecting isn't caught by this `catch` at all --
+        // that case is bounded by the caller's `withPreloadTimeout`, not
+        // by anything here.
       }
     })
   );

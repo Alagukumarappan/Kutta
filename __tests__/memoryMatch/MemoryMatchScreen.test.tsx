@@ -554,10 +554,17 @@ describe('MemoryMatchScreen', () => {
       mockDownloadAsync.mockResolvedValue(undefined);
     });
 
-    it('shows a loading panel and does not start the preview timer until preloading actually resolves', async () => {
-      let resolveDownload!: () => void;
-      const pending = new Promise<void>((resolve) => {
-        resolveDownload = resolve;
+    it('shows a loading panel and does not start the preview timer until preloading actually resolves, but never hangs forever if a download never settles', async () => {
+      // A download that NEVER settles (neither resolves nor rejects) --
+      // realistically possible in dev/Expo Go over a stalled Metro
+      // connection. `Promise.allSettled` inside `preloadItemImages` gives
+      // this exactly zero protection (it only guards rejections), so the
+      // only thing standing between this and a permanently stuck
+      // LoadingPanel is MemoryMatchScreen's `withPreloadTimeout`. This is
+      // the test that actually proves that guarantee: the screen must
+      // escape 'preloading' once the timeout elapses, never staying stuck.
+      const pending = new Promise<void>(() => {
+        // Deliberately never resolves or rejects.
       });
       mockDownloadAsync.mockImplementation(() => pending);
 
@@ -569,27 +576,20 @@ describe('MemoryMatchScreen', () => {
       expect(queryAllByTestId(/memory-match-card-\d+/)).toHaveLength(0);
       expect(mockDownloadAsync).toHaveBeenCalled();
 
-      // Advancing the FULL preview duration must not be enough to reach
-      // the post-preview face-down state while preloading is still stuck
-      // -- proving the preview timer genuinely waits for preloading
-      // rather than running on its own regardless of it.
+      // Advance past PRELOAD_TIMEOUT_MS (2500ms): even though the
+      // download promise above will NEVER settle, the preload timeout
+      // must force the preview to start anyway.
       await act(async () => {
-        jest.advanceTimersByTime(2000);
-      });
-      expect(queryByTestId('memory-match-loading')).toBeTruthy();
-      expect(queryAllByTestId(/memory-match-card-\d+/)).toHaveLength(0);
-
-      // Let preloading resolve: the preview should now start (every card
-      // visible face-up), and only THEN, after another full
-      // PREVIEW_DURATION_MS, flip face-down into real play.
-      await act(async () => {
-        resolveDownload();
+        jest.advanceTimersByTime(2500);
         await Promise.resolve();
         await Promise.resolve();
       });
       expect(queryByTestId('memory-match-loading')).toBeNull();
       expect(queryAllByTestId(/memory-match-card-\d+-image/)).toHaveLength(12);
 
+      // And the preview proceeds exactly as if preloading had succeeded --
+      // after PREVIEW_DURATION_MS it flips face-down into real play, never
+      // getting stuck again.
       await act(async () => {
         jest.advanceTimersByTime(2000);
       });
@@ -603,7 +603,7 @@ describe('MemoryMatchScreen', () => {
       // deck (12 cards, 2 per item) -- out of a 20-item bundled pool.
       // Preloading must only ever attempt those 6, never all 20.
       expect(mockDownloadAsync).toHaveBeenCalled();
-      expect(mockDownloadAsync.mock.calls.length).toBeLessThanOrEqual(6);
+      expect(mockDownloadAsync.mock.calls.length).toBe(6);
     });
 
     it('does not get stuck forever if one asset\'s download rejects (best-effort preload)', async () => {

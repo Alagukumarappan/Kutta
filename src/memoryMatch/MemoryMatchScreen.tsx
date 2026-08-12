@@ -27,6 +27,35 @@ import {
 
 const PALETTE = getActivityPalette('memoryMatch');
 
+// Races `preloadItemImages` against a timeout so the "memorize the board"
+// preview is GUARANTEED to start eventually, even if a single photo's
+// `downloadAsync()` never settles at all (neither resolves nor rejects --
+// realistically possible in dev/Expo Go over a stalled Metro connection,
+// though very unlikely in a release build where these are local bundled
+// assets). Same technique as RootNavigator's own `withTimeout` (used there
+// to bound `resolveSubfolderUris`), adapted here to always RESOLVE rather
+// than reject on timeout: preloading is best-effort, not a critical
+// operation, so timing out should just mean "proceed to the preview
+// anyway, slightly less warm than ideal" -- never surface an error, never
+// block the game. (`preloadItemImages` itself never rejects -- it's built
+// on `Promise.allSettled` -- but resolving on both branches here is
+// defense in depth, not reliance on that.)
+function withPreloadTimeout(promise: Promise<void>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    promise.then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      () => {
+        clearTimeout(timer);
+        resolve();
+      }
+    );
+  });
+}
+
 // How long the whole deck is shown face-up right after Start, before it
 // flips back down and reshuffles -- see the design spec's "reveal-then-
 // shuffle" round intro.
@@ -36,6 +65,16 @@ const PREVIEW_DURATION_MS = 2000;
 // down -- long enough for a child to actually register what the two cards
 // were, short enough not to feel sluggish.
 const MISMATCH_FLIP_BACK_DELAY_MS = 900;
+
+// Best-effort budget for `preloadItemImages` before the preview starts
+// anyway -- see the preload effect below and `withPreloadTimeout`'s own
+// comment. Generous enough to cover a normal cold-start decode of a
+// handful of bundled photos, but short enough that a child never
+// perceives the wait as "the game is broken" even in the worst case
+// (a hung `downloadAsync()` -- see that function's own doc comment in
+// memoryMatchContent.ts for why that's realistic in Expo Go/dev but not
+// in a release build).
+const PRELOAD_TIMEOUT_MS = 2500;
 
 // How many columns the grid uses per difficulty -- chosen so every level
 // divides evenly (no incomplete final row) and stays wide/short, matching
@@ -170,17 +209,19 @@ export function MemoryMatchScreen({
   // this round deals, not the full 20-item pool) -- before the "memorize
   // the board" preview is allowed to start counting down. Depends on
   // `roundKey` (not `[]`) so handleRetry re-triggers this exact sequence
-  // for a fresh round. Guarded with a `cancelled` flag rather than
-  // clearing a timer: `preloadItemImages` itself can never hang forever
-  // (it's built on `Promise.allSettled` over individually try/caught
-  // downloads -- see its own doc comment in memoryMatchContent.ts), so
-  // this only needs to avoid setting state after an unmount/retry, not
-  // guard against the promise itself getting stuck.
+  // for a fresh round. `Promise.allSettled` inside `preloadItemImages`
+  // only guards against a per-item REJECTION -- it does nothing for a
+  // download that never settles at all, which would otherwise leave
+  // `revealPhase` stuck at 'preloading' (and `LoadingPanel` on screen)
+  // forever. `withPreloadTimeout` above is what actually guarantees this
+  // effect's `.then()` always runs, one way or another; the `cancelled`
+  // flag alongside it only guards the separate, ordinary concern of not
+  // setting state after an unmount/retry.
   useEffect(() => {
     let cancelled = false;
     setRevealPhase('preloading');
     const itemIds = Array.from(new Set(deckRef.current.map((card) => card.itemId)));
-    preloadItemImages(itemIds).then(() => {
+    withPreloadTimeout(preloadItemImages(itemIds), PRELOAD_TIMEOUT_MS).then(() => {
       if (cancelled) return;
       setRevealPhase('previewing');
     });
